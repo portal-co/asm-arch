@@ -7,6 +7,7 @@ pub mod asm;
 pub trait WriterCore {
     type Error: Error;
 
+    fn hlt(&mut self) -> Result<(), Self::Error>;
     fn xchg(
         &mut self,
         dest: &(dyn Arg + '_),
@@ -52,99 +53,104 @@ pub trait Writer<L>: WriterCore {
     fn set_label(&mut self, s: L) -> Result<(), Self::Error>;
     fn lea_label(&mut self, dest: &(dyn Arg + '_), label: L) -> Result<(), Self::Error>;
 }
+#[macro_export]
 macro_rules! writer_dispatch {
     ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
         const _: () = {
             $(
-                impl<$($u)*> WriterCore for $ty{
-                type Error = $e;
-                    fn xchg(&mut self, dest: &(dyn Arg + '_), src: &(dyn Arg + '_), mem: Option<isize>) -> Result<(), Self::Error> {
-                        WriterCore::xchg(&mut **self, dest, src, mem)
+                impl<$($u)*> $crate::out::WriterCore for $ty{
+                    type Error = $e;
+                    fn hlt(&mut self) -> $crate::__::core::result::Result<(),Self::Error>{
+                        $crate::out::WriterCore::hlt(&mut **self)
                     }
-                    fn push(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error> {
-                        WriterCore::push(&mut **self, op)
+                    fn xchg(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), src: &(dyn $crate::out::arg::Arg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::xchg(&mut **self, dest, src, mem)
                     }
-                    fn pop(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error> {
-                        WriterCore::pop(&mut **self, op)
+                    fn push(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::push(&mut **self, op)
                     }
-                    fn call(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::call(&mut **self,op)
+                    fn pop(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::pop(&mut **self, op)
                     }
-                    fn jmp(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::jmp(&mut **self,op)
+                    fn call(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::call(&mut **self,op)
                     }
-                    fn cmp0(&mut self, op: &(dyn Arg + '_)) -> Result<(),Self::Error>{
-                        WriterCore::cmp0(&mut **self,op)
+                    fn jmp(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::jmp(&mut **self,op)
                     }
-                    fn cmovz64(&mut self, op: &(dyn Arg + '_),val:u64) -> Result<(), Self::Error>{
-                        WriterCore::cmovz64(&mut **self,op,val)
+                    fn cmp0(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
+                        $crate::out::WriterCore::cmp0(&mut **self,op)
                     }
-                    fn jz(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::jz(&mut **self,op)
+                    fn cmovz64(&mut self, op: &(dyn $crate::out::arg::Arg + '_),val:u64) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::cmovz64(&mut **self,op,val)
+                    }
+                    fn jz(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::jz(&mut **self,op)
                     }
                     fn lea(
                         &mut self,
-                        dest: &(dyn Arg + '_),
-                        src: &(dyn Arg + '_),
+                        dest: &(dyn $crate::out::arg::Arg + '_),
+                        src: &(dyn $crate::out::arg::Arg + '_),
                         offset: isize,
-                        off_reg: Option<(&(dyn Arg + '_), usize)>,
-                    ) -> Result<(), Self::Error> {
-                        WriterCore::lea(&mut **self, dest, src, offset, off_reg)
+                        off_reg: $crate::__::core::option::Option<(&(dyn $crate::out::arg::Arg + '_), usize)>,
+                    ) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::lea(&mut **self, dest, src, offset, off_reg)
                     }
 
-                    fn get_ip(&mut self) -> Result<(), Self::Error>{
-                        WriterCore::get_ip(&mut **self)
+                    fn get_ip(&mut self) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::get_ip(&mut **self)
                     }
-                    fn ret(&mut self) -> Result<(), Self::Error>{
-                        WriterCore::ret(&mut **self)
+                    fn ret(&mut self) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::ret(&mut **self)
                     }
-                    fn mov64(&mut self, r: &(dyn Arg + '_), val: u64) -> Result<(),Self::Error>{
-                        WriterCore::mov64(&mut **self,r,val)
+                    fn mov64(&mut self, r: &(dyn $crate::out::arg::Arg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
+                        $crate::out::WriterCore::mov64(&mut **self,r,val)
                     }
-                    fn mov(&mut self, dest: &(dyn Arg + '_), src: &(dyn Arg + '_), mem: Option<isize>) -> Result<(), Self::Error>{
-                        WriterCore::mov(&mut **self,dest,src,mem)
+                    fn mov(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), src: &(dyn $crate::out::arg::Arg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::mov(&mut **self,dest,src,mem)
                     }
-                    fn u32(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::u32(&mut **self,op)
+                    fn u32(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::u32(&mut **self,op)
                     }
-                    fn not(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::not(&mut **self,op)
+                    fn not(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::not(&mut **self,op)
                     }
-                    fn mul(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::mul(&mut **self,a,b)
+                    fn mul(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::mul(&mut **self,a,b)
                     }
-                    fn div(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::div(&mut **self,a,b)
+                    fn div(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::div(&mut **self,a,b)
                     }
-                    fn idiv(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::idiv(&mut **self,a,b)
+                    fn idiv(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::idiv(&mut **self,a,b)
                     }
-                    fn and(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::and(&mut **self,a,b)
+                    fn and(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::and(&mut **self,a,b)
                     }
-                    fn or(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::or(&mut **self,a,b)
+                    fn or(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::or(&mut **self,a,b)
                     }
-                    fn eor(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::eor(&mut **self,a,b)
+                    fn eor(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::eor(&mut **self,a,b)
                     }
-                    fn shl(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::shl(&mut **self,a,b)
+                    fn shl(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::shl(&mut **self,a,b)
                     }
-                    fn shr(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                        WriterCore::shr(&mut **self,a,b)
+                    fn shr(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::shr(&mut **self,a,b)
                     }
                 }
-                impl<$($t)*> Writer<$l> for $ty{
+                impl<$($t)*>$crate::out:: Writer<$l> for $ty{
 
-                fn set_label(&mut self, s: $l) -> Result<(), Self::Error> {
-                    Writer::set_label(&mut **self, s)
-                }
-                  fn lea_label(&mut self, dest: &(dyn Arg + '_), label: $l) -> Result<(), Self::Error> {
-                    Writer::lea_label(&mut **self, dest, label)
-                }
+                    fn set_label(&mut self, s: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::Writer::set_label(&mut **self, s)
+                    }
+                    fn lea_label(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                       $crate::out:: Writer::lea_label(&mut **self, dest, label)
+                    }
 
-            })*
+                }
+            )*
         };
     };
 }

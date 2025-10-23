@@ -1,136 +1,139 @@
 use super::*;
 use core::fmt::{Display, Formatter, Write};
+#[macro_export]
 macro_rules! writers {
     ($($ty:ty),*) => {
         const _: () = {
             $(
-            impl WriterCore for $ty{
-                                type Error = core::fmt::Error;
-
-                fn xchg(&mut self, dest: &(dyn Arg + '_), src: &(dyn Arg + '_), mem: Option<isize>) -> Result<(),Self::Error>{
-                    let dest = dest.display(X64Arch::default());
-                    let src = src.display(X64Arch::default());
-                    write!(self,"xchg {dest}, ")?;
+            impl $crate::out::WriterCore for $ty{
+                type Error = $crate::__::core::fmt::Error;
+                fn hlt(&mut self) -> $crate::__::core::result::Result<(),Self::Error>{
+                    $crate::__::core::write!(self,"hlt\n")
+                }
+                fn xchg(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), src: &(dyn $crate::out::arg::Arg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(),Self::Error>{
+                    let dest = dest.display($crate::X64Arch::default());
+                    let src = src.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"xchg {dest}, ")?;
                     match mem{
-                        None => write!(self,"{src}\n"),
-                        Some(i) => write!(self,"qword ptr [{src}+{i}]\n")
+                        None => $crate::__::core::write!(self,"{src}\n"),
+                        Some(i) => $crate::__::core::write!(self,"qword ptr [{src}+{i}]\n")
                     }
                 }
-                fn push(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"push {op}\n")
+                fn push(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"push {op}\n")
                 }
-                fn pop(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"pop {op}\n")
+                fn pop(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"pop {op}\n")
                 }
-                fn call(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"call {op}\n")
+                fn call(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"call {op}\n")
                 }
-                 fn jmp(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"jmp {op}\n")
+                 fn jmp(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"jmp {op}\n")
                 }
-                fn cmp0(&mut self, op: &(dyn Arg + '_)) -> Result<(),Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"cmp {op}, 0\n")
+                fn cmp0(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"cmp {op}, 0\n")
                 }
-                fn cmovz64(&mut self, op: &(dyn Arg + '_),val:u64) -> Result<(), Self::Error>{
-                     let op = op.display(X64Arch::default());
-                    write!(self,"cmovz {op}, {val}\n")
+                fn cmovz64(&mut self, op: &(dyn $crate::out::arg::Arg + '_),val:u64) -> $crate::__::core::result::Result<(), Self::Error>{
+                     let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"cmovz {op}, {val}\n")
                 }
-                fn jz(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"jz {op}\n")
+                fn jz(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"jz {op}\n")
                 }
-                fn u32(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"and {op}, 0xffffffff\n")
+                fn u32(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"and {op}, 0xffffffff\n")
                 }
-                fn lea(&mut self, dest: &(dyn Arg + '_), src: &(dyn Arg + '_), offset: isize, off_reg: Option<(&(dyn Arg + '_),usize)>) -> Result<(),Self::Error>{
-                    let dest = dest.display(X64Arch::default());
-                    let src = src.display(X64Arch::default());
-                    write!(self,"lea {dest}, [{src}")?;
+                fn lea(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), src: &(dyn $crate::out::arg::Arg + '_), offset: isize, off_reg: $crate::__::core::option::Option<(&(dyn $crate::out::arg::Arg + '_),usize)>) -> $crate::__::core::result::Result<(),Self::Error>{
+                    let dest = dest.display($crate::X64Arch::default());
+                    let src = src.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"lea {dest}, [{src}")?;
                     if let Some((r,m)) = off_reg{
-                        let r = r.display(X64Arch::default());
-                        write!(self,"+{r}*{m}")?;
+                        let r = r.display($crate::X64Arch::default());
+                        $crate::__::core::write!(self,"+{r}*{m}")?;
                     }
-                    write!(self,"+{offset}]\n")
+                    $crate::__::core::write!(self,"+{offset}]\n")
                 }
-                fn mov(&mut self, dest: &(dyn Arg + '_), src: &(dyn Arg + '_), mem: Option<isize>) -> Result<(), Self::Error>{
-                     let dest = dest.display(X64Arch::default());
-                    let src = src.display(X64Arch::default());
-                    write!(self,"mov {dest}, ")?;
+                fn mov(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), src: &(dyn $crate::out::arg::Arg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error>{
+                     let dest = dest.display($crate::X64Arch::default());
+                    let src = src.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"mov {dest}, ")?;
                     match mem{
-                        None => write!(self,"{src}\n"),
-                        Some(i) => write!(self,"qword ptr [{src}+{i}]\n")
+                        None => $crate::__::core::write!(self,"{src}\n"),
+                        Some(i) => $crate::__::core::write!(self,"qword ptr [{src}+{i}]\n")
                     }
                 }
 
-                fn get_ip(&mut self) -> Result<(),Self::Error>{
-                //   let dest = dest.display(X64Arch::default());
-                    write!(self,"call 1f\n1:\n")
+                fn get_ip(&mut self) -> $crate::__::core::result::Result<(),Self::Error>{
+                //   let dest = dest.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"call 1f\n1:\n")
                 }
-                fn ret(&mut self) -> Result<(), Self::Error>{
-                    write!(self,"ret\n")
+                fn ret(&mut self) -> $crate::__::core::result::Result<(), Self::Error>{
+                    $crate::__::core::write!(self,"ret\n")
                 }
-                fn mov64(&mut self, r: &(dyn Arg + '_), val: u64) -> Result<(),Self::Error>{
-                    let r = r.display(X64Arch::default());
-                    write!(self,"mov {r}, {val}\n")
+                fn mov64(&mut self, r: &(dyn $crate::out::arg::Arg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
+                    let r = r.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"mov {r}, {val}\n")
                 }
-                fn not(&mut self, op: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let op = op.display(X64Arch::default());
-                    write!(self,"not {op}\n")
+                fn not(&mut self, op: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let op = op.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"not {op}\n")
                 }
-                fn mul(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"mul {a},{b}\n")
+                fn mul(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"mul {a},{b}\n")
                 }
-                fn div(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"div {a},{b}\n")
+                fn div(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"div {a},{b}\n")
                 }
-                fn idiv(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"idiv {a},{b}\n")
+                fn idiv(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"idiv {a},{b}\n")
                 }
-                fn and(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"and {a},{b}\n")
+                fn and(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"and {a},{b}\n")
                 }
-                fn or(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"or {a},{b}\n")
+                fn or(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"or {a},{b}\n")
                 }
-                fn eor(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"eor {a},{b}\n")
+                fn eor(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"eor {a},{b}\n")
                 }
-                fn shl(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"shl {a},{b}\n")
+                fn shl(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"shl {a},{b}\n")
                 }
-                fn shr(&mut self, a: &(dyn Arg + '_), b: &(dyn Arg + '_)) -> Result<(), Self::Error>{
-                    let a = a.display(X64Arch::default());
-                    let b = b.display(X64Arch::default());
-                    write!(self,"shr {a},{b}\n")
+                fn shr(&mut self, a: &(dyn $crate::out::arg::Arg + '_), b: &(dyn $crate::out::arg::Arg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.display($crate::X64Arch::default());
+                    let b = b.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"shr {a},{b}\n")
                 }
             }
             impl<L: Display> Writer<L> for $ty {
-                 fn set_label(&mut self, s: L) -> Result<(), Self::Error> {
-                    write!(self, "{s}:\n")
+                 fn set_label(&mut self, s: L) -> $crate::__::core::result::Result<(), Self::Error> {
+                    $crate::__::core::write!(self, "{s}:\n")
                 }
-                 fn lea_label(&mut self, dest: &(dyn Arg + '_), label: L) -> Result<(),Self::Error>{
-                    let dest = dest.display(X64Arch::default());
-                    write!(self,"lea {dest}, {label}\n")
+                 fn lea_label(&mut self, dest: &(dyn $crate::out::arg::Arg + '_), label: L) -> $crate::__::core::result::Result<(),Self::Error>{
+                    let dest = dest.display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"lea {dest}, {label}\n")
                 }
 
             })*

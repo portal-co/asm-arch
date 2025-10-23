@@ -3,11 +3,10 @@ use core::fmt::{Display, Formatter, Write};
 macro_rules! writers {
     ($($ty:ty),*) => {
         const _: () = {
-            $(impl<L: Display> Writer<L> for $ty {
-                type Error = core::fmt::Error;
-                fn set_label(&mut self, s: L) -> Result<(), Self::Error> {
-                    write!(self, "{s}:\n")
-                }
+            $(
+            impl WriterCore for $ty{
+                                type Error = core::fmt::Error;
+
                 fn xchg(&mut self, dest: &(dyn Arg + '_), src: &(dyn Arg + '_), mem: Option<isize>) -> Result<(),Self::Error>{
                     let dest = dest.display(X64Arch::default());
                     let src = src.display(X64Arch::default());
@@ -68,10 +67,7 @@ macro_rules! writers {
                         Some(i) => write!(self,"qword ptr [{src}+{i}]\n")
                     }
                 }
-                fn lea_label(&mut self, dest: &(dyn Arg + '_), label: L) -> Result<(),Self::Error>{
-                    let dest = dest.display(X64Arch::default());
-                    write!(self,"lea {dest}, {label}\n")
-                }
+
                 fn get_ip(&mut self) -> Result<(),Self::Error>{
                 //   let dest = dest.display(X64Arch::default());
                     write!(self,"call 1f\n1:\n")
@@ -127,6 +123,16 @@ macro_rules! writers {
                     let b = b.display(X64Arch::default());
                     write!(self,"shr {a},{b}\n")
                 }
+            }
+            impl<L: Display> Writer<L> for $ty {
+                 fn set_label(&mut self, s: L) -> Result<(), Self::Error> {
+                    write!(self, "{s}:\n")
+                }
+                 fn lea_label(&mut self, dest: &(dyn Arg + '_), label: L) -> Result<(),Self::Error>{
+                    let dest = dest.display(X64Arch::default());
+                    write!(self,"lea {dest}, {label}\n")
+                }
+
             })*
         };
     };

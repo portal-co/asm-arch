@@ -63,25 +63,25 @@ pub enum ConditionCode {
     NG,
     G,
 }
-impl Display for ConditionCode{
+impl Display for ConditionCode {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self{
-            ConditionCode::O => write!(f,"o"),
-            ConditionCode::NO => write!(f,"no"),
-            ConditionCode::B => write!(f,"b"),
-            ConditionCode::NB => write!(f,"nb"),
-            ConditionCode::E => write!(f,"e"),
-            ConditionCode::NE => write!(f,"ne"),
-            ConditionCode::NA => write!(f,"na"),
-            ConditionCode::A => write!(f,"a"),
-            ConditionCode::S => write!(f,"s"),
-            ConditionCode::NS => write!(f,"ns"),
-            ConditionCode::P => write!(f,"p"),
-            ConditionCode::NP => write!(f,"np"),
-            ConditionCode::L => write!(f,"l"),
-            ConditionCode::NL => write!(f,"nl"),
-            ConditionCode::NG => write!(f,"ng"),
-            ConditionCode::G => write!(f,"g"),
+        match self {
+            ConditionCode::O => write!(f, "o"),
+            ConditionCode::NO => write!(f, "no"),
+            ConditionCode::B => write!(f, "b"),
+            ConditionCode::NB => write!(f, "nb"),
+            ConditionCode::E => write!(f, "e"),
+            ConditionCode::NE => write!(f, "ne"),
+            ConditionCode::NA => write!(f, "na"),
+            ConditionCode::A => write!(f, "a"),
+            ConditionCode::S => write!(f, "s"),
+            ConditionCode::NS => write!(f, "ns"),
+            ConditionCode::P => write!(f, "p"),
+            ConditionCode::NP => write!(f, "np"),
+            ConditionCode::L => write!(f, "l"),
+            ConditionCode::NL => write!(f, "nl"),
+            ConditionCode::NG => write!(f, "ng"),
+            ConditionCode::G => write!(f, "g"),
         }
     }
 }

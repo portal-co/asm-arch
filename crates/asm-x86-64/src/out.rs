@@ -1,6 +1,9 @@
 use core::error::Error;
 
-use crate::{out::arg::{Arg,MemArg}, *};
+use crate::{
+    out::arg::{Arg, MemArg},
+    *,
+};
 // use alloc::boxed::Box;
 pub mod arg;
 pub mod asm;
@@ -9,13 +12,15 @@ pub trait WriterCore {
 
     fn hlt(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
     fn xchg(
-        &mut self, cfg: crate::X64Arch,
+        &mut self,
+        cfg: crate::X64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
         mem: Option<isize>,
     ) -> Result<(), Self::Error>;
     fn mov(
-        &mut self, cfg: crate::X64Arch,
+        &mut self,
+        cfg: crate::X64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
         mem: Option<isize>,
@@ -25,12 +30,24 @@ pub trait WriterCore {
     fn call(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn jmp(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn cmp0(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn cmovcc64(&mut self, cfg: crate::X64Arch,cond: ConditionCode, op: &(dyn MemArg + '_), val: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn jcc(&mut self, cfg: crate::X64Arch,cond: ConditionCode, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    fn cmovcc64(
+        &mut self,
+        cfg: crate::X64Arch,
+        cond: ConditionCode,
+        op: &(dyn MemArg + '_),
+        val: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn jcc(
+        &mut self,
+        cfg: crate::X64Arch,
+        cond: ConditionCode,
+        op: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
     fn u32(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn not(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn lea(
-        &mut self, cfg: crate::X64Arch,
+        &mut self,
+        cfg: crate::X64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
         offset: isize,
@@ -39,19 +56,69 @@ pub trait WriterCore {
 
     fn get_ip(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
     fn ret(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
-    fn mov64(&mut self, cfg: crate::X64Arch, r: &(dyn MemArg + '_), val: u64) -> Result<(), Self::Error>;
-    fn mul(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn div(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn idiv(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn and(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn or(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn eor(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn shl(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn shr(&mut self, cfg: crate::X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    fn mov64(
+        &mut self,
+        cfg: crate::X64Arch,
+        r: &(dyn MemArg + '_),
+        val: u64,
+    ) -> Result<(), Self::Error>;
+    fn mul(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn div(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn idiv(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn and(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn or(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn eor(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn shl(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    fn shr(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
 }
 pub trait Writer<L>: WriterCore {
     fn set_label(&mut self, cfg: crate::X64Arch, s: L) -> Result<(), Self::Error>;
-    fn lea_label(&mut self, cfg: crate::X64Arch, dest: &(dyn MemArg + '_), label: L) -> Result<(), Self::Error>;
+    fn lea_label(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        label: L,
+    ) -> Result<(), Self::Error>;
 }
 #[macro_export]
 macro_rules! writer_dispatch {

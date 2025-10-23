@@ -1,5 +1,6 @@
 #![no_std]
-
+#[cfg(feature = "alloc")]
+extern crate alloc;
 use portal_pc_asm_common::types::mem::MemorySize;
 
 static REG_NAMES: &'static [&'static str; 8] =

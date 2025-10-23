@@ -47,7 +47,17 @@ pub trait Arg {
     fn display(&self, opts: X64Arch) -> ArgKindDisplay {
         return self.kind().display(opts);
     }
+    #[cfg(feature = "alloc")]
+    fn rega<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a>{
+        use core::iter::empty;
+
+        match self.kind(){
+            ArgKind::Reg { reg, size } => ::alloc::boxed::Box::new([reg].into_iter()),
+            ArgKind::Lit(_) => ::alloc::boxed::Box::new(empty()),
+        }
+    }
 }
+
 impl Arg for Reg {
     fn kind(&self) -> ArgKind {
         ArgKind::Reg {

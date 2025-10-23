@@ -152,3 +152,7 @@ writer_dispatch!(
     [ T: Writer<L> + ?Sized,L ] [T: WriterCore + ?Sized] &'_ mut T => T::Error [L]
     // [ T: Writer<L> + ?Sized,L ] Box<T> => T::Error [L]
 );
+#[cfg(feature = "alloc")]
+writer_dispatch!(
+    [ T: Writer<L> + ?Sized,L ] [T: WriterCore + ?Sized] ::alloc::boxed::Box<T> => T::Error [L]
+);

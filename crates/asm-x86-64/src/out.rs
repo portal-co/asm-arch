@@ -50,8 +50,6 @@ pub trait WriterCore {
         cfg: crate::X64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
-        offset: isize,
-        off_reg: Option<(&(dyn MemArg + '_), usize)>,
     ) -> Result<(), Self::Error>;
 
     fn get_ip(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
@@ -158,10 +156,9 @@ macro_rules! writer_dispatch {
                         &mut self, cfg: $crate::X64Arch,
                         dest: &(dyn $crate::out::arg::MemArg + '_),
                         src: &(dyn $crate::out::arg::MemArg + '_),
-                        offset: isize,
-                        off_reg: $crate::__::core::option::Option<(&(dyn $crate::out::arg::MemArg + '_), usize)>,
+                  
                     ) -> $crate::__::core::result::Result<(), Self::Error> {
-                        $crate::out::WriterCore::lea(&mut **self, cfg, dest, src, offset, off_reg)
+                        $crate::out::WriterCore::lea(&mut **self, cfg, dest, src)
                     }
 
                     fn get_ip(&mut self, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(), Self::Error>{

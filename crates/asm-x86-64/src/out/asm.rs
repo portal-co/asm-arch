@@ -52,15 +52,10 @@ macro_rules! writers {
                     let op = op.mem_display(cfg);
                     $crate::__::core::write!(self,"and {op}, 0xffffffff\n")
                 }
-                fn lea(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_), offset: isize, off_reg: $crate::__::core::option::Option<(&(dyn $crate::out::arg::MemArg + '_),usize)>) -> $crate::__::core::result::Result<(),Self::Error>{
+                fn lea(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg);
                     let src = src.mem_display(cfg);
-                    $crate::__::core::write!(self,"lea {dest}, [{src}")?;
-                    if let Some((r,m)) = off_reg{
-                        let r = r.mem_display(cfg);
-                        $crate::__::core::write!(self,"+{r}*{m}")?;
-                    }
-                    $crate::__::core::write!(self,"+{offset}]\n")
+                    $crate::__::core::write!(self,"lea {dest}, {src}")
                 }
                 fn mov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error>{
                      let dest = dest.mem_display(cfg);

@@ -25,8 +25,8 @@ pub trait WriterCore {
     fn call(&mut self, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn jmp(&mut self, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn cmp0(&mut self, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
-    fn cmovz64(&mut self, op: &(dyn MemArg + '_), val: u64) -> Result<(), Self::Error>;
-    fn jz(&mut self, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    fn cmovcc64(&mut self,cond: ConditionCode, op: &(dyn MemArg + '_), val: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    fn jcc(&mut self,cond: ConditionCode, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn u32(&mut self, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn not(&mut self, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     fn lea(
@@ -81,11 +81,11 @@ macro_rules! writer_dispatch {
                     fn cmp0(&mut self, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                         $crate::out::WriterCore::cmp0(&mut **self,op)
                     }
-                    fn cmovz64(&mut self, op: &(dyn $crate::out::arg::MemArg + '_),val:u64) -> $crate::__::core::result::Result<(), Self::Error>{
-                        $crate::out::WriterCore::cmovz64(&mut **self,op,val)
+                    fn cmovcc64(&mut self,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::cmovcc64(&mut **self,cc,op,val)
                     }
-                    fn jz(&mut self, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        $crate::out::WriterCore::jz(&mut **self,op)
+                    fn jcc(&mut self,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::jcc(&mut **self,cc,op)
                     }
                     fn lea(
                         &mut self,

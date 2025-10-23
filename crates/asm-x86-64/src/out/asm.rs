@@ -39,13 +39,14 @@ macro_rules! writers {
                     let op = op.mem_display($crate::X64Arch::default());
                     $crate::__::core::write!(self,"cmp {op}, 0\n")
                 }
-                fn cmovz64(&mut self, op: &(dyn $crate::out::arg::MemArg + '_),val:u64) -> $crate::__::core::result::Result<(), Self::Error>{
+                fn cmovcc64(&mut self,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val:&(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                      let op = op.mem_display($crate::X64Arch::default());
-                    $crate::__::core::write!(self,"cmovz {op}, {val}\n")
+                     let val = val.mem_display($crate::X64Arch::default());
+                    $crate::__::core::write!(self,"cmov{cc} {op}, {val}\n")
                 }
-                fn jz(&mut self, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                fn jcc(&mut self,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let op = op.mem_display($crate::X64Arch::default());
-                    $crate::__::core::write!(self,"jz {op}\n")
+                    $crate::__::core::write!(self,"j{cc} {op}\n")
                 }
                 fn u32(&mut self, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let op = op.mem_display($crate::X64Arch::default());

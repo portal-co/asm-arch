@@ -62,7 +62,7 @@ impl<A: Arg> MemArgKind<A> {
             .unwrap();
     }
 }
-impl Display for MemArgKind<ArgKindDisplay> {
+impl<T: Display> Display for MemArgKind<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             MemArgKind::NoMem(a) => write!(f, "{a}"),

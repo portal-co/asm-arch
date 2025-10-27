@@ -2,11 +2,59 @@ use core::fmt::{Display, Formatter};
 
 use portal_pc_asm_common::types::reg::Reg;
 
-use crate::*;
-pub trait X64Reg {
+use crate::{
+    out::{WriterCore, arg::MemArgKind},
+    *,
+};
+pub trait X64Reg: crate::out::arg::Arg + Sized {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result;
     fn display<'a>(&'a self, opts: RegFormatOpts) -> RegDisplay;
     fn context_handle(&self, arch: &X64Arch) -> (Reg, u32, u32);
+    fn load_from_context<Error: core::error::Error>(
+        &self,
+        arch: &X64Arch,
+        x: &mut (dyn WriterCore<Error = Error> + '_),
+        xchg: bool,
+    ) -> Result<(), Error> {
+        let (a, b, c) = self.context_handle(arch);
+        x.mov(
+            *arch,
+            self,
+            &MemArgKind::Mem {
+                base: a,
+                offset: None,
+                disp: b,
+                size: MemorySize::_64,
+            },
+            None,
+        )?;
+        if xchg {
+            x.xchg(
+                *arch,
+                self,
+                &MemArgKind::Mem {
+                    base: self,
+                    offset: None,
+                    disp: c,
+                    size: MemorySize::_64,
+                },
+                None,
+            )?;
+        } else {
+            x.mov(
+                *arch,
+                self,
+                &MemArgKind::Mem {
+                    base: self,
+                    offset: None,
+                    disp: c,
+                    size: MemorySize::_64,
+                },
+                None,
+            )?;
+        }
+        Ok(())
+    }
 }
 impl X64Reg for Reg {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result {

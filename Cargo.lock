@@ -73,6 +73,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-solutions-asm-semantics"
+version = "0.1.0"
+dependencies = [
+ "portal-pc-asm-common",
+ "typeid",
+]
+
+[[package]]
 name = "portal-solutions-asm-x86-64"
 version = "0.1.0"
 dependencies = [

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/asm-x86-64"]
+members = ["crates/asm-x86-64", "crates/asm-semantics"]
 resolver = "3"
 
 [workspace.package]
@@ -10,6 +10,6 @@ description = "Assembly target types and data structures"
 portal-pc-asm-common = { version = "0.1.1", git = "https://github.com/portal-co/asm-common.git" }
 typeid = "1.0.3"
 iced-x86 = { version = "1.21.0", default-features = false }
-rv-asm = {version = "*",git = "https://github.com/portal-co/rv-utils.git"}
+rv-asm = { version = "*", git = "https://github.com/portal-co/rv-utils.git" }
 rabbitizer = "1.14.3"
 powerpc = "0.4.1"

@@ -36,4 +36,7 @@ pub enum Val {
         op: Cmp,
         right: Arg,
     },
+    Just {
+        value: Arg,
+    },
 }

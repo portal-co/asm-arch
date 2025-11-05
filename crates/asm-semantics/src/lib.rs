@@ -100,6 +100,7 @@ pub enum Val {
     Jmp { target: Arg },
     Just { value: Arg },
     Deref { mem: Arg, offset: Option<Arg> },
+    Rewind { target: Arg, limit: u32 },
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(transparent)]

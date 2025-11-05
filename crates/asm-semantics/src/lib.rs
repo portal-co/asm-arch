@@ -25,17 +25,20 @@ pub struct Arg {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Semantic<
     V: ValJust = Vec<(Val, BitLength)>,
-    C: CagedPredicateTree<V> = PredicateBox<V>,
+    C: CagedPredicateTree<Val = V> = PredicateBox<V>,
     W: SemanticStore<Val = V, Cage = C> = Vec<(Arg, PredicateTree<V, C>)>,
 > {
     pub wrapped: W,
 }
 pub trait SemanticStore: Deref<Target = [(Arg, PredicateTree<Self::Val, Self::Cage>)]> {
     type Val: ValJust;
-    type Cage: CagedPredicateTree<Self::Val>;
+    type Cage: CagedPredicateTree<Val = Self::Val>;
 }
-impl<V: ValJust, C: CagedPredicateTree<V>, T: Deref<Target = [(Arg, PredicateTree<V, C>)]> + ?Sized>
-    SemanticStore for T
+impl<
+    V: ValJust,
+    C: CagedPredicateTree<Val = V>,
+    T: Deref<Target = [(Arg, PredicateTree<V, C>)]> + ?Sized,
+> SemanticStore for T
 {
     type Val = V;
 
@@ -44,7 +47,7 @@ impl<V: ValJust, C: CagedPredicateTree<V>, T: Deref<Target = [(Arg, PredicateTre
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum PredicateTree<
     V: ValJust = Vec<(Val, BitLength)>,
-    C: CagedPredicateTree<V> = PredicateBox<V>,
+    C: CagedPredicateTree<Val = V> = PredicateBox<V>,
 > {
     Just(V),
     Compare {
@@ -77,8 +80,12 @@ impl<'a, V: ValJust> Deref for PredicateRef<'a, V> {
 }
 pub trait ValJust: Deref<Target = [(Val, BitLength)]> {}
 impl<T: Deref<Target = [(Val, BitLength)]> + ?Sized> ValJust for T {}
-pub trait CagedPredicateTree<V: ValJust>: Deref<Target = PredicateTree<V, Self>> + Sized {}
-impl<V: ValJust, T: Deref<Target = PredicateTree<V, T>>> CagedPredicateTree<V> for T {}
+pub trait CagedPredicateTree: Deref<Target = PredicateTree<Self::Val, Self>> + Sized {
+    type Val: ValJust;
+}
+impl<V: ValJust, T: Deref<Target = PredicateTree<V, T>>> CagedPredicateTree for T {
+    type Val = V;
+}
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum Val {

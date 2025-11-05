@@ -17,27 +17,34 @@ pub enum ArgKind {
     Lit(u64),
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Arg {
-    pub kind: ArgKind,
+#[non_exhaustive]
+pub enum MemArgKind {
+    Arg(ArgKind),
+    Deref { base: Arg },
+}
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Arg<K = ArgKind> {
+    pub kind: K,
     pub bit_start: u8,
     pub bit_length: BitLength,
 }
+pub type MemArg = Arg<MemArgKind>;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Semantic<
     V: ValJust = Vec<(Val, BitLength)>,
     C: CagedPredicateTree<Val = V> = PredicateBox<V>,
-    W: SemanticStore<Val = V, Cage = C> = Vec<(Arg, PredicateTree<V, C>)>,
+    W: SemanticStore<Val = V, Cage = C> = Vec<(MemArg, PredicateTree<V, C>)>,
 > {
     pub wrapped: W,
 }
-pub trait SemanticStore: Deref<Target = [(Arg, PredicateTree<Self::Val, Self::Cage>)]> {
+pub trait SemanticStore: Deref<Target = [(MemArg, PredicateTree<Self::Val, Self::Cage>)]> {
     type Val: ValJust;
     type Cage: CagedPredicateTree<Val = Self::Val>;
 }
 impl<
     V: ValJust,
     C: CagedPredicateTree<Val = V>,
-    T: Deref<Target = [(Arg, PredicateTree<V, C>)]> + ?Sized,
+    T: Deref<Target = [(MemArg, PredicateTree<V, C>)]> + ?Sized,
 > SemanticStore for T
 {
     type Val = V;
@@ -92,6 +99,7 @@ pub enum Val {
     Bin { left: Arg, op: Arith, right: Arg },
     Jmp { target: Arg },
     Just { value: Arg },
+    Deref { mem: Arg, offset: Option<Arg> },
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(transparent)]

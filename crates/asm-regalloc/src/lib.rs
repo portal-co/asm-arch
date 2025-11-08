@@ -227,4 +227,42 @@ impl RegAlloc {
             e = Some(v);
         }
     }
+    pub fn flush(&mut self) -> impl Iterator<Item = Cmd> {
+        let mut i = 0u8;
+        core::iter::from_fn(move|| {
+            for _ in 0u8..=255 {
+                let o = i;
+                i = i.wrapping_add(1);
+                match &self.frames[i as usize] {
+                    RegAllocFrame::Reserved => {}
+                    RegAllocFrame::Empty => {}
+                    RegAllocFrame::Stack { elem } => match elem {
+                        StackElement::Above(_) => {}
+                        StackElement::Native => {
+                            self.frames[i as usize] = RegAllocFrame::Empty;
+                            for f in self.frames.iter_mut() {
+                                if let RegAllocFrame::Stack { elem } = f {
+                                    if let StackElement::Above(v) = elem {
+                                        if *v == i {
+                                            *elem = StackElement::Native;
+                                        }
+                                    }
+                                }
+                            }
+                            if self.tos.is_some_and(|a| a == i) {
+                                self.tos = None;
+                            }
+                            return Some(Cmd::Push(i));
+                        }
+                    },
+                    RegAllocFrame::Local(l) => {
+                        let l = *l;
+                        self.frames[i as usize] = RegAllocFrame::Empty;
+                        return Some(Cmd::SetLocal { src: i, local: l });
+                    }
+                }
+            }
+            return None;
+        })
+    }
 }

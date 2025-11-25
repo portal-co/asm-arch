@@ -4,110 +4,180 @@
 pub extern crate alloc;
 #[doc(hidden)]
 pub use core;
-use core::mem::replace;
+use core::{mem::replace, ops::IndexMut};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-pub struct Target {
+pub struct Target<K> {
     pub reg: u8,
-    pub kind: usize,
+    pub kind: K,
 }
-pub struct RegAlloc<const N: usize> {
-    pub frames: [RegAllocFrame; N],
-    pub tos: Option<u8>,
+pub struct RegAlloc<K, const N: usize, I> {
+    pub frames: I,
+    pub tos: Option<Target<K>>,
 }
-pub enum RegAllocFrame {
+pub enum RegAllocFrame<K> {
     Reserved,
     Empty,
-    Stack { elem: StackElement },
+    Stack { elem: StackElement<K> },
     Local(u32),
 }
-pub enum StackElement {
-    Above(u8),
+pub enum StackElement<K> {
+    Above(Target<K>),
     Native,
 }
-pub enum Cmd {
-    Push(u8),
-    Pop(u8),
-    GetLocal { dest: u8, local: u32 },
-    SetLocal { src: u8, local: u32 },
+pub enum Cmd<K> {
+    Push(Target<K>),
+    Pop(Target<K>),
+    GetLocal { dest: Target<K>, local: u32 },
+    SetLocal { src: Target<K>, local: u32 },
 }
-impl<const N: usize> RegAlloc<N> {
-    fn evict(&mut self) -> (u8, impl Iterator<Item = Cmd> + use<N>) {
+pub trait Length {
+    fn len(&self) -> usize;
+}
+impl<T> Length for [T] {
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+impl<T, const N: usize> Length for [T; N] {
+    fn len(&self) -> usize {
+        N
+    }
+}
+impl<
+    K: Clone + Eq + TryFrom<usize>,
+    const N: usize,
+    I: IndexMut<K, Output = [RegAllocFrame<K>; N]> + Length,
+> RegAlloc<K, N, I>
+{
+    fn evict(
+        &mut self,
+    ) -> Result<
+        (Target<K>, impl Iterator<Item = Cmd<K>> + use<N, K, I>),
+        <K as TryFrom<usize>>::Error,
+    > {
         let mut i = 0;
         let mut c = None;
         loop {
-            let f = &mut self.frames[(i & ((N - 1) & 0xff))];
+            for j in 0..self.frames.len() {
+                let f = &mut self.frames[K::try_from(j)?][(i & ((N - 1) & 0xff))];
 
-            match f {
-                RegAllocFrame::Reserved => {
-                    i += 1;
-                    continue;
-                }
-                RegAllocFrame::Empty => {
-                    return (i as u8, c.into_iter());
-                }
-                RegAllocFrame::Stack { elem } => {
-                    let StackElement::Native = elem else {
+                match f {
+                    RegAllocFrame::Reserved => {
                         i += 1;
                         continue;
-                    };
-                    if let Some(t) = self.tos {
-                        if t == i as u8 {
+                    }
+                    RegAllocFrame::Empty => {
+                        return Ok((
+                            Target {
+                                reg: i as u8,
+                                kind: K::try_from(j)?,
+                            },
+                            c.into_iter(),
+                        ));
+                    }
+                    RegAllocFrame::Stack { elem } => {
+                        let StackElement::Native = elem else {
                             i += 1;
                             continue;
+                        };
+                        if let Some(t) = self.tos.as_ref() {
+                            if *t
+                                == (Target {
+                                    reg: i as u8,
+                                    kind: K::try_from(j)?,
+                                })
+                            {
+                                i += 1;
+                                continue;
+                            }
                         }
-                    }
-                    c = Some(Cmd::Push(i as u8));
-                    *f = RegAllocFrame::Empty;
-                    for f in self.frames.iter_mut() {
-                        if let RegAllocFrame::Stack { elem } = f {
-                            if let StackElement::Above(v) = elem {
-                                if *v == i as u8 {
-                                    *elem = StackElement::Native;
+                        c = Some(Cmd::Push(Target {
+                            reg: i as u8,
+                            kind: K::try_from(j)?,
+                        }));
+                        *f = RegAllocFrame::Empty;
+                        for k in 0..self.frames.len() {
+                            for f in self.frames[K::try_from(k)?].iter_mut() {
+                                if let RegAllocFrame::Stack { elem } = f {
+                                    if let StackElement::Above(v) = elem {
+                                        if *v
+                                            == (Target {
+                                                reg: i as u8,
+                                                kind: K::try_from(j)?,
+                                            })
+                                        {
+                                            *elem = StackElement::Native;
+                                        }
+                                    }
                                 }
                             }
                         }
+                        return Ok((
+                            Target {
+                                reg: i as u8,
+                                kind: K::try_from(j)?,
+                            },
+                            c.into_iter(),
+                        ));
                     }
-                    return (i as u8, c.into_iter());
-                }
-                RegAllocFrame::Local(l) => {
-                    c = Some(Cmd::SetLocal {
-                        src: i as u8,
-                        local: *l,
-                    });
-                    *f = RegAllocFrame::Empty;
-                    return (i as u8, c.into_iter());
+                    RegAllocFrame::Local(l) => {
+                        c = Some(Cmd::SetLocal {
+                            src: Target {
+                                reg: i as u8,
+                                kind: K::try_from(j)?,
+                            },
+                            local: *l,
+                        });
+                        *f = RegAllocFrame::Empty;
+                        return Ok((
+                            Target {
+                                reg: i as u8,
+                                kind: K::try_from(j)?,
+                            },
+                            c.into_iter(),
+                        ));
+                    }
                 }
             }
         }
     }
-    pub fn push(&mut self) -> (u8, impl Iterator<Item = Cmd>) {
+    pub fn push(
+        &mut self,
+        k: K,
+    ) -> Result<(u8, impl Iterator<Item = Cmd<K>>), <K as TryFrom<usize>>::Error> {
         let mut c = None;
         let mut e = None;
         loop {
             let mut i = 0;
-            while let Some(a) = self.frames.get_mut(i) {
+            while let Some(a) = self.frames[k.clone()].get_mut(i) {
                 if let RegAllocFrame::Empty = a {
                     *a = RegAllocFrame::Stack {
-                        elem: match replace(&mut self.tos, Some(i as u8)) {
+                        elem: match replace(
+                            &mut self.tos,
+                            Some(Target {
+                                reg: i as u8,
+                                kind: k.clone(),
+                            }),
+                        ) {
                             None => StackElement::Native,
                             Some(a) => StackElement::Above(a),
                         },
                     };
-                    return (i as u8, e.into_iter().flatten().chain(c.into_iter()));
+                    return Ok((i as u8, e.into_iter().flatten().chain(c.into_iter())));
                 }
                 i += 1;
                 i = i & ((N - 1) & 0xff);
             }
-            let mut i = self.tos;
+            let mut i = self.tos.as_mut();
             if let Some(mut i) = i {
                 let mut i3 = 0u8;
                 let i2 = loop {
-                    let f = &self.frames[i as usize & ((N - 1) & 0xff)];
+                    let f = &self.frames[i.kind.clone()][i.reg as usize & ((N - 1) & 0xff)];
                     match f {
                         RegAllocFrame::Stack { elem } => match elem {
                             StackElement::Above(a) => {
-                                i = *a;
-                                i3 = i;
+                                i.reg = a.reg;
+                                i3 = i.reg;
                             }
                             StackElement::Native => {
                                 break i;
@@ -116,36 +186,36 @@ impl<const N: usize> RegAlloc<N> {
                         _ => todo!(),
                     }
                 };
-                c = Some(Cmd::Push(i2));
-                self.frames[i2 as usize] = RegAllocFrame::Empty;
-                self.frames[i3 as usize] = RegAllocFrame::Stack {
+                c = Some(Cmd::Push(i2.clone()));
+                self.frames[i2.kind.clone()][i2.reg as usize] = RegAllocFrame::Empty;
+                self.frames[i2.kind.clone()][i3 as usize] = RegAllocFrame::Stack {
                     elem: StackElement::Native,
                 };
             } else {
-                let (_, v) = self.evict();
+                let (_, v) = self.evict()?;
                 e = Some(v);
             }
         }
     }
-    pub fn push_existing(&mut self, a: u8) -> impl Iterator<Item = Cmd> {
-        let mut c: Option<Cmd> = None;
-        if let RegAllocFrame::Empty = &self.frames[a as usize] {
-            self.frames[a as usize] = RegAllocFrame::Stack {
-                elem: match replace(&mut self.tos, Some(a)) {
+    pub fn push_existing(&mut self, a: Target<K>) -> impl Iterator<Item = Cmd<K>> {
+        let mut c: Option<Cmd<K>> = None;
+        if let RegAllocFrame::Empty = &self.frames[a.kind.clone()][a.reg as usize] {
+            self.frames[a.kind.clone()][a.reg as usize] = RegAllocFrame::Stack {
+                elem: match replace(&mut self.tos, Some(a.clone())) {
                     None => StackElement::Native,
-                    Some(a) => StackElement::Above(a),
+                    Some(a) => StackElement::Above(a.clone()),
                 },
             };
             return c.into_iter();
         }
         todo!()
     }
-    pub fn pop(&mut self) -> (u8, impl Iterator<Item = Cmd>) {
+    pub fn pop(&mut self, kind: K) -> (Target<K>, impl Iterator<Item = Cmd<K>>) {
         let mut c = None;
         'a: loop {
             match self.tos.take() {
                 Some(i) => {
-                    let a = &mut self.frames[i as usize & ((N - 1) & 0xff)];
+                    let a = &mut self.frames[i.kind.clone()][i.reg as usize & ((N - 1) & 0xff)];
                     if let RegAllocFrame::Stack { elem } = replace(a, RegAllocFrame::Empty) {
                         self.tos = match elem {
                             StackElement::Above(v) => Some(v),
@@ -156,10 +226,16 @@ impl<const N: usize> RegAlloc<N> {
                 }
                 None => {
                     let mut i = 0;
-                    while let Some(a) = self.frames.get_mut(i) {
+                    while let Some(a) = self.frames[kind.clone()].get_mut(i) {
                         if let RegAllocFrame::Empty = a {
-                            c = Some(Cmd::Pop(i as u8));
-                            self.tos = Some(i as u8);
+                            c = Some(Cmd::Pop(Target {
+                                reg: i as u8,
+                                kind: kind.clone(),
+                            }));
+                            self.tos = Some(Target {
+                                reg: i as u8,
+                                kind: kind.clone(),
+                            });
                             continue 'a;
                         }
                         i += 1;
@@ -169,12 +245,12 @@ impl<const N: usize> RegAlloc<N> {
             }
         }
     }
-    pub fn pop_local(&mut self, target: u32) -> (impl Iterator<Item = Cmd>) {
+    pub fn pop_local(&mut self, kind: K, target: u32) -> (impl Iterator<Item = Cmd<K>>) {
         let mut c = None;
         'a: loop {
             match self.tos.take() {
                 Some(i) => {
-                    let a = &mut self.frames[i as usize];
+                    let a = &mut self.frames[i.kind][i.reg as usize];
                     if let RegAllocFrame::Stack { elem } = replace(a, RegAllocFrame::Local(target))
                     {
                         self.tos = match elem {
@@ -186,10 +262,16 @@ impl<const N: usize> RegAlloc<N> {
                 }
                 None => {
                     let mut i = 0;
-                    while let Some(a) = self.frames.get_mut(i) {
+                    while let Some(a) = self.frames[kind.clone()].get_mut(i) {
                         if let RegAllocFrame::Empty = a {
-                            c = Some(Cmd::Pop(i as u8));
-                            self.tos = Some(i as u8);
+                            c = Some(Cmd::Pop(Target {
+                                reg: i as u8,
+                                kind: kind.clone(),
+                            }));
+                            self.tos = Some(Target {
+                                reg: i as u8,
+                                kind: kind.clone(),
+                            });
                             continue 'a;
                         }
                         i += 1;
@@ -199,32 +281,45 @@ impl<const N: usize> RegAlloc<N> {
             }
         }
     }
-    pub fn push_local(&mut self, src: u32) -> impl Iterator<Item = Cmd> {
+    pub fn push_local(
+        &mut self,
+        kind: K,
+        src: u32,
+    ) -> Result<impl Iterator<Item = Cmd<K>>, <K as TryFrom<usize>>::Error> {
         let mut c = None;
         let mut e = None;
         'a: loop {
             let mut i = 0;
-            while let Some(a) = self.frames.get_mut(i) {
+            while let Some(a) = self.frames[kind.clone()].get_mut(i) {
                 if let RegAllocFrame::Local(l) = a {
                     if *l == src {
                         *a = RegAllocFrame::Stack {
-                            elem: match replace(&mut self.tos, Some(i as u8)) {
+                            elem: match replace(
+                                &mut self.tos,
+                                Some(Target {
+                                    reg: i as u8,
+                                    kind: kind.clone(),
+                                }),
+                            ) {
                                 None => StackElement::Native,
                                 Some(a) => StackElement::Above(a),
                             },
                         };
-                        return e.into_iter().flatten().chain(c.into_iter());
+                        return Ok(e.into_iter().flatten().chain(c.into_iter()));
                     }
                 }
                 i += 1;
                 i = i & ((N - 1) & 0xff);
             }
             i = 0;
-            while let Some(a) = self.frames.get_mut(i) {
+            while let Some(a) = self.frames[kind.clone()].get_mut(i) {
                 if let RegAllocFrame::Empty = a {
                     *a = RegAllocFrame::Local(src);
                     c = Some(Cmd::GetLocal {
-                        dest: i as u8,
+                        dest: Target {
+                            reg: i as u8,
+                            kind: kind.clone(),
+                        },
                         local: src,
                     });
                     continue 'a;
@@ -232,42 +327,61 @@ impl<const N: usize> RegAlloc<N> {
                 i += 1;
                 i = i & ((N - 1) & 0xff);
             }
-            let (_, v) = self.evict();
+            let (_, v) = self.evict()?;
             e = Some(v);
         }
     }
-    pub fn flush(&mut self) -> impl Iterator<Item = Cmd> {
+    pub fn flush(&mut self) -> impl Iterator<Item = Cmd<K>> {
         let mut i = 0u8;
         core::iter::from_fn(move || {
-            for _ in 0u8..=(((N - 1) & 0xff) as u8) {
-                let o = i;
-                i = i.wrapping_add(1);
-                match &self.frames[i as usize & ((N - 1) & 0xff)] {
-                    RegAllocFrame::Reserved => {}
-                    RegAllocFrame::Empty => {}
-                    RegAllocFrame::Stack { elem } => match elem {
-                        StackElement::Above(_) => {}
-                        StackElement::Native => {
-                            self.frames[i as usize] = RegAllocFrame::Empty;
-                            for f in self.frames.iter_mut() {
-                                if let RegAllocFrame::Stack { elem } = f {
-                                    if let StackElement::Above(v) = elem {
-                                        if *v == i {
-                                            *elem = StackElement::Native;
+            for k in 0..self.frames.len() {
+                let Ok(k) = K::try_from(k) else {
+                    continue;
+                };
+                for _ in 0u8..=(((N - 1) & 0xff) as u8) {
+                    let o = i;
+                    i = i.wrapping_add(1);
+                    match &self.frames[k.clone()][i as usize & ((N - 1) & 0xff)] {
+                        RegAllocFrame::Reserved => {}
+                        RegAllocFrame::Empty => {}
+                        RegAllocFrame::Stack { elem } => match elem {
+                            StackElement::Above(_) => {}
+                            StackElement::Native => {
+                                self.frames[k.clone()][i as usize] = RegAllocFrame::Empty;
+                                for k2 in 0..self.frames.len() {
+                                    let Ok(k2) = K::try_from(k2) else {
+                                        continue;
+                                    };
+                                    for f in self.frames[k2.clone()].iter_mut() {
+                                        if let RegAllocFrame::Stack { elem } = f {
+                                            if let StackElement::Above(v) = elem {
+                                                if v.reg == i && v.kind == k {
+                                                    *elem = StackElement::Native;
+                                                }
+                                            }
                                         }
                                     }
                                 }
+                                if self.tos.as_ref().is_some_and(|a| a.reg == i && a.kind == k) {
+                                    self.tos = None;
+                                }
+                                return Some(Cmd::Push(Target {
+                                    reg: i,
+                                    kind: k.clone(),
+                                }));
                             }
-                            if self.tos.is_some_and(|a| a == i) {
-                                self.tos = None;
-                            }
-                            return Some(Cmd::Push(i));
+                        },
+                        RegAllocFrame::Local(l) => {
+                            let l = *l;
+                            self.frames[k.clone()][i as usize] = RegAllocFrame::Empty;
+                            return Some(Cmd::SetLocal {
+                                src: Target {
+                                    reg: i,
+                                    kind: k.clone(),
+                                },
+                                local: l,
+                            });
                         }
-                    },
-                    RegAllocFrame::Local(l) => {
-                        let l = *l;
-                        self.frames[i as usize] = RegAllocFrame::Empty;
-                        return Some(Cmd::SetLocal { src: i, local: l });
                     }
                 }
             }

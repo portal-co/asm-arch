@@ -5,9 +5,13 @@ pub extern crate alloc;
 #[doc(hidden)]
 pub use core;
 use core::mem::replace;
-
-pub struct RegAlloc {
-    pub frames: [RegAllocFrame; 256],
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub struct Target {
+    pub reg: u8,
+    pub kind: usize,
+}
+pub struct RegAlloc<const N: usize> {
+    pub frames: [RegAllocFrame; N],
     pub tos: Option<u8>,
 }
 pub enum RegAllocFrame {
@@ -26,12 +30,12 @@ pub enum Cmd {
     GetLocal { dest: u8, local: u32 },
     SetLocal { src: u8, local: u32 },
 }
-impl RegAlloc {
-    fn evict(&mut self) -> (u8, impl Iterator<Item = Cmd> + use<>) {
+impl<const N: usize> RegAlloc<N> {
+    fn evict(&mut self) -> (u8, impl Iterator<Item = Cmd> + use<N>) {
         let mut i = 0;
         let mut c = None;
         loop {
-            let f = &mut self.frames[i];
+            let f = &mut self.frames[(i & ((N - 1) & 0xff))];
 
             match f {
                 RegAllocFrame::Reserved => {
@@ -92,12 +96,13 @@ impl RegAlloc {
                     return (i as u8, e.into_iter().flatten().chain(c.into_iter()));
                 }
                 i += 1;
+                i = i & ((N - 1) & 0xff);
             }
             let mut i = self.tos;
             if let Some(mut i) = i {
                 let mut i3 = 0u8;
                 let i2 = loop {
-                    let f = &self.frames[i as usize];
+                    let f = &self.frames[i as usize & ((N - 1) & 0xff)];
                     match f {
                         RegAllocFrame::Stack { elem } => match elem {
                             StackElement::Above(a) => {
@@ -140,7 +145,7 @@ impl RegAlloc {
         'a: loop {
             match self.tos.take() {
                 Some(i) => {
-                    let a = &mut self.frames[i as usize];
+                    let a = &mut self.frames[i as usize & ((N - 1) & 0xff)];
                     if let RegAllocFrame::Stack { elem } = replace(a, RegAllocFrame::Empty) {
                         self.tos = match elem {
                             StackElement::Above(v) => Some(v),
@@ -158,6 +163,7 @@ impl RegAlloc {
                             continue 'a;
                         }
                         i += 1;
+                        i = i & ((N - 1) & 0xff);
                     }
                 }
             }
@@ -187,6 +193,7 @@ impl RegAlloc {
                             continue 'a;
                         }
                         i += 1;
+                        i = i & ((N - 1) & 0xff);
                     }
                 }
             }
@@ -210,6 +217,7 @@ impl RegAlloc {
                     }
                 }
                 i += 1;
+                i = i & ((N - 1) & 0xff);
             }
             i = 0;
             while let Some(a) = self.frames.get_mut(i) {
@@ -222,6 +230,7 @@ impl RegAlloc {
                     continue 'a;
                 }
                 i += 1;
+                i = i & ((N - 1) & 0xff);
             }
             let (_, v) = self.evict();
             e = Some(v);
@@ -229,11 +238,11 @@ impl RegAlloc {
     }
     pub fn flush(&mut self) -> impl Iterator<Item = Cmd> {
         let mut i = 0u8;
-        core::iter::from_fn(move|| {
-            for _ in 0u8..=255 {
+        core::iter::from_fn(move || {
+            for _ in 0u8..=(((N - 1) & 0xff) as u8) {
                 let o = i;
                 i = i.wrapping_add(1);
-                match &self.frames[i as usize] {
+                match &self.frames[i as usize & ((N - 1) & 0xff)] {
                     RegAllocFrame::Reserved => {}
                     RegAllocFrame::Empty => {}
                     RegAllocFrame::Stack { elem } => match elem {

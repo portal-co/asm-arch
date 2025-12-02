@@ -81,15 +81,30 @@ pub enum MemArgKind<A = ArgKind> {
         disp: u32,
         /// Size of the memory access.
         size: MemorySize,
+        /// Register class for pointer naming (xmmword vs qword, etc.).
+        reg_class: crate::RegisterClass,
     },
 }
 impl<A: Arg> MemArgKind<A> {
     /// Creates a displayable representation of this memory argument kind.
     pub fn display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
-        return self
-            .as_ref()
-            .map(&mut |a| Ok::<_, Infallible>(a.display(opts)))
-            .unwrap();
+        match self {
+            MemArgKind::NoMem(a) => {
+                // For non-memory operands, use the provided opts
+                MemArgKind::NoMem(a.display(opts))
+            }
+            MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+                // For memory operands, force base and offset to be GPRs
+                let gpr_opts = crate::DisplayOpts::new(opts.arch);
+                MemArgKind::Mem {
+                    base: base.display(gpr_opts),
+                    offset: offset.as_ref().map(|(a, scale)| (a.display(gpr_opts), *scale)),
+                    disp: *disp,
+                    size: *size,
+                    reg_class: *reg_class,
+                }
+            }
+        }
     }
 }
 impl<T: Display> Display for MemArgKind<T> {
@@ -101,12 +116,30 @@ impl<T: Display> Display for MemArgKind<T> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => {
-                let ptr = match size {
-                    MemorySize::_8 => "byte",
-                    MemorySize::_16 => "word",
-                    MemorySize::_32 => "dword",
-                    MemorySize::_64 => "qword",
+                // Pointer type name based on register class and size
+                // Scheme for pointer naming:
+                // - GPR registers: Use standard size names (byte, word, dword, qword)
+                // - XMM registers: Use SIMD names based on MemorySize
+                //   * _64 and below -> xmmword (scalar operations on XMM)
+                //   * _128 -> xmmword (full 128-bit XMM register) [Future]
+                //   * _256 -> ymmword (256-bit YMM register) [Future]
+                //   * _512 -> zmmword (512-bit ZMM register) [Future]
+                let ptr = match reg_class {
+                    crate::RegisterClass::Gpr => match size {
+                        MemorySize::_8 => "byte",
+                        MemorySize::_16 => "word",
+                        MemorySize::_32 => "dword",
+                        MemorySize::_64 => "qword",
+                    },
+                    crate::RegisterClass::Xmm => match size {
+                        MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmmword",
+                        // Future SIMD pointer sizes:
+                        // MemorySize::_128 => "xmmword",
+                        // MemorySize::_256 => "ymmword",
+                        // MemorySize::_512 => "zmmword",
+                    },
                 };
                 let c;
                 let d;
@@ -137,11 +170,13 @@ impl<A> MemArgKind<A> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => MemArgKind::Mem {
                 base,
                 offset: offset.as_ref().map(|(a, b)| (a, *b)),
                 disp: *disp,
                 size: *size,
+                reg_class: *reg_class,
             },
         }
     }
@@ -154,11 +189,13 @@ impl<A> MemArgKind<A> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => MemArgKind::Mem {
                 base,
                 offset: offset.as_mut().map(|(a, b)| (a, *b)),
                 disp: *disp,
                 size: *size,
+                reg_class: *reg_class,
             },
         }
     }
@@ -174,6 +211,7 @@ impl<A> MemArgKind<A> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => MemArgKind::Mem {
                 base: go(base)?,
                 offset: match offset {
@@ -182,6 +220,7 @@ impl<A> MemArgKind<A> {
                 },
                 disp,
                 size,
+                reg_class,
             },
         })
     }
@@ -231,6 +270,7 @@ pub trait MemArg {
                     offset,
                     disp,
                     size,
+                    reg_class,
                 } => base
                     .regs()
                     .chain(offset.iter().flat_map(|(a, _)| a.regs()))
@@ -398,11 +438,13 @@ impl<T: MemArg> MemArg for MemorySized<T> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => MemArgKind::Mem {
                 base,
                 offset,
                 disp,
                 size: self.size,
+                reg_class,
             },
         }
     }
@@ -417,11 +459,13 @@ impl<T: MemArg> MemArg for MemorySized<T> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => go(MemArgKind::Mem {
                 base,
                 offset,
                 disp,
                 size: self.size,
+                reg_class,
             }),
         });
     }
@@ -487,6 +531,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
                 offset,
                 disp,
                 size,
+                reg_class,
             } => MemArgKind::Mem {
                 base,
                 offset: match offset.as_ref() {
@@ -495,6 +540,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
                 },
                 disp: *disp,
                 size: *size,
+                reg_class: *reg_class,
             },
         })
     }

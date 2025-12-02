@@ -109,7 +109,7 @@ pub struct X64Arch {
 ///
 /// Controls how registers are displayed, including the target architecture,
 /// the operand size, and the register class (GPR vs XMM).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 #[non_exhaustive]
 pub struct RegFormatOpts {
     /// The target architecture configuration.
@@ -171,9 +171,9 @@ mod tests {
         
         // Test GPR display
         let gpr_opts = RegFormatOpts::default_with_arch(cfg);
-        let gpr0 = format!("{}", X64Reg::display(&reg0, gpr_opts));
-        let gpr1 = format!("{}", X64Reg::display(&reg1, gpr_opts));
-        let gpr7 = format!("{}", X64Reg::display(&reg7, gpr_opts));
+        let gpr0 = format!("{}", X64Reg::display(&reg0, gpr_opts.clone()));
+        let gpr1 = format!("{}", X64Reg::display(&reg1, gpr_opts.clone()));
+        let gpr7 = format!("{}", X64Reg::display(&reg7, gpr_opts.clone()));
         let gpr8 = format!("{}", X64Reg::display(&reg8, gpr_opts));
         
         assert_eq!(gpr0, "rax");
@@ -183,15 +183,38 @@ mod tests {
         
         // Test XMM display
         let xmm_opts = RegFormatOpts::with_reg_class(cfg, Default::default(), RegisterClass::Xmm);
-        let xmm0 = format!("{}", X64Reg::display(&reg0, xmm_opts));
-        let xmm1 = format!("{}", X64Reg::display(&reg1, xmm_opts));
-        let xmm7 = format!("{}", X64Reg::display(&reg7, xmm_opts));
+        let xmm0 = format!("{}", X64Reg::display(&reg0, xmm_opts.clone()));
+        let xmm1 = format!("{}", X64Reg::display(&reg1, xmm_opts.clone()));
+        let xmm7 = format!("{}", X64Reg::display(&reg7, xmm_opts.clone()));
         let xmm8 = format!("{}", X64Reg::display(&reg8, xmm_opts));
         
         assert_eq!(xmm0, "xmm0");
         assert_eq!(xmm1, "xmm1");
         assert_eq!(xmm7, "xmm7");
         assert_eq!(xmm8, "xmm8");
+    }
+    
+    #[test]
+    fn test_apx_xmm_registers() {
+        let cfg_apx = X64Arch { apx: true };
+        let reg16 = Reg(16);
+        let reg31 = Reg(31);
+        
+        // Test APX XMM registers (xmm16-xmm31)
+        let xmm_opts = RegFormatOpts::with_reg_class(cfg_apx, Default::default(), RegisterClass::Xmm);
+        let xmm16 = format!("{}", X64Reg::display(&reg16, xmm_opts.clone()));
+        let xmm31 = format!("{}", X64Reg::display(&reg31, xmm_opts));
+        
+        assert_eq!(xmm16, "xmm16", "Register 16 should display as xmm16 with APX and XMM register class");
+        assert_eq!(xmm31, "xmm31", "Register 31 should display as xmm31 with APX and XMM register class");
+        
+        // Test APX GPR registers for comparison
+        let gpr_opts = RegFormatOpts::default_with_arch(cfg_apx);
+        let r16 = format!("{}", X64Reg::display(&reg16, gpr_opts.clone()));
+        let r31 = format!("{}", X64Reg::display(&reg31, gpr_opts));
+        
+        assert_eq!(r16, "r16", "Register 16 should display as r16 with APX and GPR register class");
+        assert_eq!(r31, "r31", "Register 31 should display as r31 with APX and GPR register class");
     }
     
     #[test]

@@ -49,6 +49,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                 offset: None,
                 disp: b,
                 size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
             },
         )?;
         if xchg {
@@ -60,6 +61,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                     offset: None,
                     disp: c,
                     size: MemorySize::_64,
+                    reg_class: crate::RegisterClass::Gpr,
                 },
             )?;
         } else {
@@ -71,6 +73,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                     offset: None,
                     disp: c,
                     size: MemorySize::_64,
+                    reg_class: crate::RegisterClass::Gpr,
                 },
             )?;
         }
@@ -79,19 +82,29 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
 }
 impl X64Reg for Reg {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result {
+        // Check APX support at the top of the method
+        let max_regs = if opts.arch.apx { 32 } else { 16 };
+        let idx = (self.0 as usize) % max_regs;
+        
         match opts.reg_class {
             crate::RegisterClass::Xmm => {
-                // For XMM registers, use the register index directly
-                let idx = (self.0 as usize) % 16;
-                if idx < 16 {
-                    write!(f, "{}", crate::XMM_REG_NAMES[idx])
-                } else {
-                    // For APX extended XMM registers (xmm16-xmm31)
-                    write!(f, "xmm{idx}")
-                }
+                // For XMM/YMM/ZMM registers
+                // Scheme: MemorySize determines register type
+                // - _64 bits (8 bytes) and below -> xmm (128-bit, using scalar operations)
+                // - _128 bits (16 bytes) -> xmm (full 128-bit register) [Future]
+                // - _256 bits (32 bytes) -> ymm (256-bit register) [Future]
+                // - _512 bits (64 bytes) -> zmm (512-bit register) [Future]
+                let prefix = match &opts.size {
+                    MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmm",
+                    // Future: Add MemorySize::_128 for full xmm
+                    // Future: Add MemorySize::_256 for ymm -> "ymm"
+                    // Future: Add MemorySize::_512 for zmm -> "zmm"
+                };
+                
+                // Both regular and APX extended registers use the same format
+                write!(f, "{}{}", prefix, idx)
             }
             crate::RegisterClass::Gpr => {
-                let idx = (self.0 as usize) % (if opts.arch.apx { 32 } else { 16 });
                 if idx < 8 {
                     write!(
                         f,

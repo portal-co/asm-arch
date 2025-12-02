@@ -168,7 +168,10 @@ pub enum Val {
         /// Right operand.
         right: Arg 
     },
-    /// A jump to a target.
+    /// A jump to a target address.
+    ///
+    /// This always breaks out of the current machine instruction being lowered,
+    /// transferring control to an external address.
     Jmp { 
         /// Jump target.
         target: Arg 
@@ -185,7 +188,12 @@ pub enum Val {
         /// Optional offset.
         offset: Option<Arg> 
     },
-    /// A rewind operation.
+    /// A backward jump within the lowered instruction's implementation.
+    ///
+    /// Unlike [`Jmp`](Val::Jmp), this does not break out of the current machine
+    /// instruction. Instead, it jumps backwards within the instruction's lowered
+    /// implementation to enable looping instructions such as x86-64 `rep` prefixed
+    /// instructions.
     Rewind { 
         /// Rewind target.
         target: Arg, 

@@ -1,5 +1,15 @@
+//! Assembly text output implementations.
+//!
+//! This module provides macro-based implementations of [`WriterCore`] and [`Writer`]
+//! for types that implement [`core::fmt::Write`], enabling assembly code to be
+//! written as text.
+
 use super::*;
 use core::fmt::{Display, Formatter, Write};
+
+/// Implements [`WriterCore`] and [`Writer`] for the specified types.
+///
+/// This macro generates implementations that emit assembly instructions as text.
 #[macro_export]
 macro_rules! writers {
     ($($ty:ty),*) => {

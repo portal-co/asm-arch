@@ -132,6 +132,8 @@ impl<T: Display> Display for MemArgKind<T> {
                         MemorySize::_16 => "word",
                         MemorySize::_32 => "dword",
                         MemorySize::_64 => "qword",
+                        // Default to qword for any unknown sizes
+                        _ => "qword",
                     },
                     crate::RegisterClass::Xmm => match size {
                         MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmmword",
@@ -139,6 +141,8 @@ impl<T: Display> Display for MemArgKind<T> {
                         // MemorySize::_128 => "xmmword",
                         // MemorySize::_256 => "ymmword",
                         // MemorySize::_512 => "zmmword",
+                        // Default to xmmword for any unknown sizes
+                        _ => "xmmword",
                     },
                 };
                 let c;

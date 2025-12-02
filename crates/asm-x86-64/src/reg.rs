@@ -96,9 +96,11 @@ impl X64Reg for Reg {
                 // - _512 bits (64 bytes) -> zmm (512-bit register) [Future]
                 let prefix = match &opts.size {
                     MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmm",
-                    // Future: Add MemorySize::_128 for full xmm
-                    // Future: Add MemorySize::_256 for ymm -> "ymm"
-                    // Future: Add MemorySize::_512 for zmm -> "zmm"
+                    // Future: Add MemorySize::_128 => "xmm"
+                    // Future: Add MemorySize::_256 => "ymm"
+                    // Future: Add MemorySize::_512 => "zmm"
+                    // Default to xmm for any unknown sizes
+                    _ => "xmm",
                 };
                 
                 // Both regular and APX extended registers use the same format

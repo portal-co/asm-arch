@@ -118,14 +118,12 @@ impl<T: Display> Display for MemArgKind<T> {
                 size,
                 reg_class,
             } => {
+                // TEMPORARY HACK: Map smaller MemorySize values to larger SIMD memory widths
+                // This is a workaround until proper MemorySize variants are added to portal-pc-asm-common
+                // Hack mapping: _8 → xmmword (128-bit), _16 → ymmword (256-bit), _32 → zmmword (512-bit), _64 → unmapped
+                const NO_HACK: bool = false;
+                
                 // Pointer type name based on register class and size
-                // Scheme for pointer naming:
-                // - GPR registers: Use standard size names (byte, word, dword, qword)
-                // - XMM registers: Use SIMD names based on MemorySize
-                //   * _64 and below -> xmmword (scalar operations on XMM)
-                //   * _128 -> xmmword (full 128-bit XMM register) [Future]
-                //   * _256 -> ymmword (256-bit YMM register) [Future]
-                //   * _512 -> zmmword (512-bit ZMM register) [Future]
                 let ptr = match reg_class {
                     crate::RegisterClass::Gpr => match size {
                         MemorySize::_8 => "byte",
@@ -135,15 +133,35 @@ impl<T: Display> Display for MemArgKind<T> {
                         // Default to qword for any unknown sizes
                         _ => "qword",
                     },
-                    crate::RegisterClass::Xmm => match size {
-                        MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmmword",
-                        // Future SIMD pointer sizes:
-                        // MemorySize::_128 => "xmmword",
-                        // MemorySize::_256 => "ymmword",
-                        // MemorySize::_512 => "zmmword",
-                        // Default to xmmword for any unknown sizes
-                        _ => "xmmword",
-                    },
+                    crate::RegisterClass::Xmm => {
+                        if NO_HACK {
+                            // Non-hacky code: Proper MemorySize to pointer width mapping (for future use)
+                            // Scheme for pointer naming:
+                            // - _64 and below -> xmmword (scalar operations on XMM)
+                            // - _128 -> xmmword (full 128-bit XMM register) [Future]
+                            // - _256 -> ymmword (256-bit YMM register) [Future]
+                            // - _512 -> zmmword (512-bit ZMM register) [Future]
+                            match size {
+                                MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmmword",
+                                // Future SIMD pointer sizes:
+                                // MemorySize::_128 => "xmmword",
+                                // MemorySize::_256 => "ymmword",
+                                // MemorySize::_512 => "zmmword",
+                                // Default to xmmword for any unknown sizes
+                                _ => "xmmword",
+                            }
+                        } else {
+                            // HACK: Temporary mapping until proper MemorySize variants exist
+                            // _8 → 128-bit xmmword, _16 → 256-bit ymmword, _32 → 512-bit zmmword, _64 → unmapped
+                            match size {
+                                MemorySize::_8 => "xmmword",   // 128-bit memory access
+                                MemorySize::_16 => "ymmword",  // 256-bit memory access
+                                MemorySize::_32 => "zmmword",  // 512-bit memory access
+                                MemorySize::_64 => "xmmword",  // Unmapped - default to xmmword
+                                _ => "xmmword",
+                            }
+                        }
+                    }
                 };
                 let c;
                 let d;

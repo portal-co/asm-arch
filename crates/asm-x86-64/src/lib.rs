@@ -218,6 +218,36 @@ mod tests {
     }
     
     #[test]
+    fn test_ymm_zmm_register_hack() {
+        // Test the temporary hack for YMM/ZMM register naming
+        // _8 → xmm (128-bit), _16 → ymm (256-bit), _32 → zmm (512-bit)
+        let cfg = X64Arch::default();
+        let reg0 = Reg(0);
+        let reg1 = Reg(1);
+        
+        // Test XMM with _8 (hack: 128-bit xmm)
+        let xmm_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_8, RegisterClass::Xmm);
+        let xmm0 = format!("{}", X64Reg::display(&reg0, xmm_opts.clone()));
+        let xmm1 = format!("{}", X64Reg::display(&reg1, xmm_opts));
+        assert_eq!(xmm0, "xmm0", "MemorySize::_8 should map to xmm with hack");
+        assert_eq!(xmm1, "xmm1", "MemorySize::_8 should map to xmm with hack");
+        
+        // Test YMM with _16 (hack: 256-bit ymm)
+        let ymm_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_16, RegisterClass::Xmm);
+        let ymm0 = format!("{}", X64Reg::display(&reg0, ymm_opts.clone()));
+        let ymm1 = format!("{}", X64Reg::display(&reg1, ymm_opts));
+        assert_eq!(ymm0, "ymm0", "MemorySize::_16 should map to ymm with hack");
+        assert_eq!(ymm1, "ymm1", "MemorySize::_16 should map to ymm with hack");
+        
+        // Test ZMM with _32 (hack: 512-bit zmm)
+        let zmm_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_32, RegisterClass::Xmm);
+        let zmm0 = format!("{}", X64Reg::display(&reg0, zmm_opts.clone()));
+        let zmm1 = format!("{}", X64Reg::display(&reg1, zmm_opts));
+        assert_eq!(zmm0, "zmm0", "MemorySize::_32 should map to zmm with hack");
+        assert_eq!(zmm1, "zmm1", "MemorySize::_32 should map to zmm with hack");
+    }
+    
+    #[test]
     fn test_float_instruction_with_xmm_registers() {
         use crate::out::arg::Arg;
         

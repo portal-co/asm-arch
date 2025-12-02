@@ -82,6 +82,11 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
 }
 impl X64Reg for Reg {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result {
+        // TEMPORARY HACK: Map smaller MemorySize values to larger SIMD registers
+        // This is a workaround until proper MemorySize variants are added to portal-pc-asm-common
+        // Hack mapping: _8 → xmm (128-bit), _16 → ymm (256-bit), _32 → zmm (512-bit), _64 → unmapped
+        const NO_HACK: bool = false;
+        
         // Check APX support at the top of the method
         let max_regs = if opts.arch.apx { 32 } else { 16 };
         let idx = (self.0 as usize) % max_regs;
@@ -89,18 +94,31 @@ impl X64Reg for Reg {
         match opts.reg_class {
             crate::RegisterClass::Xmm => {
                 // For XMM/YMM/ZMM registers
-                // Scheme: MemorySize determines register type
-                // - _64 bits (8 bytes) and below -> xmm (128-bit, using scalar operations)
-                // - _128 bits (16 bytes) -> xmm (full 128-bit register) [Future]
-                // - _256 bits (32 bytes) -> ymm (256-bit register) [Future]
-                // - _512 bits (64 bytes) -> zmm (512-bit register) [Future]
-                let prefix = match &opts.size {
-                    MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmm",
-                    // Future: Add MemorySize::_128 => "xmm"
-                    // Future: Add MemorySize::_256 => "ymm"
-                    // Future: Add MemorySize::_512 => "zmm"
-                    // Default to xmm for any unknown sizes
-                    _ => "xmm",
+                let prefix = if NO_HACK {
+                    // Non-hacky code: Proper MemorySize to register mapping (for future use)
+                    // Scheme: MemorySize determines register type
+                    // - _64 bits (8 bytes) and below -> xmm (128-bit, using scalar operations)
+                    // - _128 bits (16 bytes) -> xmm (full 128-bit register) [Future]
+                    // - _256 bits (32 bytes) -> ymm (256-bit register) [Future]
+                    // - _512 bits (64 bytes) -> zmm (512-bit register) [Future]
+                    match &opts.size {
+                        MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmm",
+                        // Future: Add MemorySize::_128 => "xmm"
+                        // Future: Add MemorySize::_256 => "ymm"
+                        // Future: Add MemorySize::_512 => "zmm"
+                        // Default to xmm for any unknown sizes
+                        _ => "xmm",
+                    }
+                } else {
+                    // HACK: Temporary mapping until proper MemorySize variants exist
+                    // _8 → 128-bit xmm, _16 → 256-bit ymm, _32 → 512-bit zmm, _64 → unmapped
+                    match &opts.size {
+                        MemorySize::_8 => "xmm",   // 128-bit XMM register
+                        MemorySize::_16 => "ymm",  // 256-bit YMM register
+                        MemorySize::_32 => "zmm",  // 512-bit ZMM register
+                        MemorySize::_64 => "xmm",  // Unmapped - default to xmm
+                        _ => "xmm",
+                    }
                 };
                 
                 // Both regular and APX extended registers use the same format

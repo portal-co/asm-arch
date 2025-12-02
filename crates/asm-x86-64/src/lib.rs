@@ -109,7 +109,7 @@ pub struct X64Arch {
 ///
 /// Controls how registers are displayed, including the target architecture,
 /// the operand size, and the register class (GPR vs XMM).
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct RegFormatOpts {
     /// The target architecture configuration.
@@ -151,6 +151,74 @@ impl Default for RegFormatOpts {
 pub mod out;
 /// Register handling and formatting module.
 pub mod reg;
+
+#[cfg(all(test, feature = "alloc"))]
+mod tests {
+    use super::*;
+    use portal_pc_asm_common::types::reg::Reg;
+    use crate::reg::X64Reg;
+    extern crate alloc;
+    use alloc::string::String;
+    use alloc::format;
+    
+    #[test]
+    fn test_xmm_register_display() {
+        let cfg = X64Arch::default();
+        let reg0 = Reg(0);
+        let reg1 = Reg(1);
+        let reg7 = Reg(7);
+        let reg8 = Reg(8);
+        
+        // Test GPR display
+        let gpr_opts = RegFormatOpts::default_with_arch(cfg);
+        let gpr0 = format!("{}", X64Reg::display(&reg0, gpr_opts));
+        let gpr1 = format!("{}", X64Reg::display(&reg1, gpr_opts));
+        let gpr7 = format!("{}", X64Reg::display(&reg7, gpr_opts));
+        let gpr8 = format!("{}", X64Reg::display(&reg8, gpr_opts));
+        
+        assert_eq!(gpr0, "rax");
+        assert_eq!(gpr1, "rcx");
+        assert_eq!(gpr7, "rdi");
+        assert_eq!(gpr8, "r8");
+        
+        // Test XMM display
+        let xmm_opts = RegFormatOpts::with_reg_class(cfg, Default::default(), RegisterClass::Xmm);
+        let xmm0 = format!("{}", X64Reg::display(&reg0, xmm_opts));
+        let xmm1 = format!("{}", X64Reg::display(&reg1, xmm_opts));
+        let xmm7 = format!("{}", X64Reg::display(&reg7, xmm_opts));
+        let xmm8 = format!("{}", X64Reg::display(&reg8, xmm_opts));
+        
+        assert_eq!(xmm0, "xmm0");
+        assert_eq!(xmm1, "xmm1");
+        assert_eq!(xmm7, "xmm7");
+        assert_eq!(xmm8, "xmm8");
+    }
+    
+    #[test]
+    fn test_float_instruction_with_xmm_registers() {
+        use crate::out::arg::Arg;
+        
+        let cfg = X64Arch::default();
+        let reg0 = Reg(0);
+        let reg1 = Reg(1);
+        
+        // Test that registers display as XMM when using DisplayOpts with Xmm register class
+        let xmm_opts = DisplayOpts::with_reg_class(cfg, RegisterClass::Xmm);
+        let reg0_xmm = format!("{}", Arg::display(&reg0, xmm_opts));
+        let reg1_xmm = format!("{}", Arg::display(&reg1, xmm_opts));
+        
+        assert_eq!(reg0_xmm, "xmm0", "Register 0 should display as xmm0 with XMM register class");
+        assert_eq!(reg1_xmm, "xmm1", "Register 1 should display as xmm1 with XMM register class");
+        
+        // Test that registers still display as GPR by default
+        let gpr_opts = DisplayOpts::new(cfg);
+        let reg0_gpr = format!("{}", Arg::display(&reg0, gpr_opts));
+        let reg1_gpr = format!("{}", Arg::display(&reg1, gpr_opts));
+        
+        assert_eq!(reg0_gpr, "rax", "Register 0 should display as rax with default (GPR) register class");
+        assert_eq!(reg1_gpr, "rcx", "Register 1 should display as rcx with default (GPR) register class");
+    }
+}
 
 /// x86-64 condition codes for conditional instructions.
 ///

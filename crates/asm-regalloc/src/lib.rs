@@ -1,3 +1,19 @@
+//! Register allocation utilities for stack-based virtual machines.
+//!
+//! This crate provides a register allocator that manages the mapping between
+//! virtual stack values and physical registers, with support for spilling to
+//! the native stack and local variables.
+//!
+//! # Features
+//!
+//! - `alloc`: Enables heap allocation support for dynamic collections
+//!
+//! # Overview
+//!
+//! The register allocator tracks which registers hold stack values, local
+//! variables, or are free for use. It generates commands for pushing, popping,
+//! and managing locals that can be interpreted by a code generator.
+
 #![no_std]
 #[cfg(feature = "alloc")]
 #[doc(hidden)]
@@ -5,32 +21,80 @@ pub extern crate alloc;
 #[doc(hidden)]
 pub use core;
 use core::{mem::replace, ops::IndexMut};
+
+/// A register target with kind information.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct Target<K> {
+    /// The register number.
     pub reg: u8,
+    /// The kind of register (e.g., integer, float).
     pub kind: K,
 }
+
+/// The register allocator.
+///
+/// Manages register assignments for a stack-based virtual machine.
+///
+/// # Type Parameters
+///
+/// - `K`: The register kind type
+/// - `N`: The number of registers per kind
+/// - `I`: The frame storage type
 pub struct RegAlloc<K, const N: usize, I> {
+    /// The register frames, indexed by kind.
     pub frames: I,
+    /// The current top-of-stack register, if any.
     pub tos: Option<Target<K>>,
 }
+
+/// The state of a register in a frame.
 pub enum RegAllocFrame<K> {
+    /// Register is reserved and cannot be used.
     Reserved,
+    /// Register is empty and available.
     Empty,
-    Stack { elem: StackElement<K> },
+    /// Register holds a stack element.
+    Stack { 
+        /// The stack element.
+        elem: StackElement<K> 
+    },
+    /// Register holds a local variable.
     Local(u32),
 }
+
+/// A stack element.
 pub enum StackElement<K> {
+    /// This element is above another stack element in the given register.
     Above(Target<K>),
+    /// This element is at the native stack level.
     Native,
 }
+
+/// A command emitted by the register allocator.
 pub enum Cmd<K> {
+    /// Push a register to the native stack.
     Push(Target<K>),
+    /// Pop from the native stack into a register.
     Pop(Target<K>),
-    GetLocal { dest: Target<K>, local: u32 },
-    SetLocal { src: Target<K>, local: u32 },
+    /// Load a local variable into a register.
+    GetLocal { 
+        /// Destination register.
+        dest: Target<K>, 
+        /// Local variable index.
+        local: u32 
+    },
+    /// Store a register into a local variable.
+    SetLocal { 
+        /// Source register.
+        src: Target<K>, 
+        /// Local variable index.
+        local: u32 
+    },
 }
+
+/// Trait for types that have a length.
 pub trait Length {
+    /// Returns the number of elements.
     fn len(&self) -> usize;
 }
 impl<T> Length for [T] {
@@ -141,6 +205,11 @@ impl<
             }
         }
     }
+    
+    /// Pushes a new value onto the virtual stack.
+    ///
+    /// Allocates a register of the specified kind for the new value.
+    /// Returns the allocated register number and any commands needed to make room.
     pub fn push(
         &mut self,
         k: K,
@@ -197,6 +266,10 @@ impl<
             }
         }
     }
+    
+    /// Pushes an existing register onto the virtual stack.
+    ///
+    /// Marks the specified register as holding a stack value.
     pub fn push_existing(&mut self, a: Target<K>) -> impl Iterator<Item = Cmd<K>> {
         let mut c: Option<Cmd<K>> = None;
         if let RegAllocFrame::Empty = &self.frames[a.kind.clone()][a.reg as usize] {
@@ -210,6 +283,10 @@ impl<
         }
         todo!()
     }
+    
+    /// Pops a value from the virtual stack.
+    ///
+    /// Returns the register containing the value and any commands needed.
     pub fn pop(&mut self, kind: K) -> (Target<K>, impl Iterator<Item = Cmd<K>>) {
         let mut c = None;
         'a: loop {
@@ -245,6 +322,10 @@ impl<
             }
         }
     }
+    
+    /// Pops a value from the virtual stack into a local variable.
+    ///
+    /// The value is stored in the specified local variable slot.
     pub fn pop_local(&mut self, kind: K, target: u32) -> (impl Iterator<Item = Cmd<K>>) {
         let mut c = None;
         'a: loop {
@@ -281,6 +362,10 @@ impl<
             }
         }
     }
+    
+    /// Pushes a local variable onto the virtual stack.
+    ///
+    /// Loads the value from the specified local variable slot.
     pub fn push_local(
         &mut self,
         kind: K,
@@ -331,6 +416,11 @@ impl<
             e = Some(v);
         }
     }
+    
+    /// Flushes all registers to their backing stores.
+    ///
+    /// Emits commands to push stack values and store locals to their
+    /// backing storage locations.
     pub fn flush(&mut self) -> impl Iterator<Item = Cmd<K>> {
         let mut i = 0u8;
         core::iter::from_fn(move || {

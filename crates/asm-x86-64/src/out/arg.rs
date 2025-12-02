@@ -1,3 +1,8 @@
+//! Argument types for instruction operands.
+//!
+//! This module defines types for representing instruction operands, including
+//! registers, immediate values, and memory references.
+
 use portal_pc_asm_common::types::{mem::MemorySized, reg::Reg};
 
 use super::*;
@@ -7,14 +12,23 @@ use core::{
     fmt::{Display, Formatter},
     mem::transmute,
 };
-// use portal_solutions_blitz_common::MemorySized;
+
+/// Represents a concrete argument kind (register or literal).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum ArgKind {
-    Reg { reg: Reg, size: MemorySize },
+    /// A register with a specific size.
+    Reg { 
+        /// The register.
+        reg: Reg, 
+        /// The operand size.
+        size: MemorySize 
+    },
+    /// A literal 64-bit value.
     Lit(u64),
 }
 impl ArgKind {
+    /// Creates a displayable representation of this argument kind.
     pub fn display(&self, opts: X64Arch) -> ArgKindDisplay {
         match self {
             ArgKind::Reg { reg, size } => ArgKindDisplay::Reg(X64Reg::display(
@@ -25,9 +39,13 @@ impl ArgKind {
         }
     }
 }
+
+/// Displayable representation of an argument kind.
 #[non_exhaustive]
 pub enum ArgKindDisplay {
+    /// A register display.
     Reg(RegDisplay),
+    /// A literal value.
     Lit(u64),
 }
 impl Display for ArgKindDisplay {
@@ -43,18 +61,30 @@ impl Display for ArgKind {
         write!(f, "{}", self.display(Default::default()))
     }
 }
+
+/// Represents a memory argument kind.
+///
+/// Can be either a direct operand or a memory reference with base, offset,
+/// displacement, and size.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum MemArgKind<A = ArgKind> {
+    /// A direct operand (not a memory reference).
     NoMem(A),
+    /// A memory reference.
     Mem {
+        /// The base operand.
         base: A,
+        /// Optional scaled index (operand, scale factor).
         offset: Option<(A, u32)>,
+        /// Displacement added to the address.
         disp: u32,
+        /// Size of the memory access.
         size: MemorySize,
     },
 }
 impl<A: Arg> MemArgKind<A> {
+    /// Creates a displayable representation of this memory argument kind.
     pub fn display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
         return self
             .as_ref()
@@ -98,6 +128,7 @@ impl<T: Display> Display for MemArgKind<T> {
     }
 }
 impl<A> MemArgKind<A> {
+    /// Returns a reference view of this memory argument kind.
     pub fn as_ref<'a>(&'a self) -> MemArgKind<&'a A> {
         match self {
             MemArgKind::NoMem(a) => MemArgKind::NoMem(a),
@@ -114,6 +145,7 @@ impl<A> MemArgKind<A> {
             },
         }
     }
+    /// Returns a mutable reference view of this memory argument kind.
     pub fn as_mut<'a>(&'a mut self) -> MemArgKind<&'a mut A> {
         match self {
             MemArgKind::NoMem(a) => MemArgKind::NoMem(a),
@@ -130,6 +162,7 @@ impl<A> MemArgKind<A> {
             },
         }
     }
+    /// Maps the argument type using the provided function.
     pub fn map<B, E>(
         self,
         go: &mut (dyn FnMut(A) -> Result<B, E> + '_),
@@ -153,8 +186,15 @@ impl<A> MemArgKind<A> {
         })
     }
 }
+
+/// Trait for types that can be used as memory arguments.
+///
+/// Memory arguments can represent either direct operands or memory references.
 pub trait MemArg {
+    /// Invokes the callback with the memory argument kind.
     fn mem_kind(&self, go: &mut (dyn FnMut(MemArgKind<&'_ (dyn Arg + '_)>) + '_));
+    
+    /// Returns the concrete memory argument kind.
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         let mut m = None;
         self.mem_kind(&mut |a| {
@@ -163,6 +203,8 @@ pub trait MemArg {
         });
         m.unwrap().unwrap()
     }
+    
+    /// Creates a displayable representation of this memory argument.
     fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
         let mut m = None;
         self.mem_kind(&mut |a| {
@@ -171,9 +213,13 @@ pub trait MemArg {
         });
         m.unwrap()
     }
+    
+    /// Formats this memory argument.
     fn mem_format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
         write!(f, "{}", self.mem_display(opts))
     }
+    
+    /// Returns an iterator over the registers used by this memory argument.
     #[cfg(feature = "alloc")]
     fn mem_regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
         let mut m = None;
@@ -213,14 +259,25 @@ impl<T: MemArg + ?Sized> MemArg for &'_ T {
         (&**self).mem_regs()
     }
 }
+
+/// Trait for types that can be used as direct instruction arguments.
+///
+/// This trait extends [`MemArg`] with methods specific to direct operands.
 pub trait Arg: MemArg {
+    /// Returns the concrete argument kind.
     fn kind(&self) -> ArgKind;
+    
+    /// Formats this argument.
     fn format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
         write!(f, "{}", self.display(opts))
     }
+    
+    /// Creates a displayable representation of this argument.
     fn display(&self, opts: X64Arch) -> ArgKindDisplay {
         return self.kind().display(opts);
     }
+    
+    /// Returns an iterator over the registers used by this argument.
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
         use core::iter::empty;

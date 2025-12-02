@@ -1,3 +1,8 @@
+//! Register handling and formatting for x86-64.
+//!
+//! This module provides traits and types for working with x86-64 registers,
+//! including formatting registers in different sizes and loading from context.
+
 use core::fmt::{Display, Formatter};
 
 use portal_pc_asm_common::types::reg::Reg;
@@ -6,10 +11,29 @@ use crate::{
     out::{WriterCore, arg::MemArgKind},
     *,
 };
+
+/// Trait for x86-64 register operations.
+///
+/// Provides methods for formatting registers, displaying them with specific options,
+/// and loading values from a context structure.
 pub trait X64Reg: crate::out::arg::Arg + Sized {
+    /// Formats the register to the given formatter with the specified options.
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result;
+    
+    /// Creates a displayable representation of the register with the given options.
     fn display<'a>(&'a self, opts: RegFormatOpts) -> RegDisplay;
+    
+    /// Returns the context handle for loading this register from a context structure.
+    ///
+    /// Returns a tuple of (base register, base offset, register offset).
     fn context_handle(&self, arch: &X64Arch) -> (Reg, u32, u32);
+    
+    /// Loads the register value from a context structure.
+    ///
+    /// # Arguments
+    /// * `arch` - The architecture configuration
+    /// * `x` - The writer to emit instructions to
+    /// * `xchg` - If true, uses xchg instead of mov for the final load
     fn load_from_context<Error: core::error::Error>(
         &self,
         arch: &X64Arch,
@@ -96,6 +120,10 @@ impl X64Reg for Reg {
         )
     }
 }
+
+/// A displayable wrapper for a register with formatting options.
+///
+/// Implements `Display` to format the register according to the specified options.
 pub struct RegDisplay {
     reg: Reg,
     opts: RegFormatOpts,

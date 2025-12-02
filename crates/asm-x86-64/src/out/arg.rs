@@ -29,11 +29,11 @@ pub enum ArgKind {
 }
 impl ArgKind {
     /// Creates a displayable representation of this argument kind.
-    pub fn display(&self, opts: X64Arch) -> ArgKindDisplay {
+    pub fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         match self {
             ArgKind::Reg { reg, size } => ArgKindDisplay::Reg(X64Reg::display(
                 reg,
-                RegFormatOpts::default_with_arch_and_size(opts, *size),
+                RegFormatOpts::with_reg_class(opts.arch, *size, opts.reg_class),
             )),
             ArgKind::Lit(i) => ArgKindDisplay::Lit(*i),
         }
@@ -85,7 +85,7 @@ pub enum MemArgKind<A = ArgKind> {
 }
 impl<A: Arg> MemArgKind<A> {
     /// Creates a displayable representation of this memory argument kind.
-    pub fn display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    pub fn display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         return self
             .as_ref()
             .map(&mut |a| Ok::<_, Infallible>(a.display(opts)))
@@ -205,7 +205,7 @@ pub trait MemArg {
     }
     
     /// Creates a displayable representation of this memory argument.
-    fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         let mut m = None;
         self.mem_kind(&mut |a| {
             m = Some(a.display(opts));
@@ -215,7 +215,7 @@ pub trait MemArg {
     }
     
     /// Formats this memory argument.
-    fn mem_format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.mem_display(opts))
     }
     
@@ -248,10 +248,10 @@ impl<T: MemArg + ?Sized> MemArg for &'_ T {
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         (&**self).concrete_mem_kind()
     }
-    fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         (&**self).mem_display(opts)
     }
-    fn mem_format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         (&**self).mem_format(f, opts)
     }
     #[cfg(feature = "alloc")]
@@ -268,12 +268,12 @@ pub trait Arg: MemArg {
     fn kind(&self) -> ArgKind;
     
     /// Formats this argument.
-    fn format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.display(opts))
     }
     
     /// Creates a displayable representation of this argument.
-    fn display(&self, opts: X64Arch) -> ArgKindDisplay {
+    fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         return self.kind().display(opts);
     }
     
@@ -289,11 +289,11 @@ pub trait Arg: MemArg {
     }
 }
 impl<T: Arg + ?Sized> Arg for &'_ T {
-    fn format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         (&**self).format(f, opts)
     }
 
-    fn display(&self, opts: X64Arch) -> ArgKindDisplay {
+    fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         (&**self).display(opts)
     }
     #[cfg(feature = "alloc")]
@@ -312,14 +312,14 @@ impl Arg for Reg {
             size: Default::default(),
         }
     }
-    fn display(&self, opts: X64Arch) -> ArgKindDisplay {
+    fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         ArgKindDisplay::Reg(X64Reg::display(
             self,
-            RegFormatOpts::default_with_arch(opts),
+            RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class),
         ))
     }
-    fn format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
-        X64Reg::format(self, f, &RegFormatOpts::default_with_arch(opts))
+    fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
+        X64Reg::format(self, f, &RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class))
     }
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -333,10 +333,10 @@ impl MemArg for Reg {
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         MemArgKind::NoMem(self.kind())
     }
-    fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         MemArgKind::NoMem(Arg::display(self, opts))
     }
-    fn mem_format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         Arg::format(self, f, opts)
     }
     #[cfg(feature = "alloc")]
@@ -359,24 +359,24 @@ impl<T: Arg> Arg for MemorySized<T> {
             }
         }
     }
-    fn display(&self, opts: X64Arch) -> ArgKindDisplay {
+    fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         let MemorySized { value, size } = self;
         if typeid::of::<T>() == typeid::of::<Reg>() {
             ArgKindDisplay::Reg(X64Reg::display(
                 unsafe { transmute::<&T, &Reg>(value) },
-                RegFormatOpts::default_with_arch_and_size(opts, *size),
+                RegFormatOpts::with_reg_class(opts.arch, *size, opts.reg_class),
             ))
         } else {
             self.kind().display(opts)
         }
     }
-    fn format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         let MemorySized { value, size } = self;
         if typeid::of::<T>() == typeid::of::<Reg>() {
             X64Reg::format(
                 unsafe { transmute::<&T, &Reg>(value) },
                 f,
-                &RegFormatOpts::default_with_arch_and_size(opts, *size),
+                &RegFormatOpts::with_reg_class(opts.arch, *size, opts.reg_class),
             )
         } else {
             write!(f, "{}", self.display(opts))
@@ -438,10 +438,10 @@ impl MemArg for ArgKind {
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         MemArgKind::NoMem(self.kind())
     }
-    fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         MemArgKind::NoMem(Arg::display(self, opts))
     }
-    fn mem_format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         Arg::format(self, f, opts)
     }
     #[cfg(feature = "alloc")]
@@ -453,10 +453,10 @@ impl Arg for u64 {
     fn kind(&self) -> ArgKind {
         ArgKind::Lit(*self)
     }
-    fn display(&self, opts: X64Arch) -> ArgKindDisplay {
+    fn display(&self, _opts: crate::DisplayOpts) -> ArgKindDisplay {
         ArgKindDisplay::Lit(*self)
     }
-    fn format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn format(&self, f: &mut Formatter<'_>, _opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{self}")
     }
 }
@@ -467,10 +467,10 @@ impl MemArg for u64 {
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         MemArgKind::NoMem(self.kind())
     }
-    fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         MemArgKind::NoMem(Arg::display(self, opts))
     }
-    fn mem_format(&self, f: &mut Formatter<'_>, opts: X64Arch) -> core::fmt::Result {
+    fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         Arg::format(self, f, opts)
     }
     #[cfg(feature = "alloc")]
@@ -503,7 +503,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
             .map(&mut |a| Ok::<_, Infallible>(a.kind()))
             .unwrap()
     }
-    fn mem_display(&self, opts: X64Arch) -> MemArgKind<ArgKindDisplay> {
+    fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         self.display(opts)
     }
 }

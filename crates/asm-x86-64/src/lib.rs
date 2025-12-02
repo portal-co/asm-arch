@@ -37,6 +37,61 @@ static REG_NAMES_16: &'static [&'static str; 8] = &["ax", "cx", "dx", "bx", "sp"
 /// 8-bit register names (al, cl, dl, bl, spl, bpl, sil, dil).
 static REG_NAMES_8: &'static [&'static str; 8] =
     &["al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil"];
+/// XMM register names (xmm0 through xmm15).
+static XMM_REG_NAMES: &'static [&'static str; 16] = &[
+    "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
+    "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
+];
+
+/// Register class for display formatting.
+///
+/// Determines whether registers are formatted as general-purpose registers (GPR)
+/// or XMM registers for floating-point operations.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[non_exhaustive]
+pub enum RegisterClass {
+    /// General-purpose register (rax, rbx, etc.).
+    #[default]
+    Gpr,
+    /// XMM register for floating-point/SIMD operations (xmm0, xmm1, etc.).
+    Xmm,
+}
+
+/// Display options for formatting assembly operands.
+///
+/// This struct combines architecture configuration with register class selection
+/// to control how operands are displayed in assembly output.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[non_exhaustive]
+pub struct DisplayOpts {
+    /// The target architecture configuration.
+    pub arch: X64Arch,
+    /// The register class for display.
+    pub reg_class: RegisterClass,
+}
+impl DisplayOpts {
+    /// Creates display options with the given architecture and default register class.
+    pub fn new(arch: X64Arch) -> Self {
+        Self {
+            arch,
+            reg_class: Default::default(),
+        }
+    }
+    /// Creates display options with the given architecture and register class.
+    pub fn with_reg_class(arch: X64Arch, reg_class: RegisterClass) -> Self {
+        Self { arch, reg_class }
+    }
+}
+impl Default for DisplayOpts {
+    fn default() -> Self {
+        Self::new(Default::default())
+    }
+}
+impl From<X64Arch> for DisplayOpts {
+    fn from(arch: X64Arch) -> Self {
+        Self::new(arch)
+    }
+}
 
 /// x86-64 architecture configuration.
 ///
@@ -52,8 +107,8 @@ pub struct X64Arch {
 
 /// Options for formatting register names.
 ///
-/// Controls how registers are displayed, including the target architecture
-/// and the operand size.
+/// Controls how registers are displayed, including the target architecture,
+/// the operand size, and the register class (GPR vs XMM).
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct RegFormatOpts {
@@ -61,6 +116,8 @@ pub struct RegFormatOpts {
     pub arch: X64Arch,
     /// The operand size for register formatting.
     pub size: MemorySize,
+    /// The register class for display.
+    pub reg_class: RegisterClass,
 }
 impl RegFormatOpts {
     /// Creates formatting options with the given architecture and default size.
@@ -69,7 +126,19 @@ impl RegFormatOpts {
     }
     /// Creates formatting options with the given architecture and size.
     pub fn default_with_arch_and_size(arch: X64Arch, size: MemorySize) -> Self {
-        Self { arch, size }
+        Self {
+            arch,
+            size,
+            reg_class: Default::default(),
+        }
+    }
+    /// Creates formatting options with the given architecture, size, and register class.
+    pub fn with_reg_class(arch: X64Arch, size: MemorySize, reg_class: RegisterClass) -> Self {
+        Self {
+            arch,
+            size,
+            reg_class,
+        }
     }
 }
 impl Default for RegFormatOpts {

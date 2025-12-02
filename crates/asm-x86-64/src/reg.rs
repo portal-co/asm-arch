@@ -79,29 +79,43 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
 }
 impl X64Reg for Reg {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result {
-        let idx = (self.0 as usize) % (if opts.arch.apx { 32 } else { 16 });
-        if idx < 8 {
-            write!(
-                f,
-                "{}",
-                &(match &opts.size {
-                    MemorySize::_8 => REG_NAMES_8,
-                    MemorySize::_16 => REG_NAMES_16,
-                    MemorySize::_32 => REG_NAMES_32,
-                    MemorySize::_64 => REG_NAMES,
-                })[idx]
-            )
-        } else {
-            write!(
-                f,
-                "r{idx}{}",
-                match &opts.size {
-                    MemorySize::_8 => "b",
-                    MemorySize::_16 => "w",
-                    MemorySize::_32 => "d",
-                    MemorySize::_64 => "",
+        match opts.reg_class {
+            crate::RegisterClass::Xmm => {
+                // For XMM registers, use the register index directly
+                let idx = (self.0 as usize) % 16;
+                if idx < 16 {
+                    write!(f, "{}", crate::XMM_REG_NAMES[idx])
+                } else {
+                    // For APX extended XMM registers (xmm16-xmm31)
+                    write!(f, "xmm{idx}")
                 }
-            )
+            }
+            crate::RegisterClass::Gpr => {
+                let idx = (self.0 as usize) % (if opts.arch.apx { 32 } else { 16 });
+                if idx < 8 {
+                    write!(
+                        f,
+                        "{}",
+                        &(match &opts.size {
+                            MemorySize::_8 => REG_NAMES_8,
+                            MemorySize::_16 => REG_NAMES_16,
+                            MemorySize::_32 => REG_NAMES_32,
+                            MemorySize::_64 => REG_NAMES,
+                        })[idx]
+                    )
+                } else {
+                    write!(
+                        f,
+                        "r{idx}{}",
+                        match &opts.size {
+                            MemorySize::_8 => "b",
+                            MemorySize::_16 => "w",
+                            MemorySize::_32 => "d",
+                            MemorySize::_64 => "",
+                        }
+                    )
+                }
+            }
         }
     }
     fn display<'a>(&'a self, opts: RegFormatOpts) -> RegDisplay {

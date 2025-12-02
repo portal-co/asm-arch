@@ -50,7 +50,6 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                 disp: b,
                 size: MemorySize::_64,
             },
-            None,
         )?;
         if xchg {
             x.xchg(
@@ -62,7 +61,6 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                     disp: c,
                     size: MemorySize::_64,
                 },
-                None,
             )?;
         } else {
             x.mov(
@@ -74,7 +72,6 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                     disp: c,
                     size: MemorySize::_64,
                 },
-                None,
             )?;
         }
         Ok(())

@@ -20,14 +20,10 @@ macro_rules! writers {
                 fn hlt(&mut self, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(),Self::Error>{
                     $crate::__::core::write!(self,"hlt\n")
                 }
-                fn xchg(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(),Self::Error>{
+                fn xchg(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg);
                     let src = src.mem_display(cfg);
-                    $crate::__::core::write!(self,"xchg {dest}, ")?;
-                    match mem{
-                        None => $crate::__::core::write!(self,"{src}\n"),
-                        Some(i) => $crate::__::core::write!(self,"qword ptr [{src}+{i}]\n")
-                    }
+                    $crate::__::core::write!(self,"xchg {dest}, {src}\n")
                 }
                 fn push(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let op = op.mem_display(cfg);
@@ -67,14 +63,10 @@ macro_rules! writers {
                     let src = src.mem_display(cfg);
                     $crate::__::core::write!(self,"lea {dest}, {src}")
                 }
-                fn mov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error>{
+                fn mov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                      let dest = dest.mem_display(cfg);
                     let src = src.mem_display(cfg);
-                    $crate::__::core::write!(self,"mov {dest}, ")?;
-                    match mem{
-                        None => $crate::__::core::write!(self,"{src}\n"),
-                        Some(i) => $crate::__::core::write!(self,"qword ptr [{src}+{i}]\n")
-                    }
+                    $crate::__::core::write!(self,"mov {dest}, {src}\n")
                 }
 
                 fn get_ip(&mut self, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(),Self::Error>{
@@ -131,6 +123,46 @@ macro_rules! writers {
                     let a = a.mem_display(cfg);
                     let b = b.mem_display(cfg);
                     $crate::__::core::write!(self,"shr {a},{b}\n")
+                }
+                fn sub(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.mem_display(cfg);
+                    let b = b.mem_display(cfg);
+                    $crate::__::core::write!(self,"sub {a},{b}\n")
+                }
+                fn movsx(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"movsx {dest},{src}\n")
+                }
+                fn movzx(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"movzx {dest},{src}\n")
+                }
+                fn fadd(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"addsd {dest},{src}\n")
+                }
+                fn fsub(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"subsd {dest},{src}\n")
+                }
+                fn fmul(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"mulsd {dest},{src}\n")
+                }
+                fn fdiv(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"divsd {dest},{src}\n")
+                }
+                fn fmov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg);
+                    let src = src.mem_display(cfg);
+                    $crate::__::core::write!(self,"movsd {dest},{src}\n")
                 }
             }
             impl<L: Display> Writer<L> for $ty {

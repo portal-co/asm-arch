@@ -37,26 +37,52 @@ pub trait WriterCore {
     
     /// Emits an XCHG (exchange) instruction.
     ///
-    /// Exchanges the values in `dest` and `src`. If `mem` is provided,
-    /// it specifies an offset for memory operand formatting.
+    /// Exchanges the values in `dest` and `src`.
     fn xchg(
         &mut self,
         cfg: crate::X64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
-        mem: Option<isize>,
     ) -> Result<(), Self::Error>;
     
     /// Emits a MOV (move) instruction.
     ///
-    /// Copies the value from `src` to `dest`. If `mem` is provided,
-    /// it specifies an offset for memory operand formatting.
+    /// Copies the value from `src` to `dest`.
     fn mov(
         &mut self,
         cfg: crate::X64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
-        mem: Option<isize>,
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a SUB (subtract) instruction.
+    ///
+    /// Subtracts `b` from `a` and stores the result in `a`.
+    fn sub(
+        &mut self,
+        cfg: crate::X64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a MOVSX (move with sign-extend) instruction.
+    ///
+    /// Copies the value from `src` to `dest` with sign extension.
+    fn movsx(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a MOVZX (move with zero-extend) instruction.
+    ///
+    /// Copies the value from `src` to `dest` with zero extension.
+    fn movzx(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error>;
     
     /// Emits a PUSH instruction.
@@ -182,6 +208,46 @@ pub trait WriterCore {
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error>;
+    
+    /// Emits an ADD instruction for floating point values.
+    fn fadd(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a SUB instruction for floating point values.
+    fn fsub(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a MUL instruction for floating point values.
+    fn fmul(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a DIV instruction for floating point values.
+    fn fdiv(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
+    
+    /// Emits a MOV instruction for floating point values.
+    fn fmov(
+        &mut self,
+        cfg: crate::X64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error>;
 }
 
 /// Extended writer trait with label support.
@@ -210,8 +276,8 @@ macro_rules! writer_dispatch {
                     fn hlt(&mut self, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(),Self::Error>{
                         $crate::out::WriterCore::hlt(&mut **self, cfg)
                     }
-                    fn xchg(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error> {
-                        $crate::out::WriterCore::xchg(&mut **self, cfg, dest, src, mem)
+                    fn xchg(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::xchg(&mut **self, cfg, dest, src)
                     }
                     fn push(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
                         $crate::out::WriterCore::push(&mut **self, cfg, op)
@@ -252,8 +318,8 @@ macro_rules! writer_dispatch {
                     fn mov64(&mut self, cfg: $crate::X64Arch, r: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
                         $crate::out::WriterCore::mov64(&mut **self, cfg,r,val)
                     }
-                    fn mov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_), mem: $crate::__::core::option::Option<isize>) -> $crate::__::core::result::Result<(), Self::Error>{
-                        $crate::out::WriterCore::mov(&mut **self, cfg,dest,src,mem)
+                    fn mov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::mov(&mut **self, cfg,dest,src)
                     }
                     fn u32(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::u32(&mut **self, cfg,op)
@@ -284,6 +350,30 @@ macro_rules! writer_dispatch {
                     }
                     fn shr(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::shr(&mut **self, cfg,a,b)
+                    }
+                    fn sub(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::sub(&mut **self, cfg,a,b)
+                    }
+                    fn movsx(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::movsx(&mut **self, cfg,dest,src)
+                    }
+                    fn movzx(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::movzx(&mut **self, cfg,dest,src)
+                    }
+                    fn fadd(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::fadd(&mut **self, cfg,dest,src)
+                    }
+                    fn fsub(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::fsub(&mut **self, cfg,dest,src)
+                    }
+                    fn fmul(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::fmul(&mut **self, cfg,dest,src)
+                    }
+                    fn fdiv(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::fdiv(&mut **self, cfg,dest,src)
+                    }
+                    fn fmov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::fmov(&mut **self, cfg,dest,src)
                     }
                 }
                 impl<$($t)*>$crate::out:: Writer<$l> for $ty{

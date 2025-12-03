@@ -285,6 +285,27 @@ mod tests {
         assert_eq!(reg0_gpr, "rax", "Register 0 should display as rax with default (GPR) register class");
         assert_eq!(reg1_gpr, "rcx", "Register 1 should display as rcx with default (GPR) register class");
     }
+    
+    #[test]
+    fn test_pushf_popf_instructions() {
+        use crate::out::WriterCore;
+        use alloc::string::String;
+        use core::fmt::Write;
+        
+        let cfg = X64Arch::default();
+        let mut output = String::new();
+        
+        // Test pushf instruction
+        let writer: &mut dyn Write = &mut output;
+        WriterCore::pushf(writer, cfg).expect("pushf should succeed");
+        assert_eq!(output, "pushfq\n", "pushf should emit 'pushfq\\n'");
+        
+        // Test popf instruction
+        output.clear();
+        let writer: &mut dyn Write = &mut output;
+        WriterCore::popf(writer, cfg).expect("popf should succeed");
+        assert_eq!(output, "popfq\n", "popf should emit 'popfq\\n'");
+    }
 }
 
 /// x86-64 condition codes for conditional instructions.

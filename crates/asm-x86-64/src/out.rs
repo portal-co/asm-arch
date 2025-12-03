@@ -91,6 +91,12 @@ pub trait WriterCore {
     /// Emits a POP instruction.
     fn pop(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     
+    /// Emits a PUSHF (push flags) instruction.
+    fn pushf(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    
+    /// Emits a POPF (pop flags) instruction.
+    fn popf(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    
     /// Emits a CALL instruction.
     fn call(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
     
@@ -284,6 +290,12 @@ macro_rules! writer_dispatch {
                     }
                     fn pop(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
                         $crate::out::WriterCore::pop(&mut **self, cfg, op)
+                    }
+                    fn pushf(&mut self, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::pushf(&mut **self, cfg)
+                    }
+                    fn popf(&mut self, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::WriterCore::popf(&mut **self, cfg)
                     }
                     fn call(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::call(&mut **self, cfg,op)

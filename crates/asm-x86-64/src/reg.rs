@@ -82,11 +82,6 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
 }
 impl X64Reg for Reg {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result {
-        // TEMPORARY HACK: Map smaller MemorySize values to larger SIMD registers
-        // This is a workaround until proper MemorySize variants are added to portal-pc-asm-common
-        // Hack mapping: _8 → xmm (128-bit), _16 → ymm (256-bit), _32 → zmm (512-bit), _64 → unmapped
-        const NO_HACK: bool = false;
-        
         // Check APX support at the top of the method
         let max_regs = if opts.arch.apx { 32 } else { 16 };
         let idx = (self.0 as usize) % max_regs;
@@ -94,7 +89,7 @@ impl X64Reg for Reg {
         match opts.reg_class {
             crate::RegisterClass::Xmm => {
                 // For XMM/YMM/ZMM registers
-                let prefix = if NO_HACK {
+                let prefix = if crate::NO_HACK {
                     // Non-hacky code: Proper MemorySize to register mapping (for future use)
                     // Scheme: MemorySize determines register type
                     // - _64 bits (8 bytes) and below -> xmm (128-bit, using scalar operations)

@@ -43,6 +43,20 @@ static XMM_REG_NAMES: &'static [&'static str; 16] = &[
     "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
 ];
 
+/// **TEMPORARY HACK**: Controls whether to use the YMM/ZMM register naming hack.
+///
+/// When `false` (current value), smaller `MemorySize` values are mapped to larger SIMD registers:
+/// - `MemorySize::_8` → xmm (128-bit)
+/// - `MemorySize::_16` → ymm (256-bit)
+/// - `MemorySize::_32` → zmm (512-bit)
+/// - `MemorySize::_64` → unmapped (defaults to xmm)
+///
+/// This is a workaround until proper `MemorySize` variants (_128/_256/_512) are added to `portal-pc-asm-common`.
+/// When `true`, the proper (non-hacky) implementation will be used once those variants exist.
+///
+/// **Consumers can check this value** to determine if the hack is active and adjust their code accordingly.
+pub const NO_HACK: bool = false;
+
 /// Register class for display formatting.
 ///
 /// Determines whether registers are formatted as general-purpose registers (GPR)

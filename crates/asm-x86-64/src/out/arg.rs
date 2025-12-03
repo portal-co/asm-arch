@@ -118,11 +118,6 @@ impl<T: Display> Display for MemArgKind<T> {
                 size,
                 reg_class,
             } => {
-                // TEMPORARY HACK: Map smaller MemorySize values to larger SIMD memory widths
-                // This is a workaround until proper MemorySize variants are added to portal-pc-asm-common
-                // Hack mapping: _8 → xmmword (128-bit), _16 → ymmword (256-bit), _32 → zmmword (512-bit), _64 → unmapped
-                const NO_HACK: bool = false;
-                
                 // Pointer type name based on register class and size
                 let ptr = match reg_class {
                     crate::RegisterClass::Gpr => match size {
@@ -134,7 +129,7 @@ impl<T: Display> Display for MemArgKind<T> {
                         _ => "qword",
                     },
                     crate::RegisterClass::Xmm => {
-                        if NO_HACK {
+                        if crate::NO_HACK {
                             // Non-hacky code: Proper MemorySize to pointer width mapping (for future use)
                             // Scheme for pointer naming:
                             // - _64 and below -> xmmword (scalar operations on XMM)

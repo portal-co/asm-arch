@@ -33,227 +33,342 @@ pub trait WriterCore {
     type Error: Error;
 
     /// Emits a HLT (halt) instruction.
-    fn hlt(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn hlt(&mut self, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+        todo!("hlt instruction not implemented")
+    }
     
     /// Emits an XCHG (exchange) instruction.
     ///
     /// Exchanges the values in `dest` and `src`.
+    #[track_caller]
     fn xchg(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("xchg instruction not implemented")
+    }
     
     /// Emits a MOV (move) instruction.
     ///
     /// Copies the value from `src` to `dest`.
+    #[track_caller]
     fn mov(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("mov instruction not implemented")
+    }
     
     /// Emits a SUB (subtract) instruction.
     ///
     /// Subtracts `b` from `a` and stores the result in `a`.
+    #[track_caller]
     fn sub(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("sub instruction not implemented")
+    }
     
     /// Emits a MOVSX (move with sign-extend) instruction.
     ///
     /// Copies the value from `src` to `dest` with sign extension.
+    #[track_caller]
     fn movsx(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("movsx instruction not implemented")
+    }
     
     /// Emits a MOVZX (move with zero-extend) instruction.
     ///
     /// Copies the value from `src` to `dest` with zero extension.
+    #[track_caller]
     fn movzx(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("movzx instruction not implemented")
+    }
     
     /// Emits a PUSH instruction.
-    fn push(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn push(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("push instruction not implemented")
+    }
     
     /// Emits a POP instruction.
-    fn pop(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn pop(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("pop instruction not implemented")
+    }
     
     /// Emits a PUSHF (push flags) instruction.
-    fn pushf(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn pushf(&mut self, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+        todo!("pushf instruction not implemented")
+    }
     
     /// Emits a POPF (pop flags) instruction.
-    fn popf(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn popf(&mut self, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+        todo!("popf instruction not implemented")
+    }
     
     /// Emits a CALL instruction.
-    fn call(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn call(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("call instruction not implemented")
+    }
     
     /// Emits a JMP (unconditional jump) instruction.
-    fn jmp(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn jmp(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("jmp instruction not implemented")
+    }
+    
+    /// Emits a CMP (compare) instruction.
+    ///
+    /// Compares `a` with `b` by computing `a - b` and setting flags.
+    #[track_caller]
+    fn cmp(
+        &mut self,
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("cmp instruction not implemented")
+    }
     
     /// Emits a CMP (compare with zero) instruction.
-    fn cmp0(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn cmp0(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("cmp0 instruction not implemented")
+    }
     
     /// Emits a CMOVcc (conditional move) instruction for 64-bit operands.
+    #[track_caller]
     fn cmovcc64(
         &mut self,
-        cfg: crate::X64Arch,
-        cond: ConditionCode,
-        op: &(dyn MemArg + '_),
-        val: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _cond: ConditionCode,
+        _op: &(dyn MemArg + '_),
+        _val: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("cmovcc64 instruction not implemented")
+    }
     
     /// Emits a Jcc (conditional jump) instruction.
+    #[track_caller]
     fn jcc(
         &mut self,
-        cfg: crate::X64Arch,
-        cond: ConditionCode,
-        op: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _cond: ConditionCode,
+        _op: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("jcc instruction not implemented")
+    }
     
     /// Emits an instruction to truncate to 32 bits (AND with 0xffffffff).
-    fn u32(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn u32(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("u32 instruction not implemented")
+    }
     
     /// Emits a NOT (bitwise complement) instruction.
-    fn not(&mut self, cfg: crate::X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn not(&mut self, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        todo!("not instruction not implemented")
+    }
     
     /// Emits a LEA (load effective address) instruction.
+    #[track_caller]
     fn lea(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("lea instruction not implemented")
+    }
 
     /// Emits instructions to get the current instruction pointer.
-    fn get_ip(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn get_ip(&mut self, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+        todo!("get_ip instruction not implemented")
+    }
     
     /// Emits a RET (return) instruction.
-    fn ret(&mut self, cfg: crate::X64Arch) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn ret(&mut self, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+        todo!("ret instruction not implemented")
+    }
     
     /// Emits a MOV instruction with a 64-bit immediate value.
+    #[track_caller]
     fn mov64(
         &mut self,
-        cfg: crate::X64Arch,
-        r: &(dyn MemArg + '_),
-        val: u64,
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _r: &(dyn MemArg + '_),
+        _val: u64,
+    ) -> Result<(), Self::Error> {
+        todo!("mov64 instruction not implemented")
+    }
     
     /// Emits a MUL (unsigned multiply) instruction.
+    #[track_caller]
     fn mul(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("mul instruction not implemented")
+    }
     
     /// Emits a DIV (unsigned divide) instruction.
+    #[track_caller]
     fn div(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("div instruction not implemented")
+    }
     
     /// Emits an IDIV (signed divide) instruction.
+    #[track_caller]
     fn idiv(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("idiv instruction not implemented")
+    }
     
     /// Emits an AND (bitwise AND) instruction.
+    #[track_caller]
     fn and(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("and instruction not implemented")
+    }
     
     /// Emits an OR (bitwise OR) instruction.
+    #[track_caller]
     fn or(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("or instruction not implemented")
+    }
     
     /// Emits an XOR (bitwise exclusive OR) instruction.
+    #[track_caller]
     fn eor(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("eor instruction not implemented")
+    }
     
     /// Emits a SHL (shift left) instruction.
+    #[track_caller]
     fn shl(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("shl instruction not implemented")
+    }
     
     /// Emits a SHR (shift right) instruction.
+    #[track_caller]
     fn shr(
         &mut self,
-        cfg: crate::X64Arch,
-        a: &(dyn MemArg + '_),
-        b: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("shr instruction not implemented")
+    }
     
     /// Emits an ADD instruction for floating point values.
+    #[track_caller]
     fn fadd(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("fadd instruction not implemented")
+    }
     
     /// Emits a SUB instruction for floating point values.
+    #[track_caller]
     fn fsub(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("fsub instruction not implemented")
+    }
     
     /// Emits a MUL instruction for floating point values.
+    #[track_caller]
     fn fmul(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("fmul instruction not implemented")
+    }
     
     /// Emits a DIV instruction for floating point values.
+    #[track_caller]
     fn fdiv(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("fdiv instruction not implemented")
+    }
     
     /// Emits a MOV instruction for floating point values.
+    #[track_caller]
     fn fmov(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        src: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("fmov instruction not implemented")
+    }
 }
 
 /// Extended writer trait with label support.
@@ -262,15 +377,21 @@ pub trait WriterCore {
 /// enabling structured control flow in generated code.
 pub trait Writer<L>: WriterCore {
     /// Sets a label at the current position.
-    fn set_label(&mut self, cfg: crate::X64Arch, s: L) -> Result<(), Self::Error>;
+    #[track_caller]
+    fn set_label(&mut self, _cfg: crate::X64Arch, _s: L) -> Result<(), Self::Error> {
+        todo!("set_label not implemented")
+    }
     
     /// Emits a LEA instruction that loads the address of a label.
+    #[track_caller]
     fn lea_label(
         &mut self,
-        cfg: crate::X64Arch,
-        dest: &(dyn MemArg + '_),
-        label: L,
-    ) -> Result<(), Self::Error>;
+        _cfg: crate::X64Arch,
+        _dest: &(dyn MemArg + '_),
+        _label: L,
+    ) -> Result<(), Self::Error> {
+        todo!("lea_label not implemented")
+    }
 }
 #[macro_export]
 macro_rules! writer_dispatch {
@@ -302,6 +423,9 @@ macro_rules! writer_dispatch {
                     }
                     fn jmp(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::jmp(&mut **self, cfg,op)
+                    }
+                    fn cmp(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
+                        $crate::out::WriterCore::cmp(&mut **self, cfg,a,b)
                     }
                     fn cmp0(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                         $crate::out::WriterCore::cmp0(&mut **self, cfg,op)

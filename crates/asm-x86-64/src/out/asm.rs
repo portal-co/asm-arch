@@ -47,6 +47,11 @@ macro_rules! writers {
                     let op = op.mem_display(cfg.into());
                     $crate::__::core::write!(self,"jmp {op}\n")
                 }
+                fn cmp(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
+                    let a = a.mem_display(cfg.into());
+                    let b = b.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"cmp {a}, {b}\n")
+                }
                 fn cmp0(&mut self, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                     let op = op.mem_display(cfg.into());
                     $crate::__::core::write!(self,"cmp {op}, 0\n")

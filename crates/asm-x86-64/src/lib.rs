@@ -306,6 +306,24 @@ mod tests {
         WriterCore::popf(writer, cfg).expect("popf should succeed");
         assert_eq!(output, "popfq\n", "popf should emit 'popfq\\n'");
     }
+    
+    #[test]
+    fn test_cmp_instruction() {
+        use crate::out::WriterCore;
+        use alloc::string::String;
+        use core::fmt::Write;
+        use portal_pc_asm_common::types::reg::Reg;
+        
+        let cfg = X64Arch::default();
+        let mut output = String::new();
+        
+        // Test cmp instruction
+        let writer: &mut dyn Write = &mut output;
+        let reg0 = Reg(0);
+        let reg1 = Reg(1);
+        WriterCore::cmp(writer, cfg, &reg0, &reg1).expect("cmp should succeed");
+        assert_eq!(output, "cmp rax, rcx\n", "cmp should emit 'cmp rax, rcx\\n'");
+    }
 }
 
 /// x86-64 condition codes for conditional instructions.

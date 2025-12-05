@@ -8,6 +8,8 @@ description.workspace = true
 [dependencies]
 portal-pc-asm-common.workspace = true
 typeid.workspace = true
+portal-solutions-asm-regalloc = { path = "../asm-regalloc", optional = true }
 
 [features]
 alloc=[]
+regalloc-integration=["dep:portal-solutions-asm-regalloc"]

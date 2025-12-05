@@ -77,6 +77,19 @@ pub trait WriterCore {
         todo!("sub instruction not implemented")
     }
     
+    /// Emits an ADD (add) instruction.
+    ///
+    /// Adds `b` to `a` and stores the result in `a`.
+    #[track_caller]
+    fn add(
+        &mut self,
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("add instruction not implemented")
+    }
+    
     /// Emits a MOVSX (move with sign-extend) instruction.
     ///
     /// Copies the value from `src` to `dest` with sign extension.

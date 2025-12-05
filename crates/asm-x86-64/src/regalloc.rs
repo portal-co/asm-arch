@@ -1,0 +1,200 @@
+//! Register allocation integration for x86-64.
+//!
+//! This module provides types and functions for integrating with the register
+//! allocator, including register kind definitions, Cmd processing, and state
+//! initialization.
+
+use portal_solutions_asm_regalloc::{Cmd, RegAlloc, RegAllocFrame};
+use crate::{out::WriterCore, X64Arch};
+
+/// Register kind for x86-64.
+///
+/// Distinguishes between integer/general-purpose registers and floating-point/SIMD registers.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum RegKind {
+    /// Integer/general-purpose register.
+    Int = 0,
+    /// Floating-point/SIMD register.
+    Float = 1,
+}
+
+impl TryFrom<usize> for RegKind {
+    type Error = ();
+    
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RegKind::Int),
+            1 => Ok(RegKind::Float),
+            _ => Err(()),
+        }
+    }
+}
+
+/// Process a single register allocation command, emitting assembly instructions.
+///
+/// # Arguments
+/// * `writer` - The instruction writer to emit to
+/// * `arch` - The x86-64 architecture configuration
+/// * `cmd` - The register allocation command to process
+///
+/// # Returns
+/// Result indicating success or a writer error
+pub fn process_cmd<E: core::error::Error>(
+    writer: &mut (dyn WriterCore<Error = E> + '_),
+    arch: X64Arch,
+    cmd: &Cmd<RegKind>,
+) -> Result<(), E> {
+    use portal_pc_asm_common::types::reg::Reg;
+    
+    match cmd {
+        Cmd::Push(target) => {
+            let reg = Reg(target.reg);
+            match target.kind {
+                RegKind::Int => writer.push(arch, &reg),
+                RegKind::Float => {
+                    // For float registers, we need to manually push using movsd
+                    // Adjust stack: sub rsp, 8
+                    let rsp = Reg(4);
+                    let imm8 = crate::out::arg::MemArgKind::NoMem(
+                        crate::out::arg::ArgKind::Lit(8)
+                    );
+                    writer.sub(arch, &rsp, &imm8)?;
+                    // Store the XMM register to [rsp]
+                    let mem = crate::out::arg::MemArgKind::Mem {
+                        base: rsp,
+                        offset: None,
+                        disp: 0,
+                        size: portal_pc_asm_common::types::mem::MemorySize::_64,
+                        reg_class: crate::RegisterClass::Xmm,
+                    };
+                    writer.fmov(arch, &mem, &reg)
+                }
+            }
+        }
+        Cmd::Pop(target) => {
+            let reg = Reg(target.reg);
+            match target.kind {
+                RegKind::Int => writer.pop(arch, &reg),
+                RegKind::Float => {
+                    // For float registers, manually pop using movsd
+                    // Load the XMM register from [rsp]
+                    let rsp = Reg(4);
+                    let mem = crate::out::arg::MemArgKind::Mem {
+                        base: rsp,
+                        offset: None,
+                        disp: 0,
+                        size: portal_pc_asm_common::types::mem::MemorySize::_64,
+                        reg_class: crate::RegisterClass::Xmm,
+                    };
+                    writer.fmov(arch, &reg, &mem)?;
+                    // Adjust stack back: add rsp, 8
+                    let imm8 = crate::out::arg::MemArgKind::NoMem(
+                        crate::out::arg::ArgKind::Lit(8)
+                    );
+                    writer.add(arch, &rsp, &imm8)
+                }
+            }
+        }
+        Cmd::GetLocal { dest, local } => {
+            let reg = Reg(dest.reg);
+            let mem = crate::out::arg::MemArgKind::Mem {
+                base: Reg(5), // rbp for locals
+                offset: None,
+                disp: (*local as i64 * -8) as u32, // locals are negative offsets from rbp
+                size: portal_pc_asm_common::types::mem::MemorySize::_64,
+                reg_class: match dest.kind {
+                    RegKind::Int => crate::RegisterClass::Gpr,
+                    RegKind::Float => crate::RegisterClass::Xmm,
+                },
+            };
+            match dest.kind {
+                RegKind::Int => writer.mov(arch, &reg, &mem),
+                RegKind::Float => writer.fmov(arch, &reg, &mem),
+            }
+        }
+        Cmd::SetLocal { src, local } => {
+            let reg = Reg(src.reg);
+            let mem = crate::out::arg::MemArgKind::Mem {
+                base: Reg(5), // rbp for locals
+                offset: None,
+                disp: (*local as i64 * -8) as u32, // locals are negative offsets from rbp
+                size: portal_pc_asm_common::types::mem::MemorySize::_64,
+                reg_class: match src.kind {
+                    RegKind::Int => crate::RegisterClass::Gpr,
+                    RegKind::Float => crate::RegisterClass::Xmm,
+                },
+            };
+            match src.kind {
+                RegKind::Int => writer.mov(arch, &mem, &reg),
+                RegKind::Float => writer.fmov(arch, &mem, &reg),
+            }
+        }
+    }
+}
+
+/// Maps a register index to a physical register kind.
+///
+/// # Arguments
+/// * `_idx` - The logical register index (currently unused)
+/// * `is_float` - Whether this is a float/SIMD register
+///
+/// # Returns
+/// The register kind (Int or Float)
+pub fn map_index_to_kind(_idx: usize, is_float: bool) -> RegKind {
+    if is_float {
+        RegKind::Float
+    } else {
+        RegKind::Int
+    }
+}
+
+/// Initialize register allocation state for x86-64.
+///
+/// Creates a RegAlloc instance with the specified number of registers per kind,
+/// reserving specific registers according to the calling convention.
+///
+/// # Type Parameters
+/// * `N` - Number of registers per kind (typically 16 or 32 with APX)
+///
+/// # Arguments
+/// * `_arch` - The x86-64 architecture configuration (currently unused)
+///
+/// # Returns
+/// A newly initialized RegAlloc instance with appropriate registers reserved
+pub fn init_regalloc<const N: usize>(
+    _arch: X64Arch,
+) -> RegAlloc<RegKind, N, [core::mem::MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2]> {
+    use core::mem::MaybeUninit;
+    
+    let mut frames: [MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2] = 
+        [MaybeUninit::uninit(), MaybeUninit::uninit()];
+    
+    // Initialize integer register frame
+    let mut int_frame: [RegAllocFrame<RegKind>; N] = 
+        core::array::from_fn(|_| RegAllocFrame::Empty);
+    
+    // Reserve rsp (4) and rbp (5) for stack and frame pointer
+    if N > 4 { int_frame[4] = RegAllocFrame::Reserved; }
+    if N > 5 { int_frame[5] = RegAllocFrame::Reserved; }
+    
+    frames[0] = MaybeUninit::new(int_frame);
+    
+    // Initialize float register frame
+    let float_frame: [RegAllocFrame<RegKind>; N] = 
+        core::array::from_fn(|_| RegAllocFrame::Empty);
+    
+    frames[1] = MaybeUninit::new(float_frame);
+    
+    // Safety: We've initialized both frames
+    let frames = unsafe {
+        core::mem::transmute::<
+            [MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2],
+            [core::mem::MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2]
+        >(frames)
+    };
+    
+    RegAlloc {
+        frames,
+        tos: None,
+    }
+}

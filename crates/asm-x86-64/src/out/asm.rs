@@ -140,6 +140,11 @@ macro_rules! writers {
                     let b = b.mem_display(cfg.into());
                     $crate::__::core::write!(self,"sub {a},{b}\n")
                 }
+                fn add(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.mem_display(cfg.into());
+                    let b = b.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"add {a},{b}\n")
+                }
                 fn movsx(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let dest = dest.mem_display(cfg.into());
                     let src = src.mem_display(cfg.into());

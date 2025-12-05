@@ -380,7 +380,7 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
 
     fn call(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
         // x86-64 CALL -> AArch64 call shim (inline, no jump)
-        // Directly emit: push LR, call target, pop LR, return
+        // Directly emit: push LR, call target, pop LR
         
         let sp = Reg(31); // SP
         let lr = Reg(30); // LR (x30)

@@ -44,6 +44,7 @@ use portal_solutions_asm_x86_64::{
     X64Arch,
     out::{WriterCore as X64WriterCore, Writer as X64Writer, arg::MemArg as X64MemArg},
 };
+use crate::out::arg::MemArg;
 
 /// Label type for shim system.
 ///
@@ -95,6 +96,7 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
                 let aarch64_reg_class = convert_register_class(reg_class);
                 
                 // Create the memory argument and pass references to its components
+                // x86-64 doesn't have pre/post-index, so always use Offset mode
                 match &aarch64_offset {
                     None => {
                         go(AArch64MemArgKind::Mem {
@@ -103,6 +105,7 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
                             disp: aarch64_disp,
                             size,
                             reg_class: aarch64_reg_class,
+                            mode: crate::out::arg::AddressingMode::Offset,
                         });
                     }
                     Some((off, scale)) => {
@@ -112,6 +115,7 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
                             disp: aarch64_disp,
                             size,
                             reg_class: aarch64_reg_class,
+                            mode: crate::out::arg::AddressingMode::Offset,
                         });
                     }
                 }
@@ -605,27 +609,27 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn push(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 PUSH -> AArch64 STR with pre-decrement
-        // PERFORMANCE: Approximation using SUB + STR
+        // x86-64 PUSH -> AArch64 STR with pre-indexed addressing
+        // [sp, #-8]! means: sp = sp - 8, then str to [sp]
         let sp = Reg(31); // SP
         let op_adapter = MemArgAdapter::new(op);
-        self.inner.sub(self.aarch64_cfg, &sp, &sp, &8u64)?;
         self.inner.str(
             self.aarch64_cfg,
             &op_adapter,
             &crate::out::arg::MemArgKind::Mem {
                 base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
-                disp: 0,
+                disp: -8,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::PreIndex,
             },
         )
     }
 
     fn pop(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 POP -> AArch64 LDR with post-increment
-        // PERFORMANCE: Approximation using LDR + ADD
+        // x86-64 POP -> AArch64 LDR with post-indexed addressing
+        // [sp], #8 means: ldr from [sp], then sp = sp + 8
         let sp = Reg(31); // SP
         let op_adapter = MemArgAdapter::new(op);
         self.inner.ldr(
@@ -634,57 +638,53 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             &crate::out::arg::MemArgKind::Mem {
                 base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
-                disp: 0,
+                disp: 8,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::PostIndex,
             },
-        )?;
-        self.inner.add(self.aarch64_cfg, &sp, &sp, &8u64)
+        )
     }
 
     fn pushf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
-        // x86-64 PUSHF -> AArch64 MRS NZCV + SUB + STR
-        // PERFORMANCE: AArch64 doesn't have direct PUSHF, requires 3 instructions
+        // x86-64 PUSHF -> AArch64 MRS NZCV + STR with pre-indexed addressing
         // Store NZCV flags using MRS
         let temp = Reg(16); // x16
         let sp = Reg(31);
         // Read NZCV flags into temp register
         self.inner.mrs_nzcv(self.aarch64_cfg, &temp)?;
-        // Allocate stack space
-        self.inner.sub(self.aarch64_cfg, &sp, &sp, &8u64)?;
-        // Store flags to stack
+        // Store flags to stack with pre-decrement: [sp, #-8]!
         self.inner.str(
             self.aarch64_cfg,
             &temp,
             &crate::out::arg::MemArgKind::Mem {
                 base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
-                disp: 0,
+                disp: -8,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::PreIndex,
             },
         )
     }
 
     fn popf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
-        // x86-64 POPF -> AArch64 LDR + ADD + MSR NZCV
-        // PERFORMANCE: AArch64 doesn't have direct POPF, requires 3 instructions
+        // x86-64 POPF -> AArch64 LDR with post-indexed addressing + MSR NZCV
         let temp = Reg(16); // x16
         let sp = Reg(31);
-        // Load flags from stack
+        // Load flags from stack with post-increment: [sp], #8
         self.inner.ldr(
             self.aarch64_cfg,
             &temp,
             &crate::out::arg::MemArgKind::Mem {
                 base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
-                disp: 0,
+                disp: 8,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::PostIndex,
             },
         )?;
-        // Deallocate stack space
-        self.inner.add(self.aarch64_cfg, &sp, &sp, &8u64)?;
         // Write flags back to NZCV
         self.inner.msr_nzcv(self.aarch64_cfg, &temp)
     }
@@ -707,17 +707,17 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // Emit the call shim inline
         self.inner.set_label(self.aarch64_cfg, shim_label)?;
         
-        // Push LR onto stack (AArch64: SUB sp, sp, #8; STR lr, [sp])
-        self.inner.sub(self.aarch64_cfg, &sp, &sp, &8u64)?;
+        // Push LR onto stack with pre-indexed addressing: [sp, #-8]!
         self.inner.str(
             self.aarch64_cfg,
             &lr,
             &crate::out::arg::MemArgKind::Mem {
                 base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
-                disp: 0,
+                disp: -8,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::PreIndex,
             },
         )?;
         
@@ -935,19 +935,19 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         let sp = Reg(31); // SP
         let lr = Reg(30); // LR (x30)
         
-        // Pop return address from stack (AArch64: LDR lr, [sp]; ADD sp, sp, #8)
+        // Pop return address from stack with post-indexed addressing: [sp], #8
         self.inner.ldr(
             self.aarch64_cfg,
             &lr,
             &crate::out::arg::MemArgKind::Mem {
                 base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
-                disp: 0,
+                disp: 8,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::PostIndex,
             },
         )?;
-        self.inner.add(self.aarch64_cfg, &sp, &sp, &8u64)?;
         
         // Return
         self.inner.ret(self.aarch64_cfg)

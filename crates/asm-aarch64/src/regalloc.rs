@@ -49,7 +49,8 @@ pub fn process_cmd<E: core::error::Error>(
     match cmd {
         Cmd::Push(target) => {
             let reg = Reg(target.reg);
-            // AArch64 doesn't have push instruction, use str with pre-decrement
+            // AArch64 doesn't have push instruction, use str with pre-indexed addressing
+            // [sp, #-8]! means: sp = sp - 8, then str to [sp]
             let sp = Reg(31); // sp register
             match target.kind {
                 RegKind::Int => {
@@ -59,6 +60,7 @@ pub fn process_cmd<E: core::error::Error>(
                         disp: -8,
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Gpr,
+                        mode: crate::out::arg::AddressingMode::PreIndex,
                     };
                     writer.str(arch, &reg, &mem)
                 }
@@ -69,6 +71,7 @@ pub fn process_cmd<E: core::error::Error>(
                         disp: -8,
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Simd,
+                        mode: crate::out::arg::AddressingMode::PreIndex,
                     };
                     writer.str(arch, &reg, &mem)
                 }
@@ -76,7 +79,8 @@ pub fn process_cmd<E: core::error::Error>(
         }
         Cmd::Pop(target) => {
             let reg = Reg(target.reg);
-            // AArch64 doesn't have pop instruction, use ldr with post-increment
+            // AArch64 doesn't have pop instruction, use ldr with post-indexed addressing
+            // [sp], #8 means: ldr from [sp], then sp = sp + 8
             let sp = Reg(31); // sp register
             match target.kind {
                 RegKind::Int => {
@@ -86,6 +90,7 @@ pub fn process_cmd<E: core::error::Error>(
                         disp: 8,
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Gpr,
+                        mode: crate::out::arg::AddressingMode::PostIndex,
                     };
                     writer.ldr(arch, &reg, &mem)
                 }
@@ -96,6 +101,7 @@ pub fn process_cmd<E: core::error::Error>(
                         disp: 8,
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Simd,
+                        mode: crate::out::arg::AddressingMode::PostIndex,
                     };
                     writer.ldr(arch, &reg, &mem)
                 }
@@ -107,12 +113,13 @@ pub fn process_cmd<E: core::error::Error>(
             let mem = crate::out::arg::MemArgKind::Mem {
                 base: fp,
                 offset: None,
-                disp: (*local as i64 * -8) as i32, // locals are negative offsets from fp
+                disp: -((*local as i32 + 1) * 8), // locals are negative offsets from fp
                 size: portal_pc_asm_common::types::mem::MemorySize::_64,
                 reg_class: match dest.kind {
                     RegKind::Int => crate::RegisterClass::Gpr,
                     RegKind::Float => crate::RegisterClass::Simd,
                 },
+                mode: crate::out::arg::AddressingMode::Offset,
             };
             writer.ldr(arch, &reg, &mem)
         }
@@ -122,12 +129,13 @@ pub fn process_cmd<E: core::error::Error>(
             let mem = crate::out::arg::MemArgKind::Mem {
                 base: fp,
                 offset: None,
-                disp: (*local as i64 * -8) as i32, // locals are negative offsets from fp
+                disp: -((*local as i32 + 1) * 8), // locals are negative offsets from fp
                 size: portal_pc_asm_common::types::mem::MemorySize::_64,
                 reg_class: match src.kind {
                     RegKind::Int => crate::RegisterClass::Gpr,
                     RegKind::Float => crate::RegisterClass::Simd,
                 },
+                mode: crate::out::arg::AddressingMode::Offset,
             };
             writer.str(arch, &reg, &mem)
         }

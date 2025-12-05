@@ -97,10 +97,13 @@ pub fn process_cmd<E: core::error::Error>(
         }
         Cmd::GetLocal { dest, local } => {
             let reg = Reg(dest.reg);
+            // Calculate negative offset from rbp for locals
+            // Using two's complement representation for negative offsets
+            let disp = (-((*local as i32 + 1) * 8)) as u32;
             let mem = crate::out::arg::MemArgKind::Mem {
                 base: Reg(5), // rbp for locals
                 offset: None,
-                disp: (*local as i64 * -8) as u32, // locals are negative offsets from rbp
+                disp, // locals are negative offsets from rbp
                 size: portal_pc_asm_common::types::mem::MemorySize::_64,
                 reg_class: match dest.kind {
                     RegKind::Int => crate::RegisterClass::Gpr,
@@ -114,10 +117,13 @@ pub fn process_cmd<E: core::error::Error>(
         }
         Cmd::SetLocal { src, local } => {
             let reg = Reg(src.reg);
+            // Calculate negative offset from rbp for locals
+            // Using two's complement representation for negative offsets
+            let disp = (-((*local as i32 + 1) * 8)) as u32;
             let mem = crate::out::arg::MemArgKind::Mem {
                 base: Reg(5), // rbp for locals
                 offset: None,
-                disp: (*local as i64 * -8) as u32, // locals are negative offsets from rbp
+                disp, // locals are negative offsets from rbp
                 size: portal_pc_asm_common::types::mem::MemorySize::_64,
                 reg_class: match src.kind {
                     RegKind::Int => crate::RegisterClass::Gpr,

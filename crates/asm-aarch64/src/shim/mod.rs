@@ -278,7 +278,7 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
             self.aarch64_cfg,
             &op_adapter,
             &crate::out::arg::MemArgKind::Mem {
-                base: sp,
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
                 disp: 0,
                 size: MemorySize::_64,
@@ -296,7 +296,7 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
             self.aarch64_cfg,
             &op_adapter,
             &crate::out::arg::MemArgKind::Mem {
-                base: sp,
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
                 disp: 0,
                 size: MemorySize::_64,
@@ -320,7 +320,7 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
             self.aarch64_cfg,
             &temp,
             &crate::out::arg::MemArgKind::Mem {
-                base: sp,
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
                 disp: 0,
                 size: MemorySize::_64,
@@ -338,7 +338,7 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
             self.aarch64_cfg,
             &temp,
             &crate::out::arg::MemArgKind::Mem {
-                base: sp,
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
                 offset: None,
                 disp: 0,
                 size: MemorySize::_64,

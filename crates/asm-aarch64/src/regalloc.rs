@@ -173,7 +173,7 @@ pub fn map_index_to_kind(idx: usize, is_float: bool) -> RegKind {
 /// A newly initialized RegAlloc instance with appropriate registers reserved
 pub fn init_regalloc<const N: usize>(
     _arch: AArch64Arch,
-) -> RegAlloc<RegKind, N, [core::mem::MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2]> {
+) -> RegAlloc<RegKind, N, [[RegAllocFrame<RegKind>; N]; 2]> {
     // Initialize integer register frame
     let mut int_frame: [RegAllocFrame<RegKind>; N] = 
         core::array::from_fn(|_| RegAllocFrame::Empty);
@@ -187,11 +187,8 @@ pub fn init_regalloc<const N: usize>(
     let float_frame: [RegAllocFrame<RegKind>; N] = 
         core::array::from_fn(|_| RegAllocFrame::Empty);
     
-    // Create frames array after both individual frames are initialized
-    let frames = [
-        core::mem::MaybeUninit::new(int_frame),
-        core::mem::MaybeUninit::new(float_frame),
-    ];
+    // Create frames array directly without MaybeUninit
+    let frames = [int_frame, float_frame];
     
     RegAlloc {
         frames,

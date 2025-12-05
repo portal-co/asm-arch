@@ -512,6 +512,17 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         handle_two_operand_instr_2arg!(self, a, b, sub)
     }
 
+    fn add(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 ADD a, b (a = a + b) -> AArch64 ADD a, a, b
+        // Handle memory operands with LDR/STR
+        handle_two_operand_instr_2arg!(self, a, b, add)
+    }
+
     fn movsx(
         &mut self,
         _cfg: X64Arch,

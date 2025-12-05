@@ -285,6 +285,26 @@ pub trait WriterCore {
         todo!("ret instruction not implemented")
     }
     
+    /// Emits an MRS NZCV (move from NZCV flags to register) instruction.
+    #[track_caller]
+    fn mrs_nzcv(
+        &mut self,
+        _cfg: crate::AArch64Arch,
+        _dest: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("mrs_nzcv instruction not implemented")
+    }
+    
+    /// Emits an MSR NZCV (move to NZCV flags from register) instruction.
+    #[track_caller]
+    fn msr_nzcv(
+        &mut self,
+        _cfg: crate::AArch64Arch,
+        _src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("msr_nzcv instruction not implemented")
+    }
+    
     /// Emits a MOVZ/MOVK sequence to load a 64-bit immediate.
     #[track_caller]
     fn mov_imm(

@@ -125,13 +125,17 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
     }
 }
 
-/// Converts x86-64 ArgKind to AArch64 ArgKind.
+/// Converts x86-64 ArgKind to AArch64 ArgKind with register mapping.
 fn convert_arg_kind(arg: portal_solutions_asm_x86_64::out::arg::ArgKind) -> crate::out::arg::ArgKind {
     use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
     use crate::out::arg::ArgKind as AArch64ArgKind;
     
     match arg {
-        X64ArgKind::Reg { reg, size } => AArch64ArgKind::Reg { reg, size },
+        X64ArgKind::Reg { reg, size } => {
+            // Map x86-64 register to AArch64 System V ABI register
+            let aarch64_reg = map_x64_register_to_aarch64(reg);
+            AArch64ArgKind::Reg { reg: aarch64_reg, size }
+        }
         X64ArgKind::Lit(val) => AArch64ArgKind::Lit(val),
         _ => AArch64ArgKind::Lit(0), // Handle any future variants
     }
@@ -147,6 +151,192 @@ fn convert_register_class(reg_class: portal_solutions_asm_x86_64::RegisterClass)
         X64RegClass::Xmm => AArch64RegClass::Simd,
         _ => AArch64RegClass::Gpr, // Handle any future variants
     }
+}
+
+/// Maps x86-64 registers to AArch64 System V ABI registers.
+///
+/// This function implements the register mapping between x86-64 and AArch64:
+/// - RAX (0) → X0 (0) - argument/return register
+/// - RCX (1) → X1 (1) - argument register  
+/// - RDX (2) → X2 (2) - argument register
+/// - RBX (3) → X19 (19) - callee-saved register
+/// - RSP (4) → SP (31) - stack pointer
+/// - RBP (5) → X29 (29) - frame pointer
+/// - RSI (6) → X3 (3) - argument register
+/// - RDI (7) → X4 (4) - argument register
+/// - R8-R15 → X5-X15, X20-X28
+///
+/// For SIMD registers, XMM0-XMM15 map directly to V0-V15.
+pub fn map_x64_register_to_aarch64(reg: Reg) -> Reg {
+    match reg.0 {
+        // Map x86-64 GPRs to AArch64 System V ABI registers
+        0 => Reg(0),   // RAX → X0
+        1 => Reg(1),   // RCX → X1
+        2 => Reg(2),   // RDX → X2
+        3 => Reg(19),  // RBX → X19 (callee-saved)
+        4 => Reg(31),  // RSP → SP
+        5 => Reg(29),  // RBP → X29 (frame pointer)
+        6 => Reg(3),   // RSI → X3
+        7 => Reg(4),   // RDI → X4
+        8 => Reg(5),   // R8 → X5
+        9 => Reg(6),   // R9 → X6
+        10 => Reg(7),  // R10 → X7
+        11 => Reg(8),  // R11 → X8
+        12 => Reg(9),  // R12 → X9
+        13 => Reg(10), // R13 → X10
+        14 => Reg(11), // R14 → X11
+        15 => Reg(12), // R15 → X12
+        // For higher registers or SIMD, pass through (XMM maps to V directly)
+        n => Reg(n),
+    }
+}
+
+/// Extension trait for memory access helpers on AArch64 Writer.
+///
+/// This trait provides helper methods for handling memory operations,
+/// automatically detecting whether operands are registers or memory
+/// and emitting appropriate LDR/STR instructions.
+pub trait WriterShimExt: crate::out::Writer<ShimLabel> {
+    /// Loads a value to a register, using LDR if source is memory.
+    ///
+    /// If `src` is already a register, this performs a MOV.
+    /// If `src` is a memory location, this performs an LDR.
+    fn load_to_reg(
+        &mut self,
+        cfg: crate::AArch64Arch,
+        dest: &Reg,
+        src: &(dyn crate::out::arg::MemArg + '_),
+    ) -> Result<(), <Self as crate::out::WriterCore>::Error> {
+        use crate::out::arg::MemArgKind;
+        
+        let src_kind = src.concrete_mem_kind();
+        match src_kind {
+            MemArgKind::NoMem(_) => {
+                // Source is a register or immediate, use MOV
+                self.mov(cfg, dest, src)
+            }
+            MemArgKind::Mem { .. } => {
+                // Source is memory, use LDR
+                self.ldr(cfg, dest, src)
+            }
+        }
+    }
+    
+    /// Stores a value from a register, using STR if destination is memory.
+    ///
+    /// If `dest` is already a register, this performs a MOV.
+    /// If `dest` is a memory location, this performs a STR.
+    fn store_from_reg(
+        &mut self,
+        cfg: crate::AArch64Arch,
+        dest: &(dyn crate::out::arg::MemArg + '_),
+        src: &Reg,
+    ) -> Result<(), <Self as crate::out::WriterCore>::Error> {
+        use crate::out::arg::MemArgKind;
+        
+        let dest_kind = dest.concrete_mem_kind();
+        match dest_kind {
+            MemArgKind::NoMem(_) => {
+                // Destination is a register, use MOV
+                self.mov(cfg, dest, src)
+            }
+            MemArgKind::Mem { .. } => {
+                // Destination is memory, use STR
+                self.str(cfg, src, dest)
+            }
+        }
+    }
+}
+
+// Blanket implementation for all types that implement Writer<ShimLabel>
+impl<W: crate::out::Writer<ShimLabel>> WriterShimExt for W {}
+
+/// Helper macro to handle two-operand instructions with memory operands.
+///
+/// Pattern: INSTR a, b where a = INSTR(a, b)
+/// Handles all combinations of register/memory operands using LDR/STR as needed.
+macro_rules! handle_two_operand_instr {
+    ($self:expr, $a:expr, $b:expr, $instr:ident) => {{
+        use crate::out::arg::MemArgKind;
+        
+        let a_adapter = MemArgAdapter::new($a);
+        let b_adapter = MemArgAdapter::new($b);
+        
+        let a_kind = a_adapter.concrete_mem_kind();
+        let b_kind = b_adapter.concrete_mem_kind();
+        
+        match (a_kind, b_kind) {
+            (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
+                // Both are registers/immediates - direct operation
+                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
+                // a is memory, b is register - LDR a, INSTR, STR a
+                let temp = Reg(16); // x16
+                $self.inner.ldr($self.aarch64_cfg, &temp, &a_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &temp, &temp, &b_adapter)?;
+                $self.inner.str($self.aarch64_cfg, &temp, &a_adapter)
+            }
+            (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
+                // a is register, b is memory - LDR b into temp, then INSTR
+                let temp = Reg(17); // x17
+                $self.inner.ldr($self.aarch64_cfg, &temp, &b_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &a_adapter, &temp)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
+                // Both are memory - LDR both, INSTR, STR result
+                let temp_a = Reg(16); // x16
+                let temp_b = Reg(17); // x17
+                $self.inner.ldr($self.aarch64_cfg, &temp_a, &a_adapter)?;
+                $self.inner.ldr($self.aarch64_cfg, &temp_b, &b_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &temp_a, &temp_a, &temp_b)?;
+                $self.inner.str($self.aarch64_cfg, &temp_a, &a_adapter)
+            }
+        }
+    }};
+}
+
+/// Helper for two-operand instructions where result overwrites first operand (like SUB in x86).
+/// For SUB, the AArch64 instruction is: SUB a, a, b (but only takes 2 args in trait)
+macro_rules! handle_two_operand_instr_2arg {
+    ($self:expr, $a:expr, $b:expr, $instr:ident) => {{
+        use crate::out::arg::MemArgKind;
+        
+        let a_adapter = MemArgAdapter::new($a);
+        let b_adapter = MemArgAdapter::new($b);
+        
+        let a_kind = a_adapter.concrete_mem_kind();
+        let b_kind = b_adapter.concrete_mem_kind();
+        
+        match (a_kind, b_kind) {
+            (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
+                // Both are registers/immediates - direct operation
+                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &b_adapter)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
+                // a is memory, b is register - LDR a, INSTR, STR a
+                let temp = Reg(16); // x16
+                $self.inner.ldr($self.aarch64_cfg, &temp, &a_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &temp, &b_adapter)?;
+                $self.inner.str($self.aarch64_cfg, &temp, &a_adapter)
+            }
+            (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
+                // a is register, b is memory - LDR b into temp, then INSTR
+                let temp = Reg(17); // x17
+                $self.inner.ldr($self.aarch64_cfg, &temp, &b_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &temp)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
+                // Both are memory - LDR both, INSTR, STR result
+                let temp_a = Reg(16); // x16
+                let temp_b = Reg(17); // x17
+                $self.inner.ldr($self.aarch64_cfg, &temp_a, &a_adapter)?;
+                $self.inner.ldr($self.aarch64_cfg, &temp_b, &b_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &temp_a, &temp_b)?;
+                $self.inner.str($self.aarch64_cfg, &temp_a, &a_adapter)
+            }
+        }
+    }};
 }
 
 /// Wrapper that translates x86-64 instructions to AArch64.
@@ -275,10 +465,36 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
-        // Direct translation: x86-64 MOV -> AArch64 MOV (or LDR/STR for memory)
+        // x86-64 MOV -> AArch64 MOV/LDR/STR depending on operands
+        use crate::out::arg::MemArgKind;
+        
         let dest_adapter = MemArgAdapter::new(dest);
         let src_adapter = MemArgAdapter::new(src);
-        self.inner.mov(self.aarch64_cfg, &dest_adapter, &src_adapter)
+        
+        let dest_kind = dest_adapter.concrete_mem_kind();
+        let src_kind = src_adapter.concrete_mem_kind();
+        
+        match (dest_kind, src_kind) {
+            (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
+                // Register to register or immediate to register - use MOV
+                self.inner.mov(self.aarch64_cfg, &dest_adapter, &src_adapter)
+            }
+            (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
+                // Memory to register - use LDR
+                self.inner.ldr(self.aarch64_cfg, &dest_adapter, &src_adapter)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
+                // Register to memory - use STR
+                self.inner.str(self.aarch64_cfg, &src_adapter, &dest_adapter)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
+                // Memory to memory - need temporary register
+                // Use x16 (IP0) as temporary
+                let temp = Reg(16);
+                self.inner.ldr(self.aarch64_cfg, &temp, &src_adapter)?;
+                self.inner.str(self.aarch64_cfg, &temp, &dest_adapter)
+            }
+        }
     }
 
     fn sub(
@@ -288,9 +504,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SUB a, b (a = a - b) -> AArch64 SUB a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.sub(self.aarch64_cfg, &a_adapter, &b_adapter)
+        // Handle memory operands with LDR/STR
+        handle_two_operand_instr_2arg!(self, a, b, sub)
     }
 
     fn movsx(
@@ -299,10 +514,46 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
-        // x86-64 MOVSX -> AArch64 SXTB/SXTH/SXTW
+        // x86-64 MOVSX -> AArch64 SXTB/SXTH/SXTW (handle memory operands)
+        use crate::out::arg::MemArgKind;
+        
         let dest_adapter = MemArgAdapter::new(dest);
         let src_adapter = MemArgAdapter::new(src);
-        self.inner.sxt(self.aarch64_cfg, &dest_adapter, &src_adapter)
+        let src_kind = src_adapter.concrete_mem_kind();
+        
+        match src_kind {
+            MemArgKind::NoMem(_) => {
+                // Source is register - direct SXT, then store if needed
+                let dest_kind = dest_adapter.concrete_mem_kind();
+                match dest_kind {
+                    MemArgKind::NoMem(_) => {
+                        self.inner.sxt(self.aarch64_cfg, &dest_adapter, &src_adapter)
+                    }
+                    MemArgKind::Mem { .. } => {
+                        let temp = Reg(16); // x16
+                        self.inner.sxt(self.aarch64_cfg, &temp, &src_adapter)?;
+                        self.inner.str(self.aarch64_cfg, &temp, &dest_adapter)
+                    }
+                }
+            }
+            MemArgKind::Mem { .. } => {
+                // Source is memory - LDR, SXT, store if needed
+                let temp = Reg(16); // x16
+                self.inner.ldr(self.aarch64_cfg, &temp, &src_adapter)?;
+                let temp2 = Reg(17); // x17 for result
+                self.inner.sxt(self.aarch64_cfg, &temp2, &temp)?;
+                
+                let dest_kind = dest_adapter.concrete_mem_kind();
+                match dest_kind {
+                    MemArgKind::NoMem(_) => {
+                        self.inner.mov(self.aarch64_cfg, &dest_adapter, &temp2)
+                    }
+                    MemArgKind::Mem { .. } => {
+                        self.inner.str(self.aarch64_cfg, &temp2, &dest_adapter)
+                    }
+                }
+            }
+        }
     }
 
     fn movzx(
@@ -311,10 +562,46 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
-        // x86-64 MOVZX -> AArch64 UXTB/UXTH
+        // x86-64 MOVZX -> AArch64 UXTB/UXTH (handle memory operands)
+        use crate::out::arg::MemArgKind;
+        
         let dest_adapter = MemArgAdapter::new(dest);
         let src_adapter = MemArgAdapter::new(src);
-        self.inner.uxt(self.aarch64_cfg, &dest_adapter, &src_adapter)
+        let src_kind = src_adapter.concrete_mem_kind();
+        
+        match src_kind {
+            MemArgKind::NoMem(_) => {
+                // Source is register - direct UXT, then store if needed
+                let dest_kind = dest_adapter.concrete_mem_kind();
+                match dest_kind {
+                    MemArgKind::NoMem(_) => {
+                        self.inner.uxt(self.aarch64_cfg, &dest_adapter, &src_adapter)
+                    }
+                    MemArgKind::Mem { .. } => {
+                        let temp = Reg(16); // x16
+                        self.inner.uxt(self.aarch64_cfg, &temp, &src_adapter)?;
+                        self.inner.str(self.aarch64_cfg, &temp, &dest_adapter)
+                    }
+                }
+            }
+            MemArgKind::Mem { .. } => {
+                // Source is memory - LDR, UXT, store if needed
+                let temp = Reg(16); // x16
+                self.inner.ldr(self.aarch64_cfg, &temp, &src_adapter)?;
+                let temp2 = Reg(17); // x17 for result
+                self.inner.uxt(self.aarch64_cfg, &temp2, &temp)?;
+                
+                let dest_kind = dest_adapter.concrete_mem_kind();
+                match dest_kind {
+                    MemArgKind::NoMem(_) => {
+                        self.inner.mov(self.aarch64_cfg, &dest_adapter, &temp2)
+                    }
+                    MemArgKind::Mem { .. } => {
+                        self.inner.str(self.aarch64_cfg, &temp2, &dest_adapter)
+                    }
+                }
+            }
+        }
     }
 
     fn push(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
@@ -356,15 +643,16 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn pushf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
-        // x86-64 PUSHF -> AArch64 MRS + STR
-        // PERFORMANCE: AArch64 doesn't have direct PUSHF, requires multiple instructions
-        // Store NZCV flags using MRS (needs temp register)
+        // x86-64 PUSHF -> AArch64 MRS NZCV + SUB + STR
+        // PERFORMANCE: AArch64 doesn't have direct PUSHF, requires 3 instructions
+        // Store NZCV flags using MRS
         let temp = Reg(16); // x16
         let sp = Reg(31);
-        // Note: This is a simplification - proper implementation would use MRS nzcv, xN
-        // For now, just push a placeholder zero
-        self.inner.mov_imm(self.aarch64_cfg, &temp, 0)?;
+        // Read NZCV flags into temp register
+        self.inner.mrs_nzcv(self.aarch64_cfg, &temp)?;
+        // Allocate stack space
         self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        // Store flags to stack
         self.inner.str(
             self.aarch64_cfg,
             &temp,
@@ -379,10 +667,11 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn popf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
-        // x86-64 POPF -> AArch64 LDR + MSR
-        // PERFORMANCE: AArch64 doesn't have direct POPF, requires multiple instructions
+        // x86-64 POPF -> AArch64 LDR + ADD + MSR NZCV
+        // PERFORMANCE: AArch64 doesn't have direct POPF, requires 3 instructions
         let temp = Reg(16); // x16
         let sp = Reg(31);
+        // Load flags from stack
         self.inner.ldr(
             self.aarch64_cfg,
             &temp,
@@ -394,9 +683,10 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
                 reg_class: crate::RegisterClass::Gpr,
             },
         )?;
+        // Deallocate stack space
         self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
-        // Note: This is a simplification - proper implementation would use MSR nzcv, xN
-        Ok(())
+        // Write flags back to NZCV
+        self.inner.msr_nzcv(self.aarch64_cfg, &temp)
     }
 
     fn call(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
@@ -456,16 +746,60 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
-        // Direct translation: x86-64 CMP -> AArch64 CMP
+        // x86-64 CMP -> AArch64 CMP (handle memory operands)
+        use crate::out::arg::MemArgKind;
+        
         let a_adapter = MemArgAdapter::new(a);
         let b_adapter = MemArgAdapter::new(b);
-        self.inner.cmp(self.aarch64_cfg, &a_adapter, &b_adapter)
+        
+        let a_kind = a_adapter.concrete_mem_kind();
+        let b_kind = b_adapter.concrete_mem_kind();
+        
+        match (a_kind, b_kind) {
+            (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
+                // Both are registers/immediates - direct CMP
+                self.inner.cmp(self.aarch64_cfg, &a_adapter, &b_adapter)
+            }
+            (MemArgKind::Mem { .. }, _) => {
+                // a is memory - LDR into temp, then CMP
+                let temp = Reg(16); // x16
+                self.inner.ldr(self.aarch64_cfg, &temp, &a_adapter)?;
+                if matches!(b_kind, MemArgKind::Mem { .. }) {
+                    let temp_b = Reg(17); // x17
+                    self.inner.ldr(self.aarch64_cfg, &temp_b, &b_adapter)?;
+                    self.inner.cmp(self.aarch64_cfg, &temp, &temp_b)
+                } else {
+                    self.inner.cmp(self.aarch64_cfg, &temp, &b_adapter)
+                }
+            }
+            (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
+                // b is memory - LDR into temp, then CMP
+                let temp = Reg(17); // x17
+                self.inner.ldr(self.aarch64_cfg, &temp, &b_adapter)?;
+                self.inner.cmp(self.aarch64_cfg, &a_adapter, &temp)
+            }
+        }
     }
 
     fn cmp0(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 CMP op, 0 -> AArch64 CMP op, #0
+        // x86-64 CMP op, 0 -> AArch64 CMP op, #0 (handle memory operands)
+        use crate::out::arg::MemArgKind;
+        
         let op_adapter = MemArgAdapter::new(op);
-        self.inner.cmp(self.aarch64_cfg, &op_adapter, &0u64)
+        let op_kind = op_adapter.concrete_mem_kind();
+        
+        match op_kind {
+            MemArgKind::NoMem(_) => {
+                // Register/immediate - direct CMP
+                self.inner.cmp(self.aarch64_cfg, &op_adapter, &0u64)
+            }
+            MemArgKind::Mem { .. } => {
+                // Memory - LDR into temp, then CMP
+                let temp = Reg(16); // x16
+                self.inner.ldr(self.aarch64_cfg, &temp, &op_adapter)?;
+                self.inner.cmp(self.aarch64_cfg, &temp, &0u64)
+            }
+        }
     }
 
     fn cmovcc64(
@@ -475,11 +809,44 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         op: &(dyn X64MemArg + '_),
         val: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
-        // x86-64 CMOVcc -> AArch64 CSEL
+        // x86-64 CMOVcc -> AArch64 CSEL (handle memory operands)
+        use crate::out::arg::MemArgKind;
+        
         let aarch64_cond = translate_condition(cond);
         let op_adapter = MemArgAdapter::new(op);
         let val_adapter = MemArgAdapter::new(val);
-        self.inner.csel(self.aarch64_cfg, aarch64_cond, &op_adapter, &val_adapter, &op_adapter)
+        
+        let op_kind = op_adapter.concrete_mem_kind();
+        let val_kind = val_adapter.concrete_mem_kind();
+        
+        match (op_kind, val_kind) {
+            (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
+                // Both registers - direct CSEL
+                self.inner.csel(self.aarch64_cfg, aarch64_cond, &op_adapter, &val_adapter, &op_adapter)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
+                // op is memory - LDR, CSEL, STR
+                let temp = Reg(16); // x16
+                self.inner.ldr(self.aarch64_cfg, &temp, &op_adapter)?;
+                self.inner.csel(self.aarch64_cfg, aarch64_cond, &temp, &val_adapter, &temp)?;
+                self.inner.str(self.aarch64_cfg, &temp, &op_adapter)
+            }
+            (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
+                // val is memory - LDR val, then CSEL
+                let temp = Reg(17); // x17
+                self.inner.ldr(self.aarch64_cfg, &temp, &val_adapter)?;
+                self.inner.csel(self.aarch64_cfg, aarch64_cond, &op_adapter, &temp, &op_adapter)
+            }
+            (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
+                // Both memory - LDR both, CSEL, STR
+                let temp_op = Reg(16); // x16
+                let temp_val = Reg(17); // x17
+                self.inner.ldr(self.aarch64_cfg, &temp_op, &op_adapter)?;
+                self.inner.ldr(self.aarch64_cfg, &temp_val, &val_adapter)?;
+                self.inner.csel(self.aarch64_cfg, aarch64_cond, &temp_op, &temp_val, &temp_op)?;
+                self.inner.str(self.aarch64_cfg, &temp_op, &op_adapter)
+            }
+        }
     }
 
     fn jcc(
@@ -495,17 +862,50 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn u32(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 AND op, 0xffffffff -> AArch64 AND op, op, #0xffffffff
-        let temp = Reg(16); // Use temp register for immediate
+        // x86-64 AND op, 0xffffffff -> AArch64 AND op, op, #0xffffffff (handle memory)
+        use crate::out::arg::MemArgKind;
+        
         let op_adapter = MemArgAdapter::new(op);
+        let op_kind = op_adapter.concrete_mem_kind();
+        let temp = Reg(16); // Use temp register for immediate
+        let temp2 = Reg(17); // For result if memory
+        
         self.inner.mov_imm(self.aarch64_cfg, &temp, 0xffffffff)?;
-        self.inner.and(self.aarch64_cfg, &op_adapter, &op_adapter, &temp)
+        
+        match op_kind {
+            MemArgKind::NoMem(_) => {
+                // Register - direct AND
+                self.inner.and(self.aarch64_cfg, &op_adapter, &op_adapter, &temp)
+            }
+            MemArgKind::Mem { .. } => {
+                // Memory - LDR, AND, STR
+                self.inner.ldr(self.aarch64_cfg, &temp2, &op_adapter)?;
+                self.inner.and(self.aarch64_cfg, &temp2, &temp2, &temp)?;
+                self.inner.str(self.aarch64_cfg, &temp2, &op_adapter)
+            }
+        }
     }
 
     fn not(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 NOT -> AArch64 MVN
+        // x86-64 NOT -> AArch64 MVN (handle memory operands)
+        use crate::out::arg::MemArgKind;
+        
         let op_adapter = MemArgAdapter::new(op);
-        self.inner.mvn(self.aarch64_cfg, &op_adapter, &op_adapter)
+        let op_kind = op_adapter.concrete_mem_kind();
+        
+        match op_kind {
+            MemArgKind::NoMem(_) => {
+                // Register - direct MVN
+                self.inner.mvn(self.aarch64_cfg, &op_adapter, &op_adapter)
+            }
+            MemArgKind::Mem { .. } => {
+                // Memory - LDR, MVN, STR
+                let temp = Reg(16); // x16
+                self.inner.ldr(self.aarch64_cfg, &temp, &op_adapter)?;
+                self.inner.mvn(self.aarch64_cfg, &temp, &temp)?;
+                self.inner.str(self.aarch64_cfg, &temp, &op_adapter)
+            }
+        }
     }
 
     fn lea(
@@ -571,9 +971,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 MUL a, b -> AArch64 MUL a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.mul(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, mul)
     }
 
     fn div(
@@ -583,9 +981,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 DIV a, b -> AArch64 UDIV a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.udiv(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, udiv)
     }
 
     fn idiv(
@@ -595,9 +991,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 IDIV a, b -> AArch64 SDIV a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.sdiv(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, sdiv)
     }
 
     fn and(
@@ -607,9 +1001,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 AND a, b -> AArch64 AND a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.and(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, and)
     }
 
     fn or(
@@ -619,9 +1011,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 OR a, b -> AArch64 ORR a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.orr(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, orr)
     }
 
     fn eor(
@@ -631,9 +1021,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 XOR a, b -> AArch64 EOR a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.eor(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, eor)
     }
 
     fn shl(
@@ -643,9 +1031,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SHL a, b -> AArch64 LSL a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.lsl(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, lsl)
     }
 
     fn shr(
@@ -655,9 +1041,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SHR a, b -> AArch64 LSR a, a, b
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
-        self.inner.lsr(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+        handle_two_operand_instr!(self, a, b, lsr)
     }
 
     fn fadd(
@@ -667,9 +1051,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 ADDSD -> AArch64 FADD
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
-        self.inner.fadd(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+        handle_two_operand_instr!(self, dest, src, fadd)
     }
 
     fn fsub(
@@ -679,9 +1061,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SUBSD -> AArch64 FSUB
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
-        self.inner.fsub(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+        handle_two_operand_instr!(self, dest, src, fsub)
     }
 
     fn fmul(

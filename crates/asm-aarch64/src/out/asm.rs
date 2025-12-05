@@ -97,6 +97,16 @@ macro_rules! writers {
                     $crate::__::core::write!(self,"ret\n")
                 }
                 
+                fn mrs_nzcv(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"mrs {dest}, nzcv\n")
+                }
+                
+                fn msr_nzcv(&mut self, cfg: $crate::AArch64Arch, src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let src = src.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"msr nzcv, {src}\n")
+                }
+                
                 fn mov_imm(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg.into());
                     // Use movz/movk sequence for 64-bit immediates

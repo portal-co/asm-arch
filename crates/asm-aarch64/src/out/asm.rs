@@ -179,16 +179,18 @@ macro_rules! writers {
                     $crate::__::core::write!(self,"lsr {dest}, {a}, {b}\n")
                 }
                 
-                fn sub(&mut self, cfg: $crate::AArch64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                fn sub(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg.into());
                     let a = a.mem_display(cfg.into());
                     let b = b.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"sub {a}, {a}, {b}\n")
+                    $crate::__::core::write!(self,"sub {dest}, {a}, {b}\n")
                 }
                 
-                fn add(&mut self, cfg: $crate::AArch64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                fn add(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg.into());
                     let a = a.mem_display(cfg.into());
                     let b = b.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"add {a}, {a}, {b}\n")
+                    $crate::__::core::write!(self,"add {dest}, {a}, {b}\n")
                 }
                 
                 fn sxt(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{

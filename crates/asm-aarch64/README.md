@@ -23,7 +23,7 @@ let writer: &mut dyn Write = &mut output;
 
 // Generate instructions
 WriterCore::mov(writer, cfg, &reg0, &reg1)?;
-WriterCore::add(writer, cfg, &reg0, &imm)?;
+WriterCore::add(writer, cfg, &reg0, &reg0, &imm)?;  // reg0 = reg0 + imm
 WriterCore::ret(writer, cfg)?;
 ```
 

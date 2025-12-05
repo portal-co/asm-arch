@@ -52,11 +52,12 @@ pub trait WriterCore {
     
     /// Emits a SUB (subtract) instruction.
     ///
-    /// Subtracts `b` from `a` and stores the result in `a`.
+    /// Subtracts `b` from `a` and stores the result in `dest`.
     #[track_caller]
     fn sub(
         &mut self,
         _cfg: crate::AArch64Arch,
+        _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -64,10 +65,13 @@ pub trait WriterCore {
     }
     
     /// Emits an ADD (add) instruction.
+    ///
+    /// Adds `a` and `b`, stores the result in `dest`.
     #[track_caller]
     fn add(
         &mut self,
         _cfg: crate::AArch64Arch,
+        _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -531,11 +535,11 @@ macro_rules! writer_dispatch {
                     fn lsr(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::lsr(&mut **self, cfg, dest, a, b)
                     }
-                    fn sub(&mut self, cfg: $crate::AArch64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        $crate::out::WriterCore::sub(&mut **self, cfg, a, b)
+                    fn sub(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::sub(&mut **self, cfg, dest, a, b)
                     }
-                    fn add(&mut self, cfg: $crate::AArch64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        $crate::out::WriterCore::add(&mut **self, cfg, a, b)
+                    fn add(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::add(&mut **self, cfg, dest, a, b)
                     }
                     fn sxt(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::sxt(&mut **self, cfg, dest, src)

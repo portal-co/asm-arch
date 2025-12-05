@@ -310,21 +310,21 @@ macro_rules! handle_two_operand_instr_2arg {
         
         match (a_kind, b_kind) {
             (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
-                // Both are registers/immediates - direct operation
-                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &b_adapter)
+                // Both are registers/immediates - direct operation with dest=a
+                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
             }
             (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
                 // a is memory, b is register - LDR a, INSTR, STR a
                 let temp = Reg(16); // x16
                 $self.inner.ldr($self.aarch64_cfg, &temp, &a_adapter)?;
-                $self.inner.$instr($self.aarch64_cfg, &temp, &b_adapter)?;
+                $self.inner.$instr($self.aarch64_cfg, &temp, &temp, &b_adapter)?;
                 $self.inner.str($self.aarch64_cfg, &temp, &a_adapter)
             }
             (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
-                // a is register, b is memory - LDR b into temp, then INSTR
+                // a is register, b is memory - LDR b into temp, then INSTR with dest=a
                 let temp = Reg(17); // x17
                 $self.inner.ldr($self.aarch64_cfg, &temp, &b_adapter)?;
-                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &temp)
+                $self.inner.$instr($self.aarch64_cfg, &a_adapter, &a_adapter, &temp)
             }
             (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
                 // Both are memory - LDR both, INSTR, STR result
@@ -332,7 +332,7 @@ macro_rules! handle_two_operand_instr_2arg {
                 let temp_b = Reg(17); // x17
                 $self.inner.ldr($self.aarch64_cfg, &temp_a, &a_adapter)?;
                 $self.inner.ldr($self.aarch64_cfg, &temp_b, &b_adapter)?;
-                $self.inner.$instr($self.aarch64_cfg, &temp_a, &temp_b)?;
+                $self.inner.$instr($self.aarch64_cfg, &temp_a, &temp_a, &temp_b)?;
                 $self.inner.str($self.aarch64_cfg, &temp_a, &a_adapter)
             }
         }
@@ -609,7 +609,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // PERFORMANCE: Approximation using SUB + STR
         let sp = Reg(31); // SP
         let op_adapter = MemArgAdapter::new(op);
-        self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.sub(self.aarch64_cfg, &sp, &sp, &8u64)?;
         self.inner.str(
             self.aarch64_cfg,
             &op_adapter,
@@ -639,7 +639,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
                 reg_class: crate::RegisterClass::Gpr,
             },
         )?;
-        self.inner.add(self.aarch64_cfg, &sp, &8u64)
+        self.inner.add(self.aarch64_cfg, &sp, &sp, &8u64)
     }
 
     fn pushf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
@@ -651,7 +651,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // Read NZCV flags into temp register
         self.inner.mrs_nzcv(self.aarch64_cfg, &temp)?;
         // Allocate stack space
-        self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.sub(self.aarch64_cfg, &sp, &sp, &8u64)?;
         // Store flags to stack
         self.inner.str(
             self.aarch64_cfg,
@@ -684,7 +684,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             },
         )?;
         // Deallocate stack space
-        self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.add(self.aarch64_cfg, &sp, &sp, &8u64)?;
         // Write flags back to NZCV
         self.inner.msr_nzcv(self.aarch64_cfg, &temp)
     }
@@ -708,7 +708,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         self.inner.set_label(self.aarch64_cfg, shim_label)?;
         
         // Push LR onto stack (AArch64: SUB sp, sp, #8; STR lr, [sp])
-        self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.sub(self.aarch64_cfg, &sp, &sp, &8u64)?;
         self.inner.str(
             self.aarch64_cfg,
             &lr,
@@ -947,7 +947,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
                 reg_class: crate::RegisterClass::Gpr,
             },
         )?;
-        self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.add(self.aarch64_cfg, &sp, &sp, &8u64)?;
         
         // Return
         self.inner.ret(self.aarch64_cfg)

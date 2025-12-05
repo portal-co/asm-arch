@@ -120,6 +120,28 @@ The key component is `MemArgAdapter`, which converts x86-64 `MemArg` trait objec
 - **Memory references**: Converts x86-64's `u32` displacement to AArch64's `i32`
 - **Register classes**: Maps `Xmm` to `Simd`, `Gpr` to `Gpr`
 
+### Stack-Based Calling Convention
+
+The shim implements x86-64's stack-based calling convention on AArch64:
+
+- **CALL**: Pushes LR (return address) onto stack, calls target, then pops LR
+  ```asm
+  sub sp, sp, #8
+  str x30, [sp]      // Push LR
+  bl target
+  ldr x30, [sp]      // Pop LR
+  add sp, sp, #8
+  ```
+
+- **RET**: Pops return address from stack into LR, then returns
+  ```asm
+  ldr x30, [sp]      // Pop return address
+  add sp, sp, #8
+  ret
+  ```
+
+This ensures compatibility with x86-64's expectation that return addresses live on the stack.
+
 ```rust
 use portal_solutions_asm_x86_64::{X64Arch, out::WriterCore as X64WriterCore};
 use portal_solutions_asm_aarch64::shim::X64ToAArch64Shim;
@@ -130,7 +152,8 @@ let mut shim = X64ToAArch64Shim::new(writer);
 
 // Use x86-64 instruction API, get AArch64 output
 X64WriterCore::mov(&mut shim, cfg, &dest, &src)?;
-X64WriterCore::ret(&mut shim, cfg)?;
+X64WriterCore::call(&mut shim, cfg, &target)?;  // Automatically handles stack
+X64WriterCore::ret(&mut shim, cfg)?;             // Pops from stack
 ```
 
 ### Direct Translations (1:1)

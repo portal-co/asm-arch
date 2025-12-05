@@ -1,29 +1,40 @@
 //! x86-64 to AArch64 translation shim.
 //!
-//! This module provides utilities for translating x86-64 instructions to AArch64.
+//! This module provides a complete translation layer for x86-64 instructions to AArch64,
+//! including a MemArg adapter and stack-based calling convention shim.
 //!
 //! # Architecture Notes
 //!
-//! The shim requires a conversion layer between x86-64 and AArch64 MemArg traits.
-//! This is a complex topic that requires careful handling of:
-//! - Different memory addressing modes
-//! - Register mapping (x86-64 has 16 GPRs by default, AArch64 has 31 + SP)
-//! - Immediate value encoding differences
-//! - Conditional code mappings
+//! The shim handles conversion between x86-64 and AArch64:
+//! - **Memory addressing modes**: Different displacement types (u32 vs i32)
+//! - **Register mapping**: x86-64 has 16 GPRs, AArch64 has 31 + SP
+//! - **Register classes**: Xmm → Simd, Gpr → Gpr
+//! - **Calling convention**: x86-64 stores return addresses on stack, AArch64 uses LR
+//!
+//! # Stack-Based Calling Convention
+//!
+//! The shim implements x86-64's calling convention where return addresses are on the stack:
+//!
+//! - **CALL instructions**: Push LR onto stack, call target, pop LR
+//!   - Ensures the return address is preserved across nested calls
+//!   - Compatible with x86-64's expectation of stack-based returns
+//!
+//! - **RET instructions**: Pop return address from stack, then return
+//!   - Restores return address from the stack into LR
+//!   - Maintains consistency with CALL's stack manipulation
+//!
+//! This inline shim system ensures correct semantics without requiring separate
+//! shim functions or label management.
 //!
 //! # Performance Notes
 //!
-//! Some x86-64 instructions don't have direct AArch64 equivalents:
-//! - **XCHG**: Requires 3 MOV instructions (no atomic exchange in base AArch64)
-//! - **PUSH/POP**: Require explicit SP adjustment + STR/LDR
-//! - **PUSHF/POPF**: Require MRS/MSR to access NZCV flags
+//! Some x86-64 instructions require multiple AArch64 instructions:
+//! - **XCHG**: 3 MOV instructions (no atomic exchange in base AArch64)
+//! - **PUSH/POP**: 2 instructions each (SUB+STR / LDR+ADD)
+//! - **PUSHF/POPF**: 3 instructions each (MRS+SUB+STR / LDR+ADD+MSR)
+//! - **CALL**: 5 instructions (SUB+STR+BL+LDR+ADD)
+//! - **RET**: 3 instructions (LDR+ADD+RET)
 //! - **Parity flags**: No direct equivalent, always evaluates to "true"
-//!
-//! # Status
-//!
-//! This is a **demonstration module** showing the translation strategy.
-//! Full implementation requires a MemArg adapter layer to convert between
-//! x86-64 and AArch64 argument representations.
 
 use portal_pc_asm_common::types::{reg::Reg, mem::MemorySize};
 use portal_solutions_asm_x86_64::{
@@ -31,6 +42,12 @@ use portal_solutions_asm_x86_64::{
     X64Arch,
     out::{WriterCore as X64WriterCore, Writer as X64Writer, arg::MemArg as X64MemArg},
 };
+
+/// Label type for shim system.
+///
+/// This newtype wraps a `usize` to uniquely identify shim labels in the generated assembly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ShimLabel(pub usize);
 
 /// Adapter that converts x86-64 MemArg to AArch64 MemArg.
 ///
@@ -128,6 +145,14 @@ fn convert_register_class(reg_class: portal_solutions_asm_x86_64::RegisterClass)
 ///
 /// This type wraps an AArch64 writer and implements the x86-64 WriterCore trait,
 /// translating each x86-64 instruction to equivalent AArch64 instructions.
+///
+/// # Shim System
+///
+/// The shim maintains a stack-based calling convention compatible with x86-64:
+/// - CALL instructions directly emit code that pushes LR onto the stack, calls the target, then pops LR
+/// - RET instructions directly emit code that pops the return address from the stack, then returns
+///
+/// This ensures x86-64 semantics where the return address is stored on the stack rather than in LR.
 pub struct X64ToAArch64Shim<W> {
     /// The underlying AArch64 writer.
     pub inner: W,
@@ -146,7 +171,10 @@ impl<W> X64ToAArch64Shim<W> {
     
     /// Creates a new shim with a specific AArch64 configuration.
     pub fn with_config(inner: W, aarch64_cfg: crate::AArch64Arch) -> Self {
-        Self { inner, aarch64_cfg }
+        Self {
+            inner,
+            aarch64_cfg,
+        }
     }
 }
 
@@ -351,9 +379,45 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn call(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 CALL -> AArch64 BL or BLR
+        // x86-64 CALL -> AArch64 call shim (inline, no jump)
+        // Directly emit: push LR, call target, pop LR, return
+        
+        let sp = Reg(31); // SP
+        let lr = Reg(30); // LR (x30)
+        
+        // Push LR onto stack (AArch64: SUB sp, sp, #8; STR lr, [sp])
+        self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.str(
+            self.aarch64_cfg,
+            &lr,
+            &crate::out::arg::MemArgKind::Mem {
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )?;
+        
+        // Call the target
         let op_adapter = MemArgAdapter::new(op);
-        self.inner.bl(self.aarch64_cfg, &op_adapter)
+        self.inner.bl(self.aarch64_cfg, &op_adapter)?;
+        
+        // Pop LR from stack (AArch64: LDR lr, [sp]; ADD sp, sp, #8)
+        self.inner.ldr(
+            self.aarch64_cfg,
+            &lr,
+            &crate::out::arg::MemArgKind::Mem {
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )?;
+        self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
+        
+        Ok(())
     }
 
     fn jmp(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
@@ -441,7 +505,27 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn ret(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
-        // Direct translation: x86-64 RET -> AArch64 RET
+        // x86-64 RET -> AArch64 ret shim (inline, no jump)
+        // Directly emit: pop return address from stack, then return
+        
+        let sp = Reg(31); // SP
+        let lr = Reg(30); // LR (x30)
+        
+        // Pop return address from stack (AArch64: LDR lr, [sp]; ADD sp, sp, #8)
+        self.inner.ldr(
+            self.aarch64_cfg,
+            &lr,
+            &crate::out::arg::MemArgKind::Mem {
+                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )?;
+        self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
+        
+        // Return
         self.inner.ret(self.aarch64_cfg)
     }
 

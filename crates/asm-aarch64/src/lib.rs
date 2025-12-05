@@ -241,6 +241,63 @@ mod tests {
         assert_eq!(translate_condition(X64CC::L), AArch64CC::LT);
         assert_eq!(translate_condition(X64CC::G), AArch64CC::GT);
     }
+    
+    #[test]
+    #[cfg(feature = "x64_shim")]
+    fn test_shim_basic_operations() {
+        use portal_solutions_asm_x86_64::{X64Arch, out::WriterCore as X64WriterCore};
+        use crate::shim::X64ToAArch64Shim;
+        use alloc::string::String;
+        use core::fmt::Write;
+        
+        let mut output = String::new();
+        {
+            let writer: &mut dyn Write = &mut output;
+            let mut shim = X64ToAArch64Shim::new(writer);
+            let cfg = X64Arch::default();
+            
+            // Test HLT instruction
+            X64WriterCore::hlt(&mut shim, cfg).unwrap();
+        }
+        assert!(output.contains("brk"));
+        
+        // Test RET instruction
+        output.clear();
+        {
+            let writer: &mut dyn Write = &mut output;
+            let mut shim = X64ToAArch64Shim::new(writer);
+            let cfg = X64Arch::default();
+            X64WriterCore::ret(&mut shim, cfg).unwrap();
+        }
+        assert!(output.contains("ret"));
+    }
+    
+    #[test]
+    #[cfg(feature = "x64_shim")]
+    fn test_memarg_adapter() {
+        use portal_pc_asm_common::types::reg::Reg;
+        use crate::{shim::MemArgAdapter, out::arg::MemArg as AArch64MemArg};
+        
+        // Test with a simple register
+        let x64_reg = Reg(0);
+        let adapter = MemArgAdapter::new(&x64_reg);
+        
+        // Verify the adapter implements the AArch64 MemArg trait
+        let kind = adapter.concrete_mem_kind();
+        
+        // Should convert to a NoMem variant
+        match kind {
+            crate::out::arg::MemArgKind::NoMem(arg) => {
+                match arg {
+                    crate::out::arg::ArgKind::Reg { reg, .. } => {
+                        assert_eq!(reg.0, 0);
+                    }
+                    _ => panic!("Expected register argument"),
+                }
+            }
+            _ => panic!("Expected NoMem variant"),
+        }
+    }
 }
 
 /// AArch64 condition codes for conditional instructions.

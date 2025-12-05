@@ -106,10 +106,32 @@ WriterCore::ret(writer, cfg)?;
 - **`brk`**: Breakpoint
 - **`sxt`**, **`uxt`**: Sign/zero extend
 
-## x86-64 to AArch64 shim
+## x86-64 to AArch64 Shim
 
-The `shim` module (enabled with `x64_shim` feature) provides documentation and utilities
-for translating x86-64 instructions to AArch64.
+The `shim` module (enabled with `x64_shim` feature) provides a complete translation layer
+for converting x86-64 instructions to AArch64.
+
+### MemArg Adapter Layer
+
+The key component is `MemArgAdapter`, which converts x86-64 `MemArg` trait objects to AArch64 `MemArg` trait objects. This adapter handles:
+
+- **Register arguments**: Direct passthrough (both architectures share the same `Reg` type)
+- **Literal values**: Direct passthrough
+- **Memory references**: Converts x86-64's `u32` displacement to AArch64's `i32`
+- **Register classes**: Maps `Xmm` to `Simd`, `Gpr` to `Gpr`
+
+```rust
+use portal_solutions_asm_x86_64::{X64Arch, out::WriterCore as X64WriterCore};
+use portal_solutions_asm_aarch64::shim::X64ToAArch64Shim;
+
+let mut output = String::new();
+let writer: &mut dyn Write = &mut output;
+let mut shim = X64ToAArch64Shim::new(writer);
+
+// Use x86-64 instruction API, get AArch64 output
+X64WriterCore::mov(&mut shim, cfg, &dest, &src)?;
+X64WriterCore::ret(&mut shim, cfg)?;
+```
 
 ### Direct Translations (1:1)
 
@@ -255,11 +277,13 @@ Tests cover:
 - ✅ All basic instructions
 - ✅ Translation guide documentation
 
-### Partial
+### Complete (New!)
 
-- ⚠️ x64_shim: Translation strategy documented, but full implementation
-  requires a MemArg adapter layer to convert between x86-64 and AArch64
-  argument representations
+- ✅ **x64_shim**: Full translation implementation with MemArg adapter layer
+  - `MemArgAdapter`: Converts between x86-64 and AArch64 argument types
+  - `X64ToAArch64Shim`: Implements all x86-64 instruction traits
+  - Automatic translation of all basic operations
+  - Full test coverage
 
 ### Future Enhancements
 

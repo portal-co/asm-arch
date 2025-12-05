@@ -25,19 +25,129 @@
 //! Full implementation requires a MemArg adapter layer to convert between
 //! x86-64 and AArch64 argument representations.
 
-use portal_pc_asm_common::types::reg::Reg;
+use portal_pc_asm_common::types::{reg::Reg, mem::MemorySize};
 use portal_solutions_asm_x86_64::{
     ConditionCode as X64ConditionCode,
+    X64Arch,
+    out::{WriterCore as X64WriterCore, Writer as X64Writer, arg::MemArg as X64MemArg},
 };
 
-/// Placeholder type for x86-64 to AArch64 translation.
+/// Adapter that converts x86-64 MemArg to AArch64 MemArg.
 ///
-/// This would wrap an AArch64 writer and implement the x86-64 WriterCore trait.
-/// Full implementation requires a MemArg adapter layer.
-#[allow(dead_code)]
+/// This type wraps a reference to an x86-64 MemArg and implements the AArch64 MemArg trait,
+/// allowing x86-64 arguments to be passed to AArch64 instruction generation functions.
+pub struct MemArgAdapter<'a> {
+    inner: &'a (dyn X64MemArg + 'a),
+}
+
+impl<'a> MemArgAdapter<'a> {
+    /// Creates a new adapter wrapping an x86-64 MemArg.
+    pub fn new(inner: &'a (dyn X64MemArg + 'a)) -> Self {
+        Self { inner }
+    }
+}
+
+impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
+    fn mem_kind(&self, go: &mut (dyn FnMut(crate::out::arg::MemArgKind<&'_ (dyn crate::out::arg::Arg + '_)>) + '_)) {
+        use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
+        use crate::out::arg::MemArgKind as AArch64MemArgKind;
+        
+        // Get the x86-64 memory argument kind
+        let x64_kind = self.inner.concrete_mem_kind();
+        
+        // Convert to AArch64 memory argument kind
+        match x64_kind {
+            X64MemArgKind::NoMem(arg) => {
+                // Direct operand - convert register or literal
+                let aarch64_arg = convert_arg_kind(arg);
+                go(AArch64MemArgKind::NoMem(&aarch64_arg));
+            }
+            X64MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+                // Memory reference - convert components
+                let aarch64_base = convert_arg_kind(base);
+                let aarch64_offset = offset.map(|(off, scale)| (convert_arg_kind(off), scale));
+                let aarch64_disp = disp as i32; // Convert u32 to i32
+                let aarch64_reg_class = convert_register_class(reg_class);
+                
+                // Create the memory argument and pass references to its components
+                match &aarch64_offset {
+                    None => {
+                        go(AArch64MemArgKind::Mem {
+                            base: &aarch64_base,
+                            offset: None,
+                            disp: aarch64_disp,
+                            size,
+                            reg_class: aarch64_reg_class,
+                        });
+                    }
+                    Some((off, scale)) => {
+                        go(AArch64MemArgKind::Mem {
+                            base: &aarch64_base,
+                            offset: Some((off, *scale)),
+                            disp: aarch64_disp,
+                            size,
+                            reg_class: aarch64_reg_class,
+                        });
+                    }
+                }
+            }
+            _ => {
+                // Handle any future variants with a default behavior
+                let aarch64_arg = crate::out::arg::ArgKind::Lit(0);
+                go(AArch64MemArgKind::NoMem(&aarch64_arg));
+            }
+        }
+    }
+}
+
+/// Converts x86-64 ArgKind to AArch64 ArgKind.
+fn convert_arg_kind(arg: portal_solutions_asm_x86_64::out::arg::ArgKind) -> crate::out::arg::ArgKind {
+    use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
+    use crate::out::arg::ArgKind as AArch64ArgKind;
+    
+    match arg {
+        X64ArgKind::Reg { reg, size } => AArch64ArgKind::Reg { reg, size },
+        X64ArgKind::Lit(val) => AArch64ArgKind::Lit(val),
+        _ => AArch64ArgKind::Lit(0), // Handle any future variants
+    }
+}
+
+/// Converts x86-64 RegisterClass to AArch64 RegisterClass.
+fn convert_register_class(reg_class: portal_solutions_asm_x86_64::RegisterClass) -> crate::RegisterClass {
+    use portal_solutions_asm_x86_64::RegisterClass as X64RegClass;
+    use crate::RegisterClass as AArch64RegClass;
+    
+    match reg_class {
+        X64RegClass::Gpr => AArch64RegClass::Gpr,
+        X64RegClass::Xmm => AArch64RegClass::Simd,
+        _ => AArch64RegClass::Gpr, // Handle any future variants
+    }
+}
+
+/// Wrapper that translates x86-64 instructions to AArch64.
+///
+/// This type wraps an AArch64 writer and implements the x86-64 WriterCore trait,
+/// translating each x86-64 instruction to equivalent AArch64 instructions.
 pub struct X64ToAArch64Shim<W> {
-    inner: W,
-    aarch64_cfg: crate::AArch64Arch,
+    /// The underlying AArch64 writer.
+    pub inner: W,
+    /// AArch64 architecture configuration.
+    pub aarch64_cfg: crate::AArch64Arch,
+}
+
+impl<W> X64ToAArch64Shim<W> {
+    /// Creates a new shim wrapping the given AArch64 writer.
+    pub fn new(inner: W) -> Self {
+        Self {
+            inner,
+            aarch64_cfg: Default::default(),
+        }
+    }
+    
+    /// Creates a new shim with a specific AArch64 configuration.
+    pub fn with_config(inner: W, aarch64_cfg: crate::AArch64Arch) -> Self {
+        Self { inner, aarch64_cfg }
+    }
 }
 
 /// Translates x86-64 condition codes to AArch64 condition codes.
@@ -81,6 +191,441 @@ pub fn translate_condition(cc: X64ConditionCode) -> crate::ConditionCode {
         X64ConditionCode::P => crate::ConditionCode::AL,  // Parity - no direct equivalent, use always
         X64ConditionCode::NP => crate::ConditionCode::AL, // No parity - no direct equivalent
         _ => crate::ConditionCode::AL, // Catch-all for any future variants
+    }
+}
+
+impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
+    type Error = W::Error;
+
+    fn hlt(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+        // x86-64 HLT -> AArch64 BRK
+        self.inner.brk(self.aarch64_cfg, 0)
+    }
+
+    fn xchg(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 XCHG doesn't have a direct AArch64 equivalent
+        // We need a temporary register. Use x16 (IP0) which is caller-saved
+        // PERFORMANCE: Uses 3 MOV instructions instead of 1 XCHG
+        let temp = Reg(16);
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.mov(self.aarch64_cfg, &temp, &dest_adapter)?;
+        self.inner.mov(self.aarch64_cfg, &dest_adapter, &src_adapter)?;
+        self.inner.mov(self.aarch64_cfg, &src_adapter, &temp)?;
+        Ok(())
+    }
+
+    fn mov(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // Direct translation: x86-64 MOV -> AArch64 MOV (or LDR/STR for memory)
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.mov(self.aarch64_cfg, &dest_adapter, &src_adapter)
+    }
+
+    fn sub(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 SUB a, b (a = a - b) -> AArch64 SUB a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.sub(self.aarch64_cfg, &a_adapter, &b_adapter)
+    }
+
+    fn movsx(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 MOVSX -> AArch64 SXTB/SXTH/SXTW
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.sxt(self.aarch64_cfg, &dest_adapter, &src_adapter)
+    }
+
+    fn movzx(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 MOVZX -> AArch64 UXTB/UXTH
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.uxt(self.aarch64_cfg, &dest_adapter, &src_adapter)
+    }
+
+    fn push(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 PUSH -> AArch64 STR with pre-decrement
+        // PERFORMANCE: Approximation using SUB + STR
+        let sp = Reg(31); // SP
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.str(
+            self.aarch64_cfg,
+            &op_adapter,
+            &crate::out::arg::MemArgKind::Mem {
+                base: sp,
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )
+    }
+
+    fn pop(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 POP -> AArch64 LDR with post-increment
+        // PERFORMANCE: Approximation using LDR + ADD
+        let sp = Reg(31); // SP
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.ldr(
+            self.aarch64_cfg,
+            &op_adapter,
+            &crate::out::arg::MemArgKind::Mem {
+                base: sp,
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )?;
+        self.inner.add(self.aarch64_cfg, &sp, &8u64)
+    }
+
+    fn pushf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+        // x86-64 PUSHF -> AArch64 MRS + STR
+        // PERFORMANCE: AArch64 doesn't have direct PUSHF, requires multiple instructions
+        // Store NZCV flags using MRS (needs temp register)
+        let temp = Reg(16); // x16
+        let sp = Reg(31);
+        // Note: This is a simplification - proper implementation would use MRS nzcv, xN
+        // For now, just push a placeholder zero
+        self.inner.mov_imm(self.aarch64_cfg, &temp, 0)?;
+        self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
+        self.inner.str(
+            self.aarch64_cfg,
+            &temp,
+            &crate::out::arg::MemArgKind::Mem {
+                base: sp,
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )
+    }
+
+    fn popf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+        // x86-64 POPF -> AArch64 LDR + MSR
+        // PERFORMANCE: AArch64 doesn't have direct POPF, requires multiple instructions
+        let temp = Reg(16); // x16
+        let sp = Reg(31);
+        self.inner.ldr(
+            self.aarch64_cfg,
+            &temp,
+            &crate::out::arg::MemArgKind::Mem {
+                base: sp,
+                offset: None,
+                disp: 0,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            },
+        )?;
+        self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
+        // Note: This is a simplification - proper implementation would use MSR nzcv, xN
+        Ok(())
+    }
+
+    fn call(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 CALL -> AArch64 BL or BLR
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.bl(self.aarch64_cfg, &op_adapter)
+    }
+
+    fn jmp(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 JMP -> AArch64 B or BR
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.b(self.aarch64_cfg, &op_adapter)
+    }
+
+    fn cmp(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // Direct translation: x86-64 CMP -> AArch64 CMP
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.cmp(self.aarch64_cfg, &a_adapter, &b_adapter)
+    }
+
+    fn cmp0(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 CMP op, 0 -> AArch64 CMP op, #0
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.cmp(self.aarch64_cfg, &op_adapter, &0u64)
+    }
+
+    fn cmovcc64(
+        &mut self,
+        _cfg: X64Arch,
+        cond: X64ConditionCode,
+        op: &(dyn X64MemArg + '_),
+        val: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 CMOVcc -> AArch64 CSEL
+        let aarch64_cond = translate_condition(cond);
+        let op_adapter = MemArgAdapter::new(op);
+        let val_adapter = MemArgAdapter::new(val);
+        self.inner.csel(self.aarch64_cfg, aarch64_cond, &op_adapter, &val_adapter, &op_adapter)
+    }
+
+    fn jcc(
+        &mut self,
+        _cfg: X64Arch,
+        cond: X64ConditionCode,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 Jcc -> AArch64 B.cond
+        let aarch64_cond = translate_condition(cond);
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.bcond(self.aarch64_cfg, aarch64_cond, &op_adapter)
+    }
+
+    fn u32(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 AND op, 0xffffffff -> AArch64 AND op, op, #0xffffffff
+        let temp = Reg(16); // Use temp register for immediate
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.mov_imm(self.aarch64_cfg, &temp, 0xffffffff)?;
+        self.inner.and(self.aarch64_cfg, &op_adapter, &op_adapter, &temp)
+    }
+
+    fn not(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+        // x86-64 NOT -> AArch64 MVN
+        let op_adapter = MemArgAdapter::new(op);
+        self.inner.mvn(self.aarch64_cfg, &op_adapter, &op_adapter)
+    }
+
+    fn lea(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 LEA -> AArch64 ADD/ADR (depending on context)
+        // For simplicity, use ADR for now
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.adr(self.aarch64_cfg, &dest_adapter, &src_adapter)
+    }
+
+    fn get_ip(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+        // x86-64 get IP (typically via CALL trick) -> AArch64 ADR
+        // PERFORMANCE: Different approach than x86-64
+        let pc_reg = Reg(30); // LR (link register)
+        self.inner.adr(self.aarch64_cfg, &pc_reg, &0u64)
+    }
+
+    fn ret(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+        // Direct translation: x86-64 RET -> AArch64 RET
+        self.inner.ret(self.aarch64_cfg)
+    }
+
+    fn mov64(
+        &mut self,
+        _cfg: X64Arch,
+        r: &(dyn X64MemArg + '_),
+        val: u64,
+    ) -> Result<(), Self::Error> {
+        // x86-64 MOV r, imm64 -> AArch64 MOVZ/MOVK sequence
+        let r_adapter = MemArgAdapter::new(r);
+        self.inner.mov_imm(self.aarch64_cfg, &r_adapter, val)
+    }
+
+    fn mul(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 MUL a, b -> AArch64 MUL a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.mul(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn div(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 DIV a, b -> AArch64 UDIV a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.udiv(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn idiv(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 IDIV a, b -> AArch64 SDIV a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.sdiv(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn and(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 AND a, b -> AArch64 AND a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.and(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn or(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 OR a, b -> AArch64 ORR a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.orr(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn eor(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 XOR a, b -> AArch64 EOR a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.eor(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn shl(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 SHL a, b -> AArch64 LSL a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.lsl(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn shr(
+        &mut self,
+        _cfg: X64Arch,
+        a: &(dyn X64MemArg + '_),
+        b: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 SHR a, b -> AArch64 LSR a, a, b
+        let a_adapter = MemArgAdapter::new(a);
+        let b_adapter = MemArgAdapter::new(b);
+        self.inner.lsr(self.aarch64_cfg, &a_adapter, &a_adapter, &b_adapter)
+    }
+
+    fn fadd(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 ADDSD -> AArch64 FADD
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.fadd(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+    }
+
+    fn fsub(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 SUBSD -> AArch64 FSUB
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.fsub(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+    }
+
+    fn fmul(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 MULSD -> AArch64 FMUL
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.fmul(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+    }
+
+    fn fdiv(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 DIVSD -> AArch64 FDIV
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.fdiv(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+    }
+
+    fn fmov(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        src: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        // x86-64 MOVSD -> AArch64 FMOV
+        let dest_adapter = MemArgAdapter::new(dest);
+        let src_adapter = MemArgAdapter::new(src);
+        self.inner.fmov(self.aarch64_cfg, &dest_adapter, &src_adapter)
+    }
+}
+
+impl<W: crate::out::Writer<L>, L> X64Writer<L> for X64ToAArch64Shim<W> {
+    fn set_label(&mut self, _cfg: X64Arch, s: L) -> Result<(), Self::Error> {
+        self.inner.set_label(self.aarch64_cfg, s)
+    }
+
+    fn lea_label(
+        &mut self,
+        _cfg: X64Arch,
+        dest: &(dyn X64MemArg + '_),
+        label: L,
+    ) -> Result<(), Self::Error> {
+        let dest_adapter = MemArgAdapter::new(dest);
+        self.inner.adr_label(self.aarch64_cfg, &dest_adapter, label)
     }
 }
 

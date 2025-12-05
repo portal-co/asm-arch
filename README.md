@@ -20,6 +20,19 @@ Core x86-64 assembly types and output generation.
   - `Writer`: Extended trait with label support
   - Argument types (`arg`): Memory and register operand representations
 
+### portal-solutions-asm-aarch64
+
+AArch64 (ARM64) assembly types and output generation, with x86-64 translation support.
+
+- **Architecture configuration** (`AArch64Arch`): AArch64-specific configuration
+- **Register handling** (`reg`): Support for 31 GPRs (X0-X30) plus SP, and 32 SIMD registers (V0-V31)
+- **Condition codes** (`ConditionCode`): Complete AArch64 condition code set
+- **Instruction output** (`out`): Full instruction generation similar to x86-64
+- **x64_shim** (optional): Translation guide for mapping x86-64 instructions to AArch64
+  - Condition code translation
+  - Instruction mapping documentation
+  - Performance notes for complex translations
+
 ### portal-solutions-asm-semantics
 
 Semantic representation of assembly operations.
@@ -43,7 +56,13 @@ All crates support `no_std` environments. Enable the `alloc` feature for heap al
 ```toml
 [dependencies]
 portal-solutions-asm-x86-64 = { version = "0.1.0", features = ["alloc"] }
+portal-solutions-asm-aarch64 = { version = "0.1.0", features = ["alloc", "x64_shim"] }
 ```
+
+### Feature Flags
+
+- **`alloc`**: Enable heap allocation support (available in all crates)
+- **`x64_shim`** (aarch64 only): Enable x86-64 to AArch64 translation utilities
 
 ## License
 

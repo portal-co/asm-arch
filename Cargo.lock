@@ -73,6 +73,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-solutions-asm-aarch64"
+version = "0.1.0"
+dependencies = [
+ "portal-pc-asm-common",
+ "portal-solutions-asm-x86-64",
+ "typeid",
+]
+
+[[package]]
 name = "portal-solutions-asm-regalloc"
 version = "0.1.0"
 dependencies = [

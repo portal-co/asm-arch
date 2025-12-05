@@ -1,0 +1,15 @@
+[package]
+name = "portal-solutions-asm-aarch64"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+portal-pc-asm-common.workspace = true
+typeid.workspace = true
+portal-solutions-asm-x86-64 = { path = "../asm-x86-64", optional = true }
+
+[features]
+alloc = ["portal-solutions-asm-x86-64?/alloc"]
+x64_shim = ["dep:portal-solutions-asm-x86-64"]

@@ -12,6 +12,7 @@ use core::{
     fmt::{Display, Formatter},
     mem::transmute,
 };
+use typeid;
 
 /// Represents a concrete argument kind (register or literal).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

@@ -58,7 +58,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
                 *arch,
                 self,
                 &MemArgKind::Mem {
-                    base: self,
+                    base: a,
                     offset: None,
                     disp: c as i32,
                     size: MemorySize::_64,
@@ -70,7 +70,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
                 *arch,
                 self,
                 &MemArgKind::Mem {
-                    base: self,
+                    base: a,
                     offset: None,
                     disp: c as i32,
                     size: MemorySize::_64,

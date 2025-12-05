@@ -99,16 +99,15 @@ macro_rules! writers {
                 
                 fn mov_imm(&mut self, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg.into());
-                    // Use movz/movk sequence for large immediates
-                    // For simplicity, just use movz for now
+                    // Use movz/movk sequence for 64-bit immediates
                     $crate::__::core::write!(self,"movz {dest}, #{}, lsl #0\n", val & 0xFFFF)?;
-                    if val > 0xFFFF {
+                    if (val >> 16) != 0 {
                         $crate::__::core::write!(self,"movk {dest}, #{}, lsl #16\n", (val >> 16) & 0xFFFF)?;
                     }
-                    if val > 0xFFFFFFFF {
+                    if (val >> 32) != 0 {
                         $crate::__::core::write!(self,"movk {dest}, #{}, lsl #32\n", (val >> 32) & 0xFFFF)?;
                     }
-                    if val > 0xFFFFFFFFFFFF {
+                    if (val >> 48) != 0 {
                         $crate::__::core::write!(self,"movk {dest}, #{}, lsl #48\n", (val >> 48) & 0xFFFF)?;
                     }
                     Ok(())

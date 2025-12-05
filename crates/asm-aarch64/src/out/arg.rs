@@ -66,6 +66,18 @@ impl Display for ArgKind {
     }
 }
 
+/// Addressing mode for memory operations.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[non_exhaustive]
+pub enum AddressingMode {
+    /// Standard offset addressing: [base, #offset]
+    Offset,
+    /// Pre-indexed addressing: [base, #offset]! (base updated before access)
+    PreIndex,
+    /// Post-indexed addressing: [base], #offset (base updated after access)
+    PostIndex,
+}
+
 /// Represents a memory argument kind.
 ///
 /// Can be either a direct operand or a memory reference with base, offset,
@@ -87,6 +99,8 @@ pub enum MemArgKind<A = ArgKind> {
         size: MemorySize,
         /// Register class for the memory access.
         reg_class: crate::RegisterClass,
+        /// Addressing mode (offset, pre-index, post-index).
+        mode: AddressingMode,
     },
 }
 
@@ -98,7 +112,7 @@ impl<A: Arg> MemArgKind<A> {
                 // For non-memory operands, use the provided opts
                 MemArgKind::NoMem(a.display(opts))
             }
-            MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+            MemArgKind::Mem { base, offset, disp, size, reg_class, mode } => {
                 // For memory operands, force base and offset to be GPRs
                 let gpr_opts = crate::DisplayOpts::new(opts.arch);
                 MemArgKind::Mem {
@@ -107,6 +121,7 @@ impl<A: Arg> MemArgKind<A> {
                     disp: *disp,
                     size: *size,
                     reg_class: *reg_class,
+                    mode: *mode,
                 }
             }
         }
@@ -123,27 +138,61 @@ impl<T: Display> Display for MemArgKind<T> {
                 disp,
                 size: _,
                 reg_class: _,
+                mode,
             } => {
-                // AArch64 memory addressing: [base, #disp] or [base, offset, LSL #scale]
-                write!(f, "[")?;
-                write!(f, "{base}")?;
-                
-                if let Some((off, scale)) = offset {
-                    write!(f, ", {off}")?;
-                    if *scale > 0 {
-                        write!(f, ", LSL #{scale}")?;
+                match mode {
+                    AddressingMode::Offset => {
+                        // Standard offset: [base, #disp] or [base, offset, LSL #scale]
+                        write!(f, "[")?;
+                        write!(f, "{base}")?;
+                        
+                        if let Some((off, scale)) = offset {
+                            write!(f, ", {off}")?;
+                            if *scale > 0 {
+                                write!(f, ", LSL #{scale}")?;
+                            }
+                        }
+                        
+                        if *disp != 0 {
+                            if *disp > 0 {
+                                write!(f, ", #{disp}")?;
+                            } else {
+                                write!(f, ", #-{}", -disp)?;
+                            }
+                        }
+                        
+                        write!(f, "]")
+                    }
+                    AddressingMode::PreIndex => {
+                        // Pre-indexed: [base, #disp]! (update base before access)
+                        write!(f, "[")?;
+                        write!(f, "{base}")?;
+                        
+                        if *disp != 0 {
+                            if *disp > 0 {
+                                write!(f, ", #{disp}")?;
+                            } else {
+                                write!(f, ", #-{}", -disp)?;
+                            }
+                        }
+                        
+                        write!(f, "]!")
+                    }
+                    AddressingMode::PostIndex => {
+                        // Post-indexed: [base], #disp (update base after access)
+                        write!(f, "[{base}]")?;
+                        
+                        if *disp != 0 {
+                            if *disp > 0 {
+                                write!(f, ", #{disp}")?;
+                            } else {
+                                write!(f, ", #-{}", -disp)?;
+                            }
+                        }
+                        
+                        Ok(())
                     }
                 }
-                
-                if *disp != 0 {
-                    if *disp > 0 {
-                        write!(f, ", #{disp}")?;
-                    } else {
-                        write!(f, ", #-{}", -disp)?;
-                    }
-                }
-                
-                write!(f, "]")
             }
         }
     }
@@ -160,12 +209,14 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                mode,
             } => MemArgKind::Mem {
                 base,
                 offset: offset.as_ref().map(|(a, b)| (a, *b)),
                 disp: *disp,
                 size: *size,
                 reg_class: *reg_class,
+                mode: *mode,
             },
         }
     }
@@ -180,12 +231,14 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                mode,
             } => MemArgKind::Mem {
                 base,
                 offset: offset.as_mut().map(|(a, b)| (a, *b)),
                 disp: *disp,
                 size: *size,
                 reg_class: *reg_class,
+                mode: *mode,
             },
         }
     }
@@ -203,6 +256,7 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                mode,
             } => MemArgKind::Mem {
                 base: go(base)?,
                 offset: match offset {
@@ -212,6 +266,7 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                mode,
             },
         })
     }
@@ -260,6 +315,7 @@ pub trait MemArg {
                     disp: _,
                     size: _,
                     reg_class: _,
+                    mode: _,
                 } => base
                     .regs()
                     .chain(offset.iter().flat_map(|(a, _)| a.regs()))
@@ -435,12 +491,14 @@ impl<T: MemArg> MemArg for MemorySized<T> {
                 disp,
                 size: _,
                 reg_class,
+                mode,
             } => MemArgKind::Mem {
                 base,
                 offset,
                 disp,
                 size: self.size,
                 reg_class,
+                mode,
             },
         }
     }
@@ -456,12 +514,14 @@ impl<T: MemArg> MemArg for MemorySized<T> {
                 disp,
                 size: _,
                 reg_class,
+                mode,
             } => go(MemArgKind::Mem {
                 base,
                 offset,
                 disp,
                 size: self.size,
                 reg_class,
+                mode,
             }),
         });
     }
@@ -533,6 +593,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                mode,
             } => MemArgKind::Mem {
                 base,
                 offset: match offset.as_ref() {
@@ -542,6 +603,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
                 disp: *disp,
                 size: *size,
                 reg_class: *reg_class,
+                mode: *mode,
             },
         })
     }

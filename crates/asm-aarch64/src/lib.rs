@@ -167,6 +167,10 @@ pub mod reg;
 #[cfg(feature = "x64_shim")]
 pub mod shim;
 
+/// Register allocation integration module (gated by `regalloc-integration` feature).
+#[cfg(feature = "regalloc-integration")]
+pub mod regalloc;
+
 #[cfg(all(test, feature = "alloc"))]
 mod tests {
     use super::*;

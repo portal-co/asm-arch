@@ -11,3 +11,4 @@ typeid.workspace = true
 
 [features]
 alloc=[]
+regalloc-integration=[]

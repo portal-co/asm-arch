@@ -77,6 +77,7 @@ name = "portal-solutions-asm-aarch64"
 version = "0.1.0"
 dependencies = [
  "portal-pc-asm-common",
+ "portal-solutions-asm-regalloc",
  "portal-solutions-asm-x86-64",
  "typeid",
 ]
@@ -102,6 +103,7 @@ name = "portal-solutions-asm-x86-64"
 version = "0.1.0"
 dependencies = [
  "portal-pc-asm-common",
+ "portal-solutions-asm-regalloc",
  "typeid",
 ]
 

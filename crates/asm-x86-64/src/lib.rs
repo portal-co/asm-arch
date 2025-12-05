@@ -165,6 +165,9 @@ impl Default for RegFormatOpts {
 pub mod out;
 /// Register handling and formatting module.
 pub mod reg;
+/// Register allocation integration module (gated by `regalloc-integration` feature).
+#[cfg(feature = "regalloc-integration")]
+pub mod regalloc;
 
 #[cfg(all(test, feature = "alloc"))]
 mod tests {

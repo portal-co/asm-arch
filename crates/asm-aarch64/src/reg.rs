@@ -50,6 +50,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
                 disp: b as i32,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                mode: crate::out::arg::AddressingMode::Offset,
             },
         )?;
         if xchg {
@@ -63,6 +64,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
                     disp: c as i32,
                     size: MemorySize::_64,
                     reg_class: crate::RegisterClass::Gpr,
+                    mode: crate::out::arg::AddressingMode::Offset,
                 },
             )?;
         } else {
@@ -75,6 +77,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
                     disp: c as i32,
                     size: MemorySize::_64,
                     reg_class: crate::RegisterClass::Gpr,
+                    mode: crate::out::arg::AddressingMode::Offset,
                 },
             )?;
         }

@@ -166,16 +166,14 @@ pub fn map_index_to_kind(idx: usize, is_float: bool) -> RegKind {
 /// # Type Parameters
 /// * `N` - Number of registers per kind (typically 32 for AArch64)
 ///
+/// # Arguments
+/// * `_arch` - The AArch64 architecture configuration (currently unused)
+///
 /// # Returns
 /// A newly initialized RegAlloc instance with appropriate registers reserved
 pub fn init_regalloc<const N: usize>(
-    arch: AArch64Arch,
+    _arch: AArch64Arch,
 ) -> RegAlloc<RegKind, N, [core::mem::MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2]> {
-    use core::mem::MaybeUninit;
-    
-    let mut frames: [MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2] = 
-        [MaybeUninit::uninit(), MaybeUninit::uninit()];
-    
     // Initialize integer register frame
     let mut int_frame: [RegAllocFrame<RegKind>; N] = 
         core::array::from_fn(|_| RegAllocFrame::Empty);
@@ -185,21 +183,15 @@ pub fn init_regalloc<const N: usize>(
     if N > 30 { int_frame[30] = RegAllocFrame::Reserved; }
     if N > 31 { int_frame[31] = RegAllocFrame::Reserved; }
     
-    frames[0] = MaybeUninit::new(int_frame);
-    
     // Initialize float register frame
     let float_frame: [RegAllocFrame<RegKind>; N] = 
         core::array::from_fn(|_| RegAllocFrame::Empty);
     
-    frames[1] = MaybeUninit::new(float_frame);
-    
-    // Safety: We've initialized both frames
-    let frames = unsafe {
-        core::mem::transmute::<
-            [MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2],
-            [core::mem::MaybeUninit<[RegAllocFrame<RegKind>; N]>; 2]
-        >(frames)
-    };
+    // Create frames array after both individual frames are initialized
+    let frames = [
+        core::mem::MaybeUninit::new(int_frame),
+        core::mem::MaybeUninit::new(float_frame),
+    ];
     
     RegAlloc {
         frames,

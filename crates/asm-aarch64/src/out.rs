@@ -413,6 +413,26 @@ pub trait Writer<L>: WriterCore {
     ) -> Result<(), Self::Error> {
         todo!("adr_label not implemented")
     }
+    
+    /// Emits a B (branch) instruction to a label.
+    #[track_caller]
+    fn b_label(
+        &mut self,
+        _cfg: crate::AArch64Arch,
+        _label: L,
+    ) -> Result<(), Self::Error> {
+        todo!("b_label not implemented")
+    }
+    
+    /// Emits a BL (branch with link) instruction to a label.
+    #[track_caller]
+    fn bl_label(
+        &mut self,
+        _cfg: crate::AArch64Arch,
+        _label: L,
+    ) -> Result<(), Self::Error> {
+        todo!("bl_label not implemented")
+    }
 }
 
 #[macro_export]

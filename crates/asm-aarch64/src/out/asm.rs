@@ -248,6 +248,14 @@ macro_rules! writers {
                     let dest = dest.mem_display(cfg.into());
                     $crate::__::core::write!(self,"adr {dest}, {label}\n")
                 }
+                
+                fn b_label(&mut self, _cfg: $crate::AArch64Arch, label: L) -> $crate::__::core::result::Result<(),Self::Error>{
+                    $crate::__::core::write!(self,"b {label}\n")
+                }
+                
+                fn bl_label(&mut self, _cfg: $crate::AArch64Arch, label: L) -> $crate::__::core::result::Result<(),Self::Error>{
+                    $crate::__::core::write!(self,"bl {label}\n")
+                }
             })*
         };
     };

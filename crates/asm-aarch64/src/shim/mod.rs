@@ -15,16 +15,18 @@
 //!
 //! The shim implements x86-64's calling convention where return addresses are on the stack:
 //!
-//! - **CALL instructions**: Push LR onto stack, call target, pop LR
-//!   - Ensures the return address is preserved across nested calls
-//!   - Compatible with x86-64's expectation of stack-based returns
+//! - **CALL instructions**: Use label-based shims that push LR and branch to target
+//!   - Emits an inline shim with a jump over it to ensure correctness
+//!   - The shim pushes LR onto the stack before branching to the target
+//!   - Branch-and-link (BL) instruction is used to call the shim
+//!   - This maintains x86-64 semantics where return addresses are on the stack
 //!
 //! - **RET instructions**: Pop return address from stack, then return
 //!   - Restores return address from the stack into LR
 //!   - Maintains consistency with CALL's stack manipulation
 //!
-//! This inline shim system ensures correct semantics without requiring separate
-//! shim functions or label management.
+//! The shim system uses labels (via the `Writer<ShimLabel>` trait) to generate
+//! inline shims that are more efficient on AArch64 CPUs.
 //!
 //! # Performance Notes
 //!
@@ -32,7 +34,7 @@
 //! - **XCHG**: 3 MOV instructions (no atomic exchange in base AArch64)
 //! - **PUSH/POP**: 2 instructions each (SUB+STR / LDR+ADD)
 //! - **PUSHF/POPF**: 3 instructions each (MRS+SUB+STR / LDR+ADD+MSR)
-//! - **CALL**: 5 instructions (SUB+STR+BL+LDR+ADD)
+//! - **CALL**: 7 instructions (B skip, label, SUB, STR, B target, skip:, BL shim)
 //! - **RET**: 3 instructions (LDR+ADD+RET)
 //! - **Parity flags**: No direct equivalent, always evaluates to "true"
 
@@ -48,6 +50,12 @@ use portal_solutions_asm_x86_64::{
 /// This newtype wraps a `usize` to uniquely identify shim labels in the generated assembly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShimLabel(pub usize);
+
+impl core::fmt::Display for ShimLabel {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, ".Lshim_{}", self.0)
+    }
+}
 
 /// Adapter that converts x86-64 MemArg to AArch64 MemArg.
 ///
@@ -149,7 +157,7 @@ fn convert_register_class(reg_class: portal_solutions_asm_x86_64::RegisterClass)
 /// # Shim System
 ///
 /// The shim maintains a stack-based calling convention compatible with x86-64:
-/// - CALL instructions directly emit code that pushes LR onto the stack, calls the target, then pops LR
+/// - CALL instructions use label-based shims that push LR and branch to the target
 /// - RET instructions directly emit code that pops the return address from the stack, then returns
 ///
 /// This ensures x86-64 semantics where the return address is stored on the stack rather than in LR.
@@ -158,6 +166,8 @@ pub struct X64ToAArch64Shim<W> {
     pub inner: W,
     /// AArch64 architecture configuration.
     pub aarch64_cfg: crate::AArch64Arch,
+    /// Counter for generating unique shim labels.
+    shim_counter: usize,
 }
 
 impl<W> X64ToAArch64Shim<W> {
@@ -166,6 +176,7 @@ impl<W> X64ToAArch64Shim<W> {
         Self {
             inner,
             aarch64_cfg: Default::default(),
+            shim_counter: 0,
         }
     }
     
@@ -174,9 +185,19 @@ impl<W> X64ToAArch64Shim<W> {
         Self {
             inner,
             aarch64_cfg,
+            shim_counter: 0,
         }
     }
+    
+    /// Generates a unique shim label.
+    fn next_shim_label(&mut self) -> ShimLabel {
+        let label = ShimLabel(self.shim_counter);
+        self.shim_counter += 1;
+        label
+    }
 }
+
+
 
 /// Translates x86-64 condition codes to AArch64 condition codes.
 ///
@@ -222,7 +243,7 @@ pub fn translate_condition(cc: X64ConditionCode) -> crate::ConditionCode {
     }
 }
 
-impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
+impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     type Error = W::Error;
 
     fn hlt(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
@@ -379,11 +400,22 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
     }
 
     fn call(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
-        // x86-64 CALL -> AArch64 call shim (inline, no jump)
-        // Directly emit: push LR, call target, pop LR
+        // x86-64 CALL -> AArch64 call shim using labels
+        // Strategy: Branch to a shim that pushes LR and branches to the target
+        // The shim is emitted inline with a jump over it to ensure correctness
         
         let sp = Reg(31); // SP
         let lr = Reg(30); // LR (x30)
+        
+        // Generate unique labels
+        let shim_label = self.next_shim_label();
+        let skip_label = self.next_shim_label();
+        
+        // Jump over the shim to skip_label
+        self.inner.b_label(self.aarch64_cfg, skip_label)?;
+        
+        // Emit the call shim inline
+        self.inner.set_label(self.aarch64_cfg, shim_label)?;
         
         // Push LR onto stack (AArch64: SUB sp, sp, #8; STR lr, [sp])
         self.inner.sub(self.aarch64_cfg, &sp, &8u64)?;
@@ -399,23 +431,15 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
             },
         )?;
         
-        // Call the target
+        // Branch to the target
         let op_adapter = MemArgAdapter::new(op);
-        self.inner.bl(self.aarch64_cfg, &op_adapter)?;
+        self.inner.b(self.aarch64_cfg, &op_adapter)?;
         
-        // Pop LR from stack (AArch64: LDR lr, [sp]; ADD sp, sp, #8)
-        self.inner.ldr(
-            self.aarch64_cfg,
-            &lr,
-            &crate::out::arg::MemArgKind::Mem {
-                base: crate::out::arg::ArgKind::Reg { reg: sp, size: MemorySize::_64 },
-                offset: None,
-                disp: 0,
-                size: MemorySize::_64,
-                reg_class: crate::RegisterClass::Gpr,
-            },
-        )?;
-        self.inner.add(self.aarch64_cfg, &sp, &8u64)?;
+        // Set skip label (execution continues here)
+        self.inner.set_label(self.aarch64_cfg, skip_label)?;
+        
+        // Branch and link to the shim
+        self.inner.bl_label(self.aarch64_cfg, shim_label)?;
         
         Ok(())
     }
@@ -697,7 +721,10 @@ impl<W: crate::out::WriterCore> X64WriterCore for X64ToAArch64Shim<W> {
     }
 }
 
-impl<W: crate::out::Writer<L>, L> X64Writer<L> for X64ToAArch64Shim<W> {
+impl<W: crate::out::Writer<ShimLabel>, L> X64Writer<L> for X64ToAArch64Shim<W>
+where
+    W: crate::out::Writer<L>,
+{
     fn set_label(&mut self, _cfg: X64Arch, s: L) -> Result<(), Self::Error> {
         self.inner.set_label(self.aarch64_cfg, s)
     }

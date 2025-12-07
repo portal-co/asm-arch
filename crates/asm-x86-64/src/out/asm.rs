@@ -135,6 +135,11 @@ macro_rules! writers {
                     let b = b.mem_display(cfg.into());
                     $crate::__::core::write!(self,"shr {a},{b}\n")
                 }
+                fn sar(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let a = a.mem_display(cfg.into());
+                    let b = b.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"sar {a},{b}\n")
+                }
                 fn sub(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let a = a.mem_display(cfg.into());
                     let b = b.mem_display(cfg.into());
@@ -185,6 +190,16 @@ macro_rules! writers {
                     let src = src.mem_display(opts);
                     $crate::__::core::write!(self,"movsd {dest},{src}\n")
                 }
+                fn db(&mut self, _cfg: $crate::X64Arch, bytes: &[u8]) -> $crate::__::core::result::Result<(), Self::Error>{
+                    $crate::__::core::write!(self, ".byte ")?;
+                    for (i, b) in bytes.iter().enumerate() {
+                        if i > 0 {
+                            $crate::__::core::write!(self, ", ")?;
+                        }
+                        $crate::__::core::write!(self, "0x{:02x}", b)?;
+                    }
+                    $crate::__::core::write!(self, "\n")
+                }
             }
             impl<L: Display> Writer<L> for $ty {
                  fn set_label(&mut self, cfg: $crate::X64Arch, s: L) -> $crate::__::core::result::Result<(), Self::Error> {
@@ -193,6 +208,12 @@ macro_rules! writers {
                  fn lea_label(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: L) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg.into());
                     $crate::__::core::write!(self,"lea {dest}, {label}\n")
+                }
+                fn jmp_label(&mut self, _cfg: $crate::X64Arch, label: L) -> $crate::__::core::result::Result<(), Self::Error> {
+                    $crate::__::core::write!(self, "jmp {label}\n")
+                }
+                fn jcc_label(&mut self, _cfg: $crate::X64Arch, cc: $crate::ConditionCode, label: L) -> $crate::__::core::result::Result<(), Self::Error> {
+                    $crate::__::core::write!(self, "j{cc} {label}\n")
                 }
 
             })*

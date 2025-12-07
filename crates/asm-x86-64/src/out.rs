@@ -328,6 +328,19 @@ pub trait WriterCore {
         todo!("shr instruction not implemented")
     }
     
+    /// Emits a SAR (arithmetic shift right) instruction.
+    ///
+    /// Shifts `a` right by `b` bits, preserving the sign bit.
+    #[track_caller]
+    fn sar(
+        &mut self,
+        _cfg: crate::X64Arch,
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("sar instruction not implemented")
+    }
+    
     /// Emits an ADD instruction for floating point values.
     #[track_caller]
     fn fadd(
@@ -382,6 +395,14 @@ pub trait WriterCore {
     ) -> Result<(), Self::Error> {
         todo!("fmov instruction not implemented")
     }
+    
+    /// Emits raw bytes as data.
+    ///
+    /// Generates a `.byte` directive (or equivalent) for the given bytes.
+    #[track_caller]
+    fn db(&mut self, _cfg: crate::X64Arch, _bytes: &[u8]) -> Result<(), Self::Error> {
+        todo!("db directive not implemented")
+    }
 }
 
 /// Extended writer trait with label support.
@@ -404,6 +425,18 @@ pub trait Writer<L>: WriterCore {
         _label: L,
     ) -> Result<(), Self::Error> {
         todo!("lea_label not implemented")
+    }
+    
+    /// Emits an unconditional jump to a label.
+    #[track_caller]
+    fn jmp_label(&mut self, _cfg: crate::X64Arch, _label: L) -> Result<(), Self::Error> {
+        todo!("jmp_label not implemented")
+    }
+    
+    /// Emits a conditional jump to a label.
+    #[track_caller]
+    fn jcc_label(&mut self, _cfg: crate::X64Arch, _cc: crate::ConditionCode, _label: L) -> Result<(), Self::Error> {
+        todo!("jcc_label not implemented")
     }
 }
 #[macro_export]
@@ -500,6 +533,9 @@ macro_rules! writer_dispatch {
                     fn shr(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::shr(&mut **self, cfg,a,b)
                     }
+                    fn sar(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::sar(&mut **self, cfg,a,b)
+                    }
                     fn sub(&mut self, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::sub(&mut **self, cfg,a,b)
                     }
@@ -527,6 +563,9 @@ macro_rules! writer_dispatch {
                     fn fmov(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         $crate::out::WriterCore::fmov(&mut **self, cfg,dest,src)
                     }
+                    fn db(&mut self, cfg: $crate::X64Arch, bytes: &[u8]) -> $crate::__::core::result::Result<(), Self::Error>{
+                        $crate::out::WriterCore::db(&mut **self, cfg,bytes)
+                    }
                 }
                 impl<$($t)*>$crate::out:: Writer<$l> for $ty{
 
@@ -535,6 +574,12 @@ macro_rules! writer_dispatch {
                     }
                     fn lea_label(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                        $crate::out:: Writer::lea_label(&mut **self, cfg, dest, label)
+                    }
+                    fn jmp_label(&mut self, cfg: $crate::X64Arch, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::Writer::jmp_label(&mut **self, cfg, label)
+                    }
+                    fn jcc_label(&mut self, cfg: $crate::X64Arch, cc: $crate::ConditionCode, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::Writer::jcc_label(&mut **self, cfg, cc, label)
                     }
 
                 }

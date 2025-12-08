@@ -428,22 +428,22 @@ macro_rules! handle_two_operand_instr {
             (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
                 // a is memory, b is register - LDR a, INSTR, STR a
                 let temp = Reg(16); // x16
-                $self.inner.ldr($self.aarch64_cfg, &temp, &a_adapter)?;
+                $self.load_memarg_into_temp(&a_adapter, &temp)?;
                 $self.inner.$instr($self.aarch64_cfg, &temp, &temp, &b_adapter)?;
                 $self.inner.str($self.aarch64_cfg, &temp, &a_adapter)
             }
             (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
                 // a is register, b is memory - LDR b into temp, then INSTR
                 let temp = Reg(17); // x17
-                $self.inner.ldr($self.aarch64_cfg, &temp, &b_adapter)?;
+                $self.load_memarg_into_temp(&b_adapter, &temp)?;
                 $self.inner.$instr($self.aarch64_cfg, &a_adapter, &a_adapter, &temp)
             }
             (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
                 // Both are memory - LDR both, INSTR, STR result
                 let temp_a = Reg(16); // x16
                 let temp_b = Reg(17); // x17
-                $self.inner.ldr($self.aarch64_cfg, &temp_a, &a_adapter)?;
-                $self.inner.ldr($self.aarch64_cfg, &temp_b, &b_adapter)?;
+                $self.load_memarg_into_temp(&a_adapter, &temp_a)?;
+                $self.load_memarg_into_temp(&b_adapter, &temp_b)?;
                 $self.inner.$instr($self.aarch64_cfg, &temp_a, &temp_a, &temp_b)?;
                 $self.inner.str($self.aarch64_cfg, &temp_a, &a_adapter)
             }
@@ -471,22 +471,22 @@ macro_rules! handle_two_operand_instr_2arg {
             (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
                 // a is memory, b is register - LDR a, INSTR, STR a
                 let temp = Reg(16); // x16
-                $self.inner.ldr($self.aarch64_cfg, &temp, &a_adapter)?;
+                $self.load_memarg_into_temp(&a_adapter, &temp)?;
                 $self.inner.$instr($self.aarch64_cfg, &temp, &temp, &b_adapter)?;
                 $self.inner.str($self.aarch64_cfg, &temp, &a_adapter)
             }
             (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
                 // a is register, b is memory - LDR b into temp, then INSTR with dest=a
                 let temp = Reg(17); // x17
-                $self.inner.ldr($self.aarch64_cfg, &temp, &b_adapter)?;
+                $self.load_memarg_into_temp(&b_adapter, &temp)?;
                 $self.inner.$instr($self.aarch64_cfg, &a_adapter, &a_adapter, &temp)
             }
             (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
                 // Both are memory - LDR both, INSTR, STR result
                 let temp_a = Reg(16); // x16
                 let temp_b = Reg(17); // x17
-                $self.inner.ldr($self.aarch64_cfg, &temp_a, &a_adapter)?;
-                $self.inner.ldr($self.aarch64_cfg, &temp_b, &b_adapter)?;
+                $self.load_memarg_into_temp(&a_adapter, &temp_a)?;
+                $self.load_memarg_into_temp(&b_adapter, &temp_b)?;
                 $self.inner.$instr($self.aarch64_cfg, &temp_a, &temp_a, &temp_b)?;
                 $self.inner.str($self.aarch64_cfg, &temp_a, &a_adapter)
             }
@@ -539,6 +539,62 @@ impl<W> X64ToAArch64Shim<W> {
         let label = ShimLabel(self.shim_counter);
         self.shim_counter += 1;
         label
+    }
+
+    /// Load a value from a possibly-APX memory argument into `dest`.
+    ///
+    /// If the given adapter references a memory operand whose index is an APX register,
+    /// this will first load the APX index value from the APX backing store ([X28 + slot])
+    /// into a temporary register and then perform the actual load using that temp as the
+    /// scaled index. Otherwise, delegates to the underlying writer's LDR.
+    fn load_memarg_into_temp(&mut self, adapter: &MemArgAdapter<'_>, dest: &Reg) -> Result<(), W::Error>
+    where
+        W: crate::out::Writer<ShimLabel>,
+    {
+        use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
+
+        match adapter.apx_access() {
+            APXAccess::MemIndex { base: _base, index, scale } => {
+                // Load the APX index value from APX backing store into a temp register
+                let slot_offset = (index as i32) * 8; // each slot is 8 bytes
+                let mem_slot = crate::out::arg::MemArgKind::Mem {
+                    base: crate::out::arg::ArgKind::Reg { reg: Reg(28), size: MemorySize::_64 },
+                    offset: None,
+                    disp: slot_offset,
+                    size: MemorySize::_64,
+                    reg_class: crate::RegisterClass::Gpr,
+                    mode: crate::out::arg::AddressingMode::Offset,
+                };
+                let temp_idx = Reg(18);
+                // Load index value from APX backing store
+                self.inner.ldr(self.aarch64_cfg, &temp_idx, &mem_slot)?;
+
+                // Rebuild the memory argument using temp_idx as the index register
+                // Extract original components to get base, disp, size and reg_class
+                if let X64MemArgKind::Mem { base: orig_base, offset: _orig_offset, disp, size, reg_class } = adapter.inner.concrete_mem_kind() {
+                    let aarch64_base = convert_arg_kind(orig_base, adapter.arch);
+                    let aarch64_disp = disp as i32;
+                    let off_arg = crate::out::arg::ArgKind::Reg { reg: temp_idx, size: MemorySize::_64 };
+                    let mem_arg = crate::out::arg::MemArgKind::Mem {
+                        base: aarch64_base,
+                        offset: Some((off_arg, scale)),
+                        disp: aarch64_disp,
+                        size,
+                        reg_class: convert_register_class(reg_class),
+                        mode: crate::out::arg::AddressingMode::Offset,
+                    };
+                    // Perform final load into dest using reconstructed memory operand
+                    self.inner.ldr(self.aarch64_cfg, dest, &mem_arg)
+                } else {
+                    // should not happen: adapter indicated MemIndex but not a Mem
+                    self.inner.ldr(self.aarch64_cfg, dest, adapter)
+                }
+            }
+            _ => {
+                // Default: delegate to underlying writer
+                self.inner.ldr(self.aarch64_cfg, dest, adapter)
+            }
+        }
     }
 }
 
@@ -646,7 +702,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
                 // Memory to memory - need temporary register
                 // Use x16 (IP0) as temporary
                 let temp = Reg(16);
-                self.inner.ldr(self.aarch64_cfg, &temp, &src_adapter)?;
+                self.load_memarg_into_temp(&src_adapter, &temp)?;
                 self.inner.str(self.aarch64_cfg, &temp, &dest_adapter)
             }
         }
@@ -705,7 +761,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             MemArgKind::Mem { .. } => {
                 // Source is memory - LDR, SXT, store if needed
                 let temp = Reg(16); // x16
-                self.inner.ldr(self.aarch64_cfg, &temp, &src_adapter)?;
+                self.load_memarg_into_temp(&src_adapter, &temp)?;
                 let temp2 = Reg(17); // x17 for result
                 self.inner.sxt(self.aarch64_cfg, &temp2, &temp)?;
                 
@@ -753,7 +809,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             MemArgKind::Mem { .. } => {
                 // Source is memory - LDR, UXT, store if needed
                 let temp = Reg(16); // x16
-                self.inner.ldr(self.aarch64_cfg, &temp, &src_adapter)?;
+                self.load_memarg_into_temp(&src_adapter, &temp)?;
                 let temp2 = Reg(17); // x17 for result
                 self.inner.uxt(self.aarch64_cfg, &temp2, &temp)?;
                 
@@ -925,7 +981,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             (MemArgKind::Mem { .. }, _) => {
                 // a is memory - LDR into temp, then CMP
                 let temp = Reg(16); // x16
-                self.inner.ldr(self.aarch64_cfg, &temp, &a_adapter)?;
+                self.load_memarg_into_temp(&a_adapter, &temp)?;
                 if matches!(b_kind, MemArgKind::Mem { .. }) {
                     let temp_b = Reg(17); // x17
                     self.inner.ldr(self.aarch64_cfg, &temp_b, &b_adapter)?;
@@ -937,7 +993,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
                 // b is memory - LDR into temp, then CMP
                 let temp = Reg(17); // x17
-                self.inner.ldr(self.aarch64_cfg, &temp, &b_adapter)?;
+                self.load_memarg_into_temp(&b_adapter, &temp)?;
                 self.inner.cmp(self.aarch64_cfg, &a_adapter, &temp)
             }
         }
@@ -958,7 +1014,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             MemArgKind::Mem { .. } => {
                 // Memory - LDR into temp, then CMP
                 let temp = Reg(16); // x16
-                self.inner.ldr(self.aarch64_cfg, &temp, &op_adapter)?;
+                self.load_memarg_into_temp(&op_adapter, &temp)?;
                 self.inner.cmp(self.aarch64_cfg, &temp, &0u64)
             }
         }
@@ -989,22 +1045,22 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
                 // op is memory - LDR, CSEL, STR
                 let temp = Reg(16); // x16
-                self.inner.ldr(self.aarch64_cfg, &temp, &op_adapter)?;
+                self.load_memarg_into_temp(&op_adapter, &temp)?;
                 self.inner.csel(self.aarch64_cfg, aarch64_cond, &temp, &val_adapter, &temp)?;
                 self.inner.str(self.aarch64_cfg, &temp, &op_adapter)
             }
             (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
                 // val is memory - LDR val, then CSEL
                 let temp = Reg(17); // x17
-                self.inner.ldr(self.aarch64_cfg, &temp, &val_adapter)?;
+                self.load_memarg_into_temp(&val_adapter, &temp)?;
                 self.inner.csel(self.aarch64_cfg, aarch64_cond, &op_adapter, &temp, &op_adapter)
             }
             (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
                 // Both memory - LDR both, CSEL, STR
                 let temp_op = Reg(16); // x16
                 let temp_val = Reg(17); // x17
-                self.inner.ldr(self.aarch64_cfg, &temp_op, &op_adapter)?;
-                self.inner.ldr(self.aarch64_cfg, &temp_val, &val_adapter)?;
+                self.load_memarg_into_temp(&op_adapter, &temp_op)?;
+                self.load_memarg_into_temp(&val_adapter, &temp_val)?;
                 self.inner.csel(self.aarch64_cfg, aarch64_cond, &temp_op, &temp_val, &temp_op)?;
                 self.inner.str(self.aarch64_cfg, &temp_op, &op_adapter)
             }
@@ -1041,7 +1097,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             }
             MemArgKind::Mem { .. } => {
                 // Memory - LDR, AND, STR
-                self.inner.ldr(self.aarch64_cfg, &temp2, &op_adapter)?;
+                self.load_memarg_into_temp(&op_adapter, &temp2)?;
                 self.inner.and(self.aarch64_cfg, &temp2, &temp2, &temp)?;
                 self.inner.str(self.aarch64_cfg, &temp2, &op_adapter)
             }
@@ -1063,7 +1119,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
             MemArgKind::Mem { .. } => {
                 // Memory - LDR, MVN, STR
                 let temp = Reg(16); // x16
-                self.inner.ldr(self.aarch64_cfg, &temp, &op_adapter)?;
+                self.load_memarg_into_temp(&op_adapter, &temp)?;
                 self.inner.mvn(self.aarch64_cfg, &temp, &temp)?;
                 self.inner.str(self.aarch64_cfg, &temp, &op_adapter)
             }

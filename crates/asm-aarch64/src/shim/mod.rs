@@ -69,12 +69,17 @@ pub struct MemArgAdapter<'a> {
 
 /// Describes how to access APX-extended registers when APX is enabled.
 ///
-/// - None: not an APX register or APX not applicable
-/// - Base { base, index }: use `base` (reserved AArch64 register) and index to compute the APX register location
+/// Variants:
+/// - None: no special handling required
+/// - RegOffset: register operand must be accessed by loading/storing from `[base + offset_bytes]`
+/// - MemBaseOffset: memory operand uses an APX register as its base; replace base with `base` and add `added_disp` to displacement
+/// - MemIndex: memory operand uses an APX register as its index; indicates index number and scale to compute an extra byte offset
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum APXAccess {
     None,
-    Base { base: Reg, index: u32 },
+    RegOffset { base: Reg, offset_bytes: i32 },
+    MemBaseOffset { base: Reg, added_disp: i32 },
+    MemIndex { base: Reg, index: u32, scale: u32 },
 }
 
 impl<'a> MemArgAdapter<'a> {
@@ -83,35 +88,72 @@ impl<'a> MemArgAdapter<'a> {
         Self { inner, arch }
     }
 
-    /// Determine whether this argument refers to an APX "late" register that must be
-    /// accessed via a reserved AArch64 base pointer. Returns an APXAccess describing
-    /// how the caller should generate accesses.
+    /// Determine whether this argument refers to an APX "late" register or memory
+    /// operand that must be accessed via a reserved AArch64 base pointer. Returns
+    /// an APXAccess describing how the caller should generate accesses.
+    ///
+    /// Rules:
+    /// - If the operand is a directly-mapped register (r16..=r23), return None so
+    ///   caller can use the mapped AArch64 register directly.
+    /// - If the operand is a register r>=24 and APX is enabled, return RegOffset
+    ///   with base=X28 and offset = (r - 24) * 8 (bytes) so callers load/store from [X28 + offset].
+    /// - If the operand is a memory argument and its base is an APX register r>=24,
+    ///   return MemBaseOffset with added_disp = (r - 24) * 8 so the base register is replaced
+    ///   with X28 and the displacement increased.
+    /// - If the operand is a memory argument and its index is an APX register r>=24,
+    ///   return MemIndex with index=(r-24) and scale (the scale provided) — callers can
+    ///   turn that into additional byte displacement = index * 8 * scale if desired.
     pub fn apx_access(&self) -> APXAccess {
         use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
-        // Inspect the concrete kind of the memory argument
+        use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
+
+        // Only applicable when APX is enabled
+        if !self.arch.apx {
+            return APXAccess::None;
+        }
+
         match self.inner.concrete_mem_kind() {
-            portal_solutions_asm_x86_64::out::arg::MemArgKind::NoMem(arg) => {
+            X64MemArgKind::NoMem(arg) => {
                 match arg {
                     X64ArgKind::Reg { reg, .. } => {
-                        // If APX is enabled and this is a high register, return base/index
-                        if self.arch.apx {
-                            let r = reg.0;
-                            // r16..=r23 -> map directly to x20..=x27 (if available)
-                            if (16..=23).contains(&r) {
-                                // compute mapping index offset to x20
-                                let mapped = 20u32 + (r - 16) as u32;
-                                return APXAccess::Base { base: Reg(mapped), index: 0 };
-                            }
-                            // r24 and above are considered "later" APX registers that need base pointer
-                            if r >= 24 {
-                                // Reserve X28 as the APX base pointer
-                                return APXAccess::Base { base: Reg(28), index: (r - 24) as u32 };
-                            }
+                        let r = reg.0;
+                        // Directly mapped registers r16..=r23 should be used directly
+                        if (16..=23).contains(&r) {
+                            return APXAccess::None;
+                        }
+                        if r >= 24 {
+                            // r24+ accessed via base pointer X28 at offset (r-24)*8
+                            let offset = ((r - 24) as i32) * 8;
+                            return APXAccess::RegOffset { base: Reg(28), offset_bytes: offset };
                         }
                         APXAccess::None
                     }
                     _ => APXAccess::None,
                 }
+            }
+            X64MemArgKind::Mem { base, offset, disp, .. } => {
+                // If base is a register that is an APX late register, indicate to replace base with X28
+                match base {
+                    X64ArgKind::Reg { reg, .. } => {
+                        let r = reg.0;
+                        if r >= 24 {
+                            let added = ((r - 24) as i32) * 8;
+                            return APXAccess::MemBaseOffset { base: Reg(28), added_disp: added };
+                        }
+                    }
+                    _ => {}
+                }
+                // If index/offset uses an APX register (offset is (reg, scale))
+                if let Some((off_arg, scale)) = offset {
+                    if let X64ArgKind::Reg { reg, .. } = off_arg {
+                        let r = reg.0;
+                        if r >= 24 {
+                            return APXAccess::MemIndex { base: Reg(28), index: (r - 24) as u32, scale };
+                        }
+                    }
+                }
+
+                APXAccess::None
             }
             _ => APXAccess::None,
         }

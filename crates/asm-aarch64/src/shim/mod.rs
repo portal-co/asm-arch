@@ -64,12 +64,57 @@ impl core::fmt::Display for ShimLabel {
 /// allowing x86-64 arguments to be passed to AArch64 instruction generation functions.
 pub struct MemArgAdapter<'a> {
     inner: &'a (dyn X64MemArg + 'a),
+    arch: X64Arch,
+}
+
+/// Describes how to access APX-extended registers when APX is enabled.
+///
+/// - None: not an APX register or APX not applicable
+/// - Base { base, index }: use `base` (reserved AArch64 register) and index to compute the APX register location
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum APXAccess {
+    None,
+    Base { base: Reg, index: u32 },
 }
 
 impl<'a> MemArgAdapter<'a> {
-    /// Creates a new adapter wrapping an x86-64 MemArg.
-    pub fn new(inner: &'a (dyn X64MemArg + 'a)) -> Self {
-        Self { inner }
+    /// Creates a new adapter wrapping an x86-64 MemArg and records the x86_64 arch.
+    pub fn new(inner: &'a (dyn X64MemArg + 'a), arch: X64Arch) -> Self {
+        Self { inner, arch }
+    }
+
+    /// Determine whether this argument refers to an APX "late" register that must be
+    /// accessed via a reserved AArch64 base pointer. Returns an APXAccess describing
+    /// how the caller should generate accesses.
+    pub fn apx_access(&self) -> APXAccess {
+        use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
+        // Inspect the concrete kind of the memory argument
+        match self.inner.concrete_mem_kind() {
+            portal_solutions_asm_x86_64::out::arg::MemArgKind::NoMem(arg) => {
+                match arg {
+                    X64ArgKind::Reg { reg, .. } => {
+                        // If APX is enabled and this is a high register, return base/index
+                        if self.arch.apx {
+                            let r = reg.0;
+                            // r16..=r23 -> map directly to x20..=x27 (if available)
+                            if (16..=23).contains(&r) {
+                                // compute mapping index offset to x20
+                                let mapped = 20u32 + (r - 16) as u32;
+                                return APXAccess::Base { base: Reg(mapped), index: 0 };
+                            }
+                            // r24 and above are considered "later" APX registers that need base pointer
+                            if r >= 24 {
+                                // Reserve X28 as the APX base pointer
+                                return APXAccess::Base { base: Reg(28), index: (r - 24) as u32 };
+                            }
+                        }
+                        APXAccess::None
+                    }
+                    _ => APXAccess::None,
+                }
+            }
+            _ => APXAccess::None,
+        }
     }
 }
 
@@ -85,13 +130,13 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
         match x64_kind {
             X64MemArgKind::NoMem(arg) => {
                 // Direct operand - convert register or literal
-                let aarch64_arg = convert_arg_kind(arg);
+                let aarch64_arg = convert_arg_kind(arg, self.arch);
                 go(AArch64MemArgKind::NoMem(&aarch64_arg));
             }
             X64MemArgKind::Mem { base, offset, disp, size, reg_class } => {
                 // Memory reference - convert components
-                let aarch64_base = convert_arg_kind(base);
-                let aarch64_offset = offset.map(|(off, scale)| (convert_arg_kind(off), scale));
+                let aarch64_base = convert_arg_kind(base, self.arch);
+                let aarch64_offset = offset.map(|(off, scale)| (convert_arg_kind(off, self.arch), scale));
                 let aarch64_disp = disp as i32; // Convert u32 to i32
                 let aarch64_reg_class = convert_register_class(reg_class);
                 
@@ -130,14 +175,14 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
 }
 
 /// Converts x86-64 ArgKind to AArch64 ArgKind with register mapping.
-fn convert_arg_kind(arg: portal_solutions_asm_x86_64::out::arg::ArgKind) -> crate::out::arg::ArgKind {
+fn convert_arg_kind(arg: portal_solutions_asm_x86_64::out::arg::ArgKind, arch: X64Arch) -> crate::out::arg::ArgKind {
     use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
     use crate::out::arg::ArgKind as AArch64ArgKind;
     
     match arg {
         X64ArgKind::Reg { reg, size } => {
-            // Map x86-64 register to AArch64 System V ABI register
-            let aarch64_reg = map_x64_register_to_aarch64(reg);
+            // Map x86-64 register to AArch64 System V ABI register, taking APX into account
+            let aarch64_reg = map_x64_register_to_aarch64(reg, arch);
             AArch64ArgKind::Reg { reg: aarch64_reg, size }
         }
         X64ArgKind::Lit(val) => AArch64ArgKind::Lit(val),
@@ -171,7 +216,21 @@ fn convert_register_class(reg_class: portal_solutions_asm_x86_64::RegisterClass)
 /// - R8-R15 → X5-X15, X20-X28
 ///
 /// For SIMD registers, XMM0-XMM15 map directly to V0-V15.
-pub fn map_x64_register_to_aarch64(reg: Reg) -> Reg {
+pub fn map_x64_register_to_aarch64(reg: Reg, arch: X64Arch) -> Reg {
+    // When APX is enabled we provide mappings for r16..r23 into x20..x27 where possible.
+    // Remaining higher APX registers (r24+) are accessed via a reserved base pointer (X28).
+    if arch.apx {
+        let r = reg.0;
+        // Map r16..=23 -> x20..=27
+        if (16..=23).contains(&r) {
+            return Reg(20 + (r - 16));
+        }
+        // For r24+ reserve X28 as base pointer for later APX registers
+        if r >= 24 {
+            return Reg(28);
+        }
+    }
+
     match reg.0 {
         // Map x86-64 GPRs to AArch64 System V ABI registers
         0 => Reg(0),   // RAX → X0
@@ -263,8 +322,8 @@ macro_rules! handle_two_operand_instr {
     ($self:expr, $a:expr, $b:expr, $instr:ident) => {{
         use crate::out::arg::MemArgKind;
         
-        let a_adapter = MemArgAdapter::new($a);
-        let b_adapter = MemArgAdapter::new($b);
+        let a_adapter = MemArgAdapter::new($a, _cfg);
+        let b_adapter = MemArgAdapter::new($b, _cfg);
         
         let a_kind = a_adapter.concrete_mem_kind();
         let b_kind = b_adapter.concrete_mem_kind();
@@ -306,8 +365,8 @@ macro_rules! handle_two_operand_instr_2arg {
     ($self:expr, $a:expr, $b:expr, $instr:ident) => {{
         use crate::out::arg::MemArgKind;
         
-        let a_adapter = MemArgAdapter::new($a);
-        let b_adapter = MemArgAdapter::new($b);
+        let a_adapter = MemArgAdapter::new($a, _cfg);
+        let b_adapter = MemArgAdapter::new($b, _cfg);
         
         let a_kind = a_adapter.concrete_mem_kind();
         let b_kind = b_adapter.concrete_mem_kind();
@@ -455,8 +514,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // We need a temporary register. Use x16 (IP0) which is caller-saved
         // PERFORMANCE: Uses 3 MOV instructions instead of 1 XCHG
         let temp = Reg(16);
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         self.inner.mov(self.aarch64_cfg, &temp, &dest_adapter)?;
         self.inner.mov(self.aarch64_cfg, &dest_adapter, &src_adapter)?;
         self.inner.mov(self.aarch64_cfg, &src_adapter, &temp)?;
@@ -472,8 +531,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 MOV -> AArch64 MOV/LDR/STR depending on operands
         use crate::out::arg::MemArgKind;
         
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         
         let dest_kind = dest_adapter.concrete_mem_kind();
         let src_kind = src_adapter.concrete_mem_kind();
@@ -532,8 +591,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 MOVSX -> AArch64 SXTB/SXTH/SXTW (handle memory operands)
         use crate::out::arg::MemArgKind;
         
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         let src_kind = src_adapter.concrete_mem_kind();
         
         match src_kind {
@@ -580,8 +639,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 MOVZX -> AArch64 UXTB/UXTH (handle memory operands)
         use crate::out::arg::MemArgKind;
         
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         let src_kind = src_adapter.concrete_mem_kind();
         
         match src_kind {
@@ -623,7 +682,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 PUSH -> AArch64 STR with pre-indexed addressing
         // [sp, #-8]! means: sp = sp - 8, then str to [sp]
         let sp = Reg(31); // SP
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         self.inner.str(
             self.aarch64_cfg,
             &op_adapter,
@@ -642,7 +701,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 POP -> AArch64 LDR with post-indexed addressing
         // [sp], #8 means: ldr from [sp], then sp = sp + 8
         let sp = Reg(31); // SP
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         self.inner.ldr(
             self.aarch64_cfg,
             &op_adapter,
@@ -733,7 +792,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         )?;
         
         // Branch to the target
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         self.inner.b(self.aarch64_cfg, &op_adapter)?;
         
         // Set skip label (execution continues here)
@@ -747,7 +806,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
 
     fn jmp(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
         // x86-64 JMP -> AArch64 B or BR
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         self.inner.b(self.aarch64_cfg, &op_adapter)
     }
 
@@ -760,8 +819,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 CMP -> AArch64 CMP (handle memory operands)
         use crate::out::arg::MemArgKind;
         
-        let a_adapter = MemArgAdapter::new(a);
-        let b_adapter = MemArgAdapter::new(b);
+        let a_adapter = MemArgAdapter::new(a, _cfg);
+        let b_adapter = MemArgAdapter::new(b, _cfg);
         
         let a_kind = a_adapter.concrete_mem_kind();
         let b_kind = b_adapter.concrete_mem_kind();
@@ -796,7 +855,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 CMP op, 0 -> AArch64 CMP op, #0 (handle memory operands)
         use crate::out::arg::MemArgKind;
         
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         let op_kind = op_adapter.concrete_mem_kind();
         
         match op_kind {
@@ -824,8 +883,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         use crate::out::arg::MemArgKind;
         
         let aarch64_cond = translate_condition(cond);
-        let op_adapter = MemArgAdapter::new(op);
-        let val_adapter = MemArgAdapter::new(val);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
+        let val_adapter = MemArgAdapter::new(val, _cfg);
         
         let op_kind = op_adapter.concrete_mem_kind();
         let val_kind = val_adapter.concrete_mem_kind();
@@ -868,7 +927,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     ) -> Result<(), Self::Error> {
         // x86-64 Jcc -> AArch64 B.cond
         let aarch64_cond = translate_condition(cond);
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         self.inner.bcond(self.aarch64_cfg, aarch64_cond, &op_adapter)
     }
 
@@ -876,7 +935,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 AND op, 0xffffffff -> AArch64 AND op, op, #0xffffffff (handle memory)
         use crate::out::arg::MemArgKind;
         
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         let op_kind = op_adapter.concrete_mem_kind();
         let temp = Reg(16); // Use temp register for immediate
         let temp2 = Reg(17); // For result if memory
@@ -901,7 +960,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         // x86-64 NOT -> AArch64 MVN (handle memory operands)
         use crate::out::arg::MemArgKind;
         
-        let op_adapter = MemArgAdapter::new(op);
+        let op_adapter = MemArgAdapter::new(op, _cfg);
         let op_kind = op_adapter.concrete_mem_kind();
         
         match op_kind {
@@ -927,8 +986,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     ) -> Result<(), Self::Error> {
         // x86-64 LEA -> AArch64 ADD/ADR (depending on context)
         // For simplicity, use ADR for now
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         self.inner.adr(self.aarch64_cfg, &dest_adapter, &src_adapter)
     }
 
@@ -971,7 +1030,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         val: u64,
     ) -> Result<(), Self::Error> {
         // x86-64 MOV r, imm64 -> AArch64 MOVZ/MOVK sequence
-        let r_adapter = MemArgAdapter::new(r);
+        let r_adapter = MemArgAdapter::new(r, _cfg);
         self.inner.mov_imm(self.aarch64_cfg, &r_adapter, val)
     }
 
@@ -1082,8 +1141,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 MULSD -> AArch64 FMUL
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         self.inner.fmul(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
     }
 
@@ -1094,8 +1153,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 DIVSD -> AArch64 FDIV
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         self.inner.fdiv(self.aarch64_cfg, &dest_adapter, &dest_adapter, &src_adapter)
     }
 
@@ -1106,8 +1165,8 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 MOVSD -> AArch64 FMOV
-        let dest_adapter = MemArgAdapter::new(dest);
-        let src_adapter = MemArgAdapter::new(src);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
+        let src_adapter = MemArgAdapter::new(src, _cfg);
         self.inner.fmov(self.aarch64_cfg, &dest_adapter, &src_adapter)
     }
 }
@@ -1126,7 +1185,7 @@ where
         dest: &(dyn X64MemArg + '_),
         label: L,
     ) -> Result<(), Self::Error> {
-        let dest_adapter = MemArgAdapter::new(dest);
+        let dest_adapter = MemArgAdapter::new(dest, _cfg);
         self.inner.adr_label(self.aarch64_cfg, &dest_adapter, label)
     }
 }

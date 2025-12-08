@@ -171,17 +171,67 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
         // Convert to AArch64 memory argument kind
         match x64_kind {
             X64MemArgKind::NoMem(arg) => {
-                // Direct operand - convert register or literal
-                let aarch64_arg = convert_arg_kind(arg, self.arch);
-                go(AArch64MemArgKind::NoMem(&aarch64_arg));
+                // Direct operand - check for APX register stored in memory
+                match self.apx_access() {
+                    APXAccess::None => {
+                        let aarch64_arg = convert_arg_kind(arg, self.arch);
+                        go(AArch64MemArgKind::NoMem(&aarch64_arg));
+                    }
+                    APXAccess::RegOffset { base, offset_bytes } => {
+                        // Represent the APX register as a memory operand at [base + offset_bytes]
+                        let aarch64_base = crate::out::arg::ArgKind::Reg { reg: base, size: MemorySize::_64 };
+                        go(AArch64MemArgKind::Mem {
+                            base: &aarch64_base,
+                            offset: None,
+                            disp: offset_bytes,
+                            size: MemorySize::_64,
+                            reg_class: crate::RegisterClass::Gpr,
+                            mode: crate::out::arg::AddressingMode::Offset,
+                        });
+                    }
+                    _ => {
+                        // Other APX variants won't occur for NoMem here
+                        let aarch64_arg = convert_arg_kind(arg, self.arch);
+                        go(AArch64MemArgKind::NoMem(&aarch64_arg));
+                    }
+                }
             }
             X64MemArgKind::Mem { base, offset, disp, size, reg_class } => {
-                // Memory reference - convert components
-                let aarch64_base = convert_arg_kind(base, self.arch);
-                let aarch64_offset = offset.map(|(off, scale)| (convert_arg_kind(off, self.arch), scale));
-                let aarch64_disp = disp as i32; // Convert u32 to i32
+                // Memory reference - convert components, with APX handling
+                // Default conversions
+                let mut aarch64_base = convert_arg_kind(base, self.arch);
+                let mut aarch64_offset = offset.map(|(off, scale)| (convert_arg_kind(off, self.arch), scale));
+                let mut aarch64_disp = disp as i32; // Convert u32 to i32
                 let aarch64_reg_class = convert_register_class(reg_class);
-                
+
+                // If base is an APX late register, replace base with APX base pointer and adjust displacement
+                match base {
+                    portal_solutions_asm_x86_64::out::arg::ArgKind::Reg { reg, .. } => {
+                        let r = reg.0;
+                        if self.arch.apx && r >= 24 {
+                            let added = ((r - 24) as i32) * 8;
+                            // Replace base with Reg(28)
+                            aarch64_base = crate::out::arg::ArgKind::Reg { reg: Reg(28), size: MemorySize::_64 };
+                            aarch64_disp = aarch64_disp.wrapping_add(added);
+                        }
+                    }
+                    _ => {}
+                }
+
+                // If offset/index uses an APX register, try to fold it into disp by treating
+                // the APX register as stored at base pointer + index_offset and adding that
+                // value as an immediate (approximation). Compute extra_disp = (r-24)*8*scale
+                if let Some((off_arg, scale)) = offset {
+                    if let portal_solutions_asm_x86_64::out::arg::ArgKind::Reg { reg, .. } = off_arg {
+                        let r = reg.0;
+                        if self.arch.apx && r >= 24 {
+                            let extra = ((r - 24) as i32) * 8 * (scale as i32);
+                            aarch64_disp = aarch64_disp.wrapping_add(extra);
+                            aarch64_offset = None;
+                        }
+                    }
+                }
+
                 // Create the memory argument and pass references to its components
                 // x86-64 doesn't have pre/post-index, so always use Offset mode
                 match &aarch64_offset {

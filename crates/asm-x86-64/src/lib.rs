@@ -172,6 +172,8 @@ pub mod reg;
 /// Register allocation integration module (gated by `regalloc-integration` feature).
 #[cfg(feature = "regalloc-integration")]
 pub mod regalloc;
+/// Advanced stack management and optimization.
+pub mod stack;
 
 #[cfg(all(test, feature = "alloc"))]
 mod tests {
@@ -298,20 +300,75 @@ mod tests {
         use crate::out::WriterCore;
         use alloc::string::String;
         use core::fmt::Write;
-        
+
         let cfg = X64Arch::default();
         let mut output = String::new();
-        
+
         // Test pushf instruction
         let writer: &mut dyn Write = &mut output;
         WriterCore::pushf(writer, cfg).expect("pushf should succeed");
         assert_eq!(output, "pushfq\n", "pushf should emit 'pushfq\\n'");
-        
+
         // Test popf instruction
         output.clear();
         let writer: &mut dyn Write = &mut output;
         WriterCore::popf(writer, cfg).expect("popf should succeed");
         assert_eq!(output, "popfq\n", "popf should emit 'popfq\\n'");
+    }
+
+    #[test]
+    fn test_stack_manager_offset_access() {
+        use crate::stack::StackManager;
+        use crate::RegisterClass;
+        use portal_pc_asm_common::types::mem::MemorySize;
+        use portal_pc_asm_common::types::reg::Reg;
+
+        let mut stack_mgr = StackManager::new();
+
+        // Test allocating stack slots
+        let offset1 = stack_mgr.allocate_slot(8, RegisterClass::Gpr);
+        assert_eq!(offset1, 0, "First slot should start at offset 0");
+
+        let offset2 = stack_mgr.allocate_slot(16, RegisterClass::Xmm);
+        assert_eq!(offset2, 8, "Second slot should start at offset 8");
+
+        assert_eq!(stack_mgr.current_offset(), 24, "Total stack offset should be 24");
+
+        // Test creating memory arguments
+        let mem_arg = stack_mgr.stack_mem_arg(8, MemorySize::_64, RegisterClass::Gpr);
+        match mem_arg {
+            crate::out::arg::MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+                assert_eq!(base, crate::out::arg::ArgKind::Reg { reg: Reg(4), size: MemorySize::_64 }); // rsp
+                assert_eq!(offset, None);
+                assert_eq!(disp, 8);
+                assert_eq!(size, MemorySize::_64);
+                assert_eq!(reg_class, RegisterClass::Gpr);
+            }
+            _ => panic!("Expected Mem variant"),
+        }
+
+        // Test deallocating slots
+        let deallocated = stack_mgr.deallocate_slot();
+        assert!(deallocated.is_some(), "Should successfully deallocate a slot");
+        assert_eq!(stack_mgr.current_offset(), 8, "Stack offset should be reduced to 8");
+    }
+
+    #[test]
+    fn test_stack_optimization() {
+        use crate::stack::{StackManager, StackAccess};
+
+        let mut stack_mgr = StackManager::new();
+
+        // Record push/pop operations that should cancel out
+        let reg = Reg(0); // Use rax for testing
+        stack_mgr.record_operation(StackAccess::Push(reg));
+        stack_mgr.record_operation(StackAccess::Pop(reg));
+        stack_mgr.record_operation(StackAccess::Push(reg));
+        stack_mgr.record_operation(StackAccess::Pop(reg));
+
+        // In a real scenario, optimize_and_execute would be called with a writer
+        // For this test, we just check that operations are recorded
+        assert_eq!(stack_mgr.pending_count(), 4, "Should have 4 pending operations");
     }
     
     #[test]

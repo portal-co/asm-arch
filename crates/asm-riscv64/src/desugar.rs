@@ -246,11 +246,12 @@ struct StackSpillManager {
     reserved_slots: i32,
     used_slots: i32,
     slot_size: i32,
+    saved_regs: Vec<Reg>,
 }
 
 impl StackSpillManager {
     fn new(slot_size: i32) -> Self {
-        Self { reserved_slots: 0, used_slots: 0, slot_size }
+        Self { reserved_slots: 0, used_slots: 0, slot_size, saved_regs: Vec::new() }
     }
 
     fn save_reg<W: WriterCore + ?Sized>(
@@ -267,6 +268,7 @@ impl StackSpillManager {
             writer.addi(arch, &sp, &sp, -total)?;
             self.reserved_slots = reserve;
             self.used_slots = 0;
+            self.saved_regs.clear();
         }
 
         // store reg at offset = used_slots * slot_size
@@ -279,6 +281,7 @@ impl StackSpillManager {
             reg_class: crate::RegisterClass::Gpr,
         };
         writer.sd(arch, &reg, &mem)?;
+        self.saved_regs.push(reg);
         self.used_slots += 1;
         Ok(())
     }
@@ -294,6 +297,8 @@ impl StackSpillManager {
             return Ok(());
         }
 
+        // Expect LIFO: last saved reg should match 'reg'. If not, search.
+        let last = self.saved_regs.pop().unwrap();
         self.used_slots -= 1;
         let offset = self.used_slots * self.slot_size;
         let mem = MemArgKind::Mem {
@@ -303,10 +308,54 @@ impl StackSpillManager {
             size: MemorySize::_64,
             reg_class: crate::RegisterClass::Gpr,
         };
+
+        // Load into the requested reg. This assumes the caller passes the same reg
+        // they saved earlier; otherwise the semantics are "restore value into reg".
         writer.ld(arch, &reg, &mem)?;
 
         // If we've freed all used slots, deallocate the reserved chunk
         if self.used_slots == 0 && self.reserved_slots > 0 {
+            let total = self.reserved_slots * self.slot_size;
+            let sp = Reg(2);
+            writer.addi(arch, &sp, &sp, total)?;
+            self.reserved_slots = 0;
+            self.saved_regs.clear();
+        }
+
+        Ok(())
+    }
+
+    /// Forcefully flush all saved registers back into their original registers and
+    /// deallocate the reserved stack area. This is required before emitting any
+    /// memory operation that directly uses `sp` as its base, to avoid accidental
+    /// aliasing with the reserved spill area.
+    fn flush_all<W: WriterCore + ?Sized>(
+        &mut self,
+        writer: &mut W,
+        arch: RiscV64Arch,
+    ) -> Result<(), W::Error> {
+        if self.reserved_slots == 0 {
+            return Ok(());
+        }
+
+        // Restore all saved registers in reverse order
+        while self.used_slots > 0 {
+            self.used_slots -= 1;
+            let offset = self.used_slots * self.slot_size;
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(2), size: MemorySize::_64 },
+                offset: None,
+                disp: offset,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+            // Load into the corresponding saved register
+            let reg = self.saved_regs.pop().expect("saved_regs mismatch");
+            writer.ld(arch, &reg, &mem)?;
+        }
+
+        // Deallocate reserved chunk
+        if self.reserved_slots > 0 {
             let total = self.reserved_slots * self.slot_size;
             let sp = Reg(2);
             writer.addi(arch, &sp, &sp, total)?;
@@ -750,6 +799,27 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         self.desugar_operand_with_avoid(arch, operand, &[])
     }
 
+    /// Flush spilled temporaries if any of the provided operands will use `sp` as a
+    /// general-purpose register operand. Memory operands that use `sp` as a base are
+    /// allowed and do NOT require a flush.
+    fn flush_sp_if_needed(
+        &mut self,
+        arch: RiscV64Arch,
+        args: &[&(dyn MemArg + '_)],
+    ) -> Result<(), W::Error> {
+        for arg in args {
+            let concrete = arg.concrete_mem_kind();
+            if let MemArgKind::NoMem(ArgKind::Reg { reg, .. }) = &concrete {
+                if *reg == Reg(2) {
+                    // `sp` is being used as a register operand -> flush all spills
+                    self.spill_manager.flush_all(self.writer, arch)?;
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Helper for binary operations that may have memory or literal operands.
     /// Ensures that operands are loaded into registers as needed.
     fn binary_op<F>(
@@ -772,17 +842,20 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
         match (a_needs_desugar, b_needs_desugar) {
             (false, false) => {
-                // Neither needs desugaring - use directly
+                // Neither needs desugaring - ensure we flush if `sp` is used as a reg
+                self.flush_sp_if_needed(cfg, &[dest, a, b])?;
                 op(self.writer, cfg, dest, a, b)
             }
             (true, false) => {
                 // Only a needs desugaring
                 let desugared_a = self.desugar_operand(cfg, a)?;
+                self.flush_sp_if_needed(cfg, &[dest, &desugared_a, b])?;
                 op(self.writer, cfg, dest, &desugared_a, b)
             }
             (false, true) => {
                 // Only b needs desugaring
                 let desugared_b = self.desugar_operand(cfg, b)?;
+                self.flush_sp_if_needed(cfg, &[dest, a, &desugared_b])?;
                 op(self.writer, cfg, dest, a, &desugared_b)
             }
             (true, true) => {
@@ -842,6 +915,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         }
                     }
 
+                    // Both operands are now in registers - flush if any use `sp`
+                    self.flush_sp_if_needed(cfg, &[dest, &desugared_a, &desugared_b])?;
                     op(self.writer, cfg, dest, &desugared_a, &desugared_b)
                 } else {
                     // At least one is literal, not memory - can use regular desugar_operand
@@ -859,6 +934,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         self.desugar_operand(cfg, b)?
                     };
                     
+                    self.flush_sp_if_needed(cfg, &[dest, &desugared_a, &desugared_b])?;
                     op(self.writer, cfg, dest, &desugared_a, &desugared_b)
                 }
             }
@@ -887,17 +963,20 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
         match (a_needs_desugar, b_needs_desugar) {
             (false, false) => {
-                // Neither needs desugaring - use directly
+                // Neither needs desugaring - flush if `sp` is being used as a reg
+                self.flush_sp_if_needed(cfg, &[a, b, target])?;
                 op(self.writer, cfg, a, b, target)
             }
             (true, false) => {
                 // Only a needs desugaring
                 let desugared_a = self.desugar_operand(cfg, a)?;
+                self.flush_sp_if_needed(cfg, &[&desugared_a, b, target])?;
                 op(self.writer, cfg, &desugared_a, b, target)
             }
             (false, true) => {
                 // Only b needs desugaring
                 let desugared_b = self.desugar_operand(cfg, b)?;
+                self.flush_sp_if_needed(cfg, &[a, &desugared_b, target])?;
                 op(self.writer, cfg, a, &desugared_b, target)
             }
             (true, true) => {
@@ -957,6 +1036,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         }
                     }
 
+                    self.flush_sp_if_needed(cfg, &[&desugared_a, &desugared_b, target])?;
                     op(self.writer, cfg, &desugared_a, &desugared_b, target)
                 } else {
                     // At least one is literal, not memory - can use regular desugar_operand
@@ -974,6 +1054,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         self.desugar_operand(cfg, b)?
                     };
                     
+                    self.flush_sp_if_needed(cfg, &[&desugared_a, &desugared_b, target])?;
                     op(self.writer, cfg, &desugared_a, &desugared_b, target)
                 }
             }
@@ -1105,11 +1186,13 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         match &src_concrete {
             MemArgKind::NoMem(ArgKind::Lit(val)) => {
                 // Source is a literal - use li instead of mv
+                self.flush_sp_if_needed(cfg, &[dest, src])?;
                 self.writer.li(cfg, dest, *val as u64)
             }
             _ => {
                 // Source is register or memory - desugar and use mv
                 let desugared_src = self.desugar_operand(cfg, src)?;
+                self.flush_sp_if_needed(cfg, &[dest, &desugared_src])?;
                 self.writer.mv(cfg, dest, &desugared_src)
             }
         }
@@ -1148,12 +1231,14 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
     ) -> Result<(), Self::Error> {
         if Self::fits_in_12_bits(imm) {
             let desugared_src = self.desugar_operand(cfg, src)?;
+            self.flush_sp_if_needed(cfg, &[dest, &desugared_src])?;
             self.writer.addi(cfg, dest, &desugared_src, imm)
         } else {
             // Large immediate - load into temp and add
             let temp_reg = self.config.temp_reg3;
             self.writer.li(cfg, &temp_reg, imm as u64)?;
             let desugared_src = self.desugar_operand(cfg, src)?;
+            self.flush_sp_if_needed(cfg, &[dest, &desugared_src, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
             self.writer.add(cfg, dest, &desugared_src, &temp_reg)
         }
     }
@@ -1350,12 +1435,14 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
     ) -> Result<(), Self::Error> {
         if Self::fits_in_12_bits(offset) {
             let desugared_base = self.desugar_operand(cfg, base)?;
+            self.flush_sp_if_needed(cfg, &[dest, &desugared_base])?;
             self.writer.jalr(cfg, dest, &desugared_base, offset)
         } else {
             // Large offset - compute address in temp register
             let temp_reg = self.config.temp_reg3;
             self.writer.li(cfg, &temp_reg, offset as u64)?;
             let desugared_base = self.desugar_operand(cfg, base)?;
+            self.flush_sp_if_needed(cfg, &[dest, &desugared_base, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
             self.writer.add(cfg, &temp_reg, &desugared_base, &temp_reg)?;
             self.writer.jalr(cfg, dest, &temp_reg, 0)
         }
@@ -1368,6 +1455,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_target = self.desugar_operand(cfg, target)?;
+        self.flush_sp_if_needed(cfg, &[dest, &desugared_target])?;
         self.writer.jal(cfg, dest, &desugared_target)
     }
 

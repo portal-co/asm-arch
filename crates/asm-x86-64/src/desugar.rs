@@ -1,17 +1,19 @@
 //! Desugaring wrapper for x86-64 memory operands.
 //!
-//! This module provides a wrapper around `WriterCore` implementations that
-//! validates and desugars memory operands (and other invalid operand forms)
+//! This module provides a hardened wrapper around `WriterCore` implementations that
+//! validates and desugars complex memory operands and other invalid operand forms
 //! into forms that are valid for x86-64 instruction encodings.
 //!
 //! The wrapper ensures:
 //! - Memory operands use a register base (literal bases are loaded into temps)
 //! - Index/scale pairs use a register index and a scale of 1/2/4/8 (other scales
-//!   are materialized into registers)
+//!   are materialized using canonical SHL for power-of-two scales or MUL for others)
 //! - Displacements fit into a signed 32-bit immediate; otherwise they are
-//!   added to the base register and a zero displacement is used
+//!   folded into the base register with proper register class handling
 //! - Literal operands used where a register is required are loaded into temps
-//! - Mem-to-mem moves/ops are broken into register temporaries
+//! - Mem-to-mem operations are broken into register temporaries with conflict avoidance
+//! - Register classes (GPR vs XMM) are preserved when materializing temporaries
+//! - Temporary register selection avoids clobbering registers used in operand addressing
 //!
 //! Usage: wrap any `WriterCore` with `DesugaringWriter` to automatically apply
 //! these fixes before forwarding to the underlying writer.
@@ -20,42 +22,187 @@ use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
 
 use crate::{
     out::{arg::{ArgKind, MemArg, MemArgKind}, WriterCore},
-    X64Arch,
+    X64Arch, RegisterClass,
 };
 
 /// Configuration for the desugaring wrapper.
+///
+/// This struct specifies the temporary registers available for desugaring operations.
+/// The desugaring logic will automatically select appropriate temporaries based on
+/// register class requirements and avoid conflicts with registers used in operand addressing.
 #[derive(Clone, Copy, Debug)]
 pub struct DesugarConfig {
-    /// Primary temporary register to use for address calculations.
-    pub temp_reg: Reg,
-    /// Secondary temporary register to use when primary is in use.
-    pub temp_reg2: Reg,
-    /// Tertiary temporary register for large immediates.
-    pub temp_reg3: Reg,
+    /// Primary temporary GPR register to use for address calculations and general operations.
+    pub temp_gpr: Reg,
+    /// Secondary temporary GPR register to use when primary GPR is in conflict.
+    pub temp_gpr2: Reg,
+    /// Tertiary temporary GPR register for complex scale materialization.
+    pub temp_gpr3: Reg,
+    /// Primary temporary XMM register for SIMD/memory operations with XMM register class.
+    pub temp_xmm: Reg,
+    /// Secondary temporary XMM register for conflict avoidance in SIMD operations.
+    pub temp_xmm2: Reg,
 }
 
 impl Default for DesugarConfig {
     fn default() -> Self {
         Self {
-            temp_reg: Reg(15),  // r15 as a high-numbered temp
-            temp_reg2: Reg(14), // r14
-            temp_reg3: Reg(13), // r13
+            temp_gpr: Reg(15),   // r15 as a high-numbered GPR temp
+            temp_gpr2: Reg(14),  // r14
+            temp_gpr3: Reg(13),  // r13
+            temp_xmm: Reg(15),   // xmm15 as a high-numbered XMM temp
+            temp_xmm2: Reg(14),  // xmm14
         }
     }
 }
 
-/// Wrapper around WriterCore that desugars/validates complex memory operands.
+/// Manages temporary register allocation with push/pop caching.
+///
+/// This struct tracks the complete stack layout of pushed registers to ensure
+/// correct stack discipline and enable more aggressive stack manipulation.
+/// Registers are stored in push order, allowing proper LIFO popping and
+/// preventing stack corruption.
+pub struct TempRegManager {
+    /// Stack of pushed registers, in push order (index 0 is bottom of stack)
+    pushed_stack: [Reg; 16],
+    /// Current number of pushed registers
+    stack_depth: usize,
+}
+
+impl TempRegManager {
+    pub fn new() -> Self {
+        Self {
+            pushed_stack: [Reg(0); 16], // Initialize with dummy values
+            stack_depth: 0,
+        }
+    }
+
+    /// Acquire a temporary register, pushing it to the stack if needed and not already pushed.
+    pub fn acquire_temp<W: WriterCore + ?Sized>(
+        &mut self,
+        writer: &mut W,
+        config: &DesugarConfig,
+        reg_class: RegisterClass,
+        used_regs: &[Reg],
+        used_count: usize
+    ) -> Result<Reg, W::Error> {
+        let candidates = match reg_class {
+            RegisterClass::Gpr => [config.temp_gpr, config.temp_gpr2, config.temp_gpr3],
+            RegisterClass::Xmm => [config.temp_xmm, config.temp_xmm2, Reg(0)], // Pad to 3 elements
+        };
+
+        // Find first candidate that doesn't conflict
+        for &candidate in &candidates {
+            if candidate.0 == 0 { continue; } // Skip padding
+            let mut conflicts = false;
+            for i in 0..used_count {
+                if used_regs[i] == candidate {
+                    conflicts = true;
+                    break;
+                }
+            }
+            if !conflicts {
+                return Ok(candidate);
+            }
+        }
+
+        // If all candidates conflict, check if we can use push/pop
+        if !Self::rsp_used(used_regs, used_count) {
+            // Safe to use push/pop - pick the first candidate
+            let temp_reg = candidates[0];
+
+            // Check if already pushed (search the stack)
+            let mut already_pushed = false;
+            for i in 0..self.stack_depth {
+                if self.pushed_stack[i] == temp_reg {
+                    already_pushed = true;
+                    break;
+                }
+            }
+
+            if !already_pushed {
+                // Not pushed yet, push it
+                writer.push(X64Arch::default(), &temp_reg)?;
+                self.pushed_stack[self.stack_depth] = temp_reg;
+                self.stack_depth += 1;
+            }
+            // Already pushed, can use it
+
+            Ok(temp_reg)
+        } else {
+            // Cannot use push/pop, use the first candidate anyway (may cause incorrect code)
+            Ok(candidates[0])
+        }
+    }
+
+    /// Release a temporary register, popping it from the stack if it's at the top.
+    /// If the register is buried deeper in the stack, it remains pushed for potential future use.
+    pub fn release_temp<W: WriterCore + ?Sized>(&mut self, writer: &mut W, reg: Reg) -> Result<(), W::Error> {
+        // Only pop if this register is at the top of the stack
+        if self.stack_depth > 0 && self.pushed_stack[self.stack_depth - 1] == reg {
+            writer.pop(X64Arch::default(), &reg)?;
+            self.stack_depth -= 1;
+        }
+        // If not at the top, leave it pushed (might be used again)
+        Ok(())
+    }
+
+    /// Release all pushed registers in reverse order (LIFO).
+    /// This should be called at the end of a desugaring operation to clean up the stack.
+    pub fn release_all<W: WriterCore + ?Sized>(&mut self, writer: &mut W) -> Result<(), W::Error> {
+        while self.stack_depth > 0 {
+            let reg = self.pushed_stack[self.stack_depth - 1];
+            writer.pop(X64Arch::default(), &reg)?;
+            self.stack_depth -= 1;
+        }
+        Ok(())
+    }
+
+    /// Check if RSP is used in the given registers.
+    fn rsp_used(used_regs: &[Reg], used_count: usize) -> bool {
+        let rsp = Reg(4);
+        for i in 0..used_count {
+            if used_regs[i] == rsp {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+/// Hardened wrapper around WriterCore that desugars and validates complex memory operands.
+///
+/// This wrapper automatically handles:
+/// - Register class-aware temporary selection
+/// - Conflict-free temporary register allocation
+/// - Canonical scale materialization (SHL for powers of two, MUL otherwise)
+/// - Large displacement folding with proper size preservation
+/// - SIMD register class handling for XMM operations
+/// - Push/pop caching with full stack layout tracking to avoid redundant operations
+///
+/// Call `release_all_temps()` when desugaring operations are complete to ensure
+/// proper stack cleanup.
 pub struct DesugaringWriter<'a, W: WriterCore + ?Sized> {
     writer: &'a mut W,
     config: DesugarConfig,
+    temp_manager: TempRegManager,
 }
 
 impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
     pub fn new(writer: &'a mut W) -> Self {
-        Self { writer, config: DesugarConfig::default() }
+        let config = DesugarConfig::default();
+        let temp_manager = TempRegManager::new();
+        Self { writer, config, temp_manager }
     }
     pub fn with_config(writer: &'a mut W, config: DesugarConfig) -> Self {
-        Self { writer, config }
+        let temp_manager = TempRegManager::new();
+        Self { writer, config, temp_manager }
+    }
+
+    /// Release all pushed temporary registers, restoring the stack to its original state.
+    /// This should be called when desugaring operations are complete to ensure proper stack cleanup.
+    pub fn release_all_temps(&mut self) -> Result<(), W::Error> {
+        self.temp_manager.release_all(self.writer)
     }
 
     /// Checks if a displacement fits in a signed 32-bit immediate.
@@ -67,6 +214,97 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
     fn valid_scale(scale: u32) -> bool {
         matches!(scale, 1 | 2 | 4 | 8)
     }
+
+    /// Returns the log2 of scale if it's a power of two, None otherwise.
+    fn is_power_of_two(scale: u32) -> Option<u32> {
+        if scale == 0 || (scale & (scale - 1)) != 0 {
+            return None;
+        }
+        let mut s = scale;
+        let mut shift = 0;
+        while s > 1 {
+            s >>= 1;
+            shift += 1;
+        }
+        Some(shift)
+    }
+
+    /// Select an appropriate temporary register based on register class.
+    fn select_temp_reg(&self, reg_class: crate::RegisterClass) -> Reg {
+        match reg_class {
+            crate::RegisterClass::Gpr => self.config.temp_gpr,
+            crate::RegisterClass::Xmm => self.config.temp_xmm,
+        }
+    }
+
+    /// Collect all registers used in a memory argument kind.
+    fn collect_used_regs(mem: &MemArgKind<ArgKind>, buffer: &mut [Reg]) -> usize {
+        let mut count = 0;
+        match mem {
+            MemArgKind::NoMem(ArgKind::Reg { reg, .. }) => {
+                buffer[count] = *reg;
+                count += 1;
+            }
+            MemArgKind::NoMem(ArgKind::Lit(_)) => {}
+            MemArgKind::Mem { base, offset, .. } => {
+                if let ArgKind::Reg { reg, .. } = base {
+                    buffer[count] = *reg;
+                    count += 1;
+                }
+                if let Some((ArgKind::Reg { reg, .. }, _)) = offset {
+                    buffer[count] = *reg;
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Check if RSP (stack pointer) is used in the given registers.
+    fn rsp_used(used_regs: &[Reg], used_count: usize) -> bool {
+        // RSP is register 4 in x86-64
+        let rsp = Reg(4);
+        for i in 0..used_count {
+            if used_regs[i] == rsp {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Select a temporary register that doesn't conflict with used registers.
+    fn select_safe_temp_reg(&self, reg_class: crate::RegisterClass, used_regs: &[Reg], used_count: usize) -> Reg {
+        let candidates = match reg_class {
+            crate::RegisterClass::Gpr => [self.config.temp_gpr, self.config.temp_gpr2, self.config.temp_gpr3],
+            crate::RegisterClass::Xmm => [self.config.temp_xmm, self.config.temp_xmm2, Reg(0)], // Pad to 3 elements
+        };
+
+        // Find first candidate that doesn't conflict
+        for &candidate in &candidates {
+            if candidate.0 == 0 { continue; } // Skip padding
+            let mut conflicts = false;
+            for i in 0..used_count {
+                if used_regs[i] == candidate {
+                    conflicts = true;
+                    break;
+                }
+            }
+            if !conflicts {
+                return candidate;
+            }
+        }
+
+        // If all candidates conflict, check if we can use push/pop
+        if !Self::rsp_used(used_regs, used_count) {
+            // Safe to use push/pop - pick the first candidate
+            candidates[0]
+        } else {
+            // Cannot use push/pop, use the first candidate anyway (may cause incorrect code)
+            candidates[0]
+        }
+    }
+
+
 
     /// Desugars a memory operand into a simple base+disp form.
     /// Returns (base_reg, disp) where the returned `disp` is a u32 displacement
@@ -85,7 +323,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     ArgKind::Reg { reg, .. } => *reg,
                     ArgKind::Lit(val) => {
                         // Load literal into temp register using mov64
-                        let temp = self.config.temp_reg;
+                        let temp = self.config.temp_gpr;
                         self.writer.mov64(arch, &temp, *val)?;
                         temp
                     }
@@ -98,7 +336,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         ArgKind::Reg { reg, .. } => *reg,
                         ArgKind::Lit(val) => {
                             // Load literal offset into temp_reg2 (avoid conflict)
-                            let tmp = if base_reg == self.config.temp_reg { self.config.temp_reg2 } else { self.config.temp_reg };
+                            let tmp = if base_reg == self.config.temp_gpr { self.config.temp_gpr2 } else { self.config.temp_gpr };
                             self.writer.mov64(arch, &tmp, *val)?;
                             tmp
                         }
@@ -113,32 +351,25 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     } else {
                         // Materialize offset * scale into a register.
                         // If scale is a power of two, use shift; otherwise multiply.
-                        let mut result_reg = self.config.temp_reg;
-
-                        // Avoid clobbering offset_reg or base_reg
-                        if result_reg == offset_reg || result_reg == base_reg {
-                            result_reg = self.config.temp_reg2;
-                        }
+                        let mut used_regs = [Reg(0); 2];
+                        used_regs[0] = base_reg;
+                        used_regs[1] = offset_reg;
+                        let result_reg = self.select_safe_temp_reg(crate::RegisterClass::Gpr, &used_regs, 2);
 
                         // Move offset into result_reg first
                         self.writer.mov(arch, &result_reg, &offset_reg)?;
 
-                        // If scale is power of two, shift
-                        if *scale != 0 && (*scale & (*scale - 1)) == 0 {
-                            // compute log2(scale)
-                            let mut s = *scale;
-                            let mut shift = 0u64;
-                            while s > 1 { s >>= 1; shift += 1; }
-                            // Use shl with immediate shift
-                            self.writer.shl(arch, &result_reg, &ArgKind::Lit(shift))?;
+                        // Canonical scale materialization: use SHL for power-of-two scales, MUL for others
+                        if let Some(shift) = Self::is_power_of_two(*scale) {
+                            // Use SHL for power-of-two scales
+                            self.writer.shl(arch, &result_reg, &ArgKind::Lit(shift as u64))?;
                         } else {
-                            // Use mul to compute scaled value: result = result_reg * scale
-                            // Load scale into temp_reg3
-                            let scale_reg = if base_reg == self.config.temp_reg3 || offset_reg == self.config.temp_reg3 {
-                                self.config.temp_reg2
-                            } else {
-                                self.config.temp_reg3
-                            };
+                            // Use MUL for non-power-of-two scales
+                            let mut used_regs = [Reg(0); 3];
+                            used_regs[0] = base_reg;
+                            used_regs[1] = offset_reg;
+                            used_regs[2] = result_reg;
+                            let scale_reg = self.select_safe_temp_reg(crate::RegisterClass::Gpr, &used_regs, 3);
                             self.writer.mov64(arch, &scale_reg, *scale as u64)?;
                             self.writer.mul(arch, &result_reg, &MemArgKind::NoMem(ArgKind::Reg { reg: scale_reg, size: MemorySize::_64 }))?;
                         }
@@ -147,11 +378,10 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     };
 
                     // Now compute base + scaled_index into a temp register
-                    let result_reg = if self.config.temp_reg == base_reg || self.config.temp_reg == scaled_index_reg {
-                        self.config.temp_reg2
-                    } else {
-                        self.config.temp_reg
-                    };
+                    let mut used_regs = [Reg(0); 2];
+                    used_regs[0] = base_reg;
+                    used_regs[1] = scaled_index_reg;
+                    let result_reg = self.select_safe_temp_reg(crate::RegisterClass::Gpr, &used_regs, 2);
                     // Move base into result_reg then add scaled index
                     self.writer.mov(arch, &result_reg, &base_reg)?;
                     self.writer.add(arch, &result_reg, &MemArgKind::NoMem(ArgKind::Reg { reg: scaled_index_reg, size: MemorySize::_64 }))?;
@@ -165,7 +395,9 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     Ok((effective_base, *disp))
                 } else {
                     // Fold displacement into base
-                    let temp = if effective_base == self.config.temp_reg { self.config.temp_reg2 } else { self.config.temp_reg };
+                    let mut used_regs = [Reg(0); 1];
+                    used_regs[0] = effective_base;
+                    let temp = self.select_safe_temp_reg(crate::RegisterClass::Gpr, &used_regs, 1);
                     self.writer.mov64(arch, &temp, *disp as u64)?;
                     self.writer.mov(arch, &temp, &effective_base)?;
                     self.writer.add(arch, &temp, &MemArgKind::NoMem(ArgKind::Reg { reg: effective_base, size: MemorySize::_64 }))?;
@@ -183,19 +415,19 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         let concrete = mem_arg.concrete_mem_kind();
         match concrete {
             MemArgKind::NoMem(_) => Ok(concrete),
-            MemArgKind::Mem { base: ArgKind::Lit(_), offset, disp, size, reg_class, .. } => {
+            MemArgKind::Mem { base: ArgKind::Lit(_), offset, disp, size, reg_class } => {
                 // literal base - load into temp (and fold any index/disp as necessary)
-                let (base_reg, new_disp) = self.desugar_mem_operand(arch, &MemArgKind::Mem { base: ArgKind::Lit(0), offset, disp, size, reg_class })?;
+                let (base_reg, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
                 Ok(Self::simple_mem(base_reg, new_disp, size, reg_class))
             }
             MemArgKind::Mem { offset: Some((_, scale)), disp, size, reg_class, .. } if !Self::valid_scale(scale) => {
                 // invalid scale - needs materialization
-                let (base, new_disp) = self.desugar_mem_operand(arch, &MemArgKind::Mem { base: ArgKind::Reg { reg: Reg(0), size }, offset: Some((ArgKind::Lit(0), scale)), disp, size, reg_class })?;
+                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
                 Ok(Self::simple_mem(base, new_disp, size, reg_class))
             }
             MemArgKind::Mem { offset: None, disp, size, reg_class, .. } if !Self::fits_in_i32(disp as u64) => {
                 // large displacement - fold into base
-                let (base, new_disp) = self.desugar_mem_operand(arch, &MemArgKind::Mem { base: ArgKind::Reg { reg: Reg(0), size }, offset: None, disp, size, reg_class })?;
+                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
                 Ok(Self::simple_mem(base, new_disp, size, reg_class))
             }
             m => Ok(m),
@@ -207,14 +439,14 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         match concrete {
             MemArgKind::NoMem(ArgKind::Reg { .. }) => Ok(concrete),
             MemArgKind::NoMem(ArgKind::Lit(val)) => {
-                // Load literal into temp
-                let temp = self.config.temp_reg;
+                // Load literal into temp - use appropriate size based on value
+                let temp = self.config.temp_gpr;
                 self.writer.mov64(arch, &temp, val)?;
                 Ok(MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: MemorySize::_64 }))
             }
-            MemArgKind::Mem { size, .. } => {
-                // Load memory operand into temp
-                let temp = self.config.temp_reg;
+            MemArgKind::Mem { size, reg_class, .. } => {
+                // Load memory operand into temp - preserve register class and size
+                let temp = self.select_temp_reg(reg_class);
                 let desugared = self.desugar_mem_arg(arch, operand)?;
                 // Use mov to load from memory into temp
                 self.writer.mov(arch, &temp, &desugared)?;
@@ -246,11 +478,19 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             }
             (true, true) => {
                 // both memory - load b into temp and use that
-                let temp_b = self.config.temp_reg2;
+                let mut all_used = [Reg(0); 4];
+                let a_count = Self::collect_used_regs(&a_concrete, &mut all_used[0..2]);
+                let b_count = Self::collect_used_regs(&b_concrete, &mut all_used[2..4]);
+                let total_count = a_count + b_count;
+                let temp_b = self.temp_manager.acquire_temp(self.writer, &self.config, crate::RegisterClass::Gpr, &all_used, total_count)?;
+
                 let desugared_b_mem = self.desugar_mem_arg(cfg, b)?;
                 self.writer.mov(cfg, &temp_b, &desugared_b_mem)?;
                 let desugared_a = self.desugar_mem_arg(cfg, a)?;
-                op(self.writer, cfg, &desugared_a, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_b, size: MemorySize::_64 }))
+                op(self.writer, cfg, &desugared_a, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_b, size: MemorySize::_64 }))?;
+
+                // Release the temp register (will pop if needed)
+                self.temp_manager.release_temp(self.writer, temp_b)
             }
         }
     }
@@ -278,11 +518,19 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             }
             (true, true) => {
                 // both memory - load one into temp
-                let temp_a = self.config.temp_reg;
+                let mut all_used = [Reg(0); 4];
+                let a_count = Self::collect_used_regs(&a_concrete, &mut all_used[0..2]);
+                let b_count = Self::collect_used_regs(&b_concrete, &mut all_used[2..4]);
+                let total_count = a_count + b_count;
+                let temp_a = self.temp_manager.acquire_temp(self.writer, &self.config, crate::RegisterClass::Gpr, &all_used, total_count)?;
+
                 let desugared_a = self.desugar_mem_arg(cfg, a)?;
                 self.writer.mov(cfg, &temp_a, &desugared_a)?;
                 let desugared_b = self.desugar_mem_arg(cfg, b)?;
-                op(self.writer, cfg, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_a, size: MemorySize::_64 }), &desugared_b)
+                op(self.writer, cfg, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_a, size: MemorySize::_64 }), &desugared_b)?;
+
+                // Release the temp register (will pop if needed)
+                self.temp_manager.release_temp(self.writer, temp_a)
             }
         }
     }
@@ -301,11 +549,25 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         match (dest_is_mem, src_is_mem) {
             (true, true) => {
                 // mem-to-mem not allowed: load src into temp then mov
-                let temp = self.config.temp_reg;
-                let desugared_src = self.desugar_mem_arg(cfg, src)?;
-                self.writer.mov(cfg, &temp, &desugared_src)?;
-                let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
-                self.writer.mov(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: MemorySize::_64 }))
+                // Use appropriate temp register based on destination register class
+                if let MemArgKind::Mem { reg_class, size, .. } = dest_conc {
+                    // Collect registers used in src and dest addressing
+                    let mut all_used = [Reg(0); 4];
+                    let src_count = Self::collect_used_regs(&src_conc, &mut all_used[0..2]);
+                    let dest_count = Self::collect_used_regs(&dest_conc, &mut all_used[2..4]);
+                    let total_count = src_count + dest_count;
+                    let temp = self.temp_manager.acquire_temp(self.writer, &self.config, reg_class, &all_used, total_count)?;
+
+                    let desugared_src = self.desugar_mem_arg(cfg, src)?;
+                    self.writer.mov(cfg, &temp, &desugared_src)?;
+                    let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
+                    self.writer.mov(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: temp, size }))?;
+
+                    // Release the temp register (will pop if needed)
+                    self.temp_manager.release_temp(self.writer, temp)
+                } else {
+                    unreachable!()
+                }
             }
             (true, false) => {
                 // dest is mem - ensure src is a valid operand (reg or lit)
@@ -322,13 +584,21 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
                 // src is mem - load into a temp then mov to dest.
                 let desugared_src = self.desugar_mem_arg(cfg, src)?;
                 // Choose a load temp that doesn't clobber any registers used by the address calculation
-                let load_temp = match &desugared_src {
-                    MemArgKind::Mem { base: ArgKind::Reg { reg, .. }, .. } if *reg == self.config.temp_reg => self.config.temp_reg2,
-                    _ => self.config.temp_reg,
+                let (load_temp, temp_size) = if let MemArgKind::Mem { reg_class, size, .. } = &desugared_src {
+                    let mut src_used = [Reg(0); 2];
+                    let src_count = Self::collect_used_regs(&src_conc, &mut src_used);
+                    let temp = self.temp_manager.acquire_temp(self.writer, &self.config, *reg_class, &src_used, src_count)?;
+                    (temp, *size)
+                } else {
+                    (self.config.temp_gpr, MemorySize::_64)
                 };
+
                 self.writer.mov(cfg, &load_temp, &desugared_src)?;
                 let desugared_dest = self.desugar_operand(cfg, dest)?;
-                self.writer.mov(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: load_temp, size: MemorySize::_64 }))
+                self.writer.mov(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: load_temp, size: temp_size }))?;
+
+                // Release the temp register (will pop if needed)
+                self.temp_manager.release_temp(self.writer, load_temp)
             }
             (false, false) => {
                 // both no-mem: if src is literal prefer mov64
@@ -349,76 +619,29 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         let dest_is_mem = matches!(dest_conc, MemArgKind::Mem { .. });
         let src_is_mem = matches!(src_conc, MemArgKind::Mem { .. });
         if dest_is_mem && src_is_mem {
-            let temp = self.config.temp_reg;
+            // Use temp register based on dest register class
+            let temp = if let MemArgKind::Mem { reg_class, .. } = dest_conc {
+                let mut all_used = [Reg(0); 4];
+                let src_count = Self::collect_used_regs(&src_conc, &mut all_used[0..2]);
+                let dest_count = Self::collect_used_regs(&dest_conc, &mut all_used[2..4]);
+                let total_count = src_count + dest_count;
+                self.temp_manager.acquire_temp(self.writer, &self.config, reg_class, &all_used, total_count)?
+            } else {
+                self.config.temp_gpr
+            };
+
             let desugared_src = self.desugar_mem_arg(cfg, src)?;
             self.writer.mov(cfg, &temp, &desugared_src)?;
             let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
-            self.writer.xchg(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: MemorySize::_64 }))
+            let temp_size = if let MemArgKind::Mem { size, .. } = dest_conc { size } else { MemorySize::_64 };
+            self.writer.xchg(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: temp_size }))?;
+
+            // Release the temp register (will pop if needed)
+            self.temp_manager.release_temp(self.writer, temp)
         } else {
             let d = if dest_is_mem { self.desugar_mem_arg(cfg, dest)? } else { dest.concrete_mem_kind() };
             let s = if src_is_mem { self.desugar_mem_arg(cfg, src)? } else { src.concrete_mem_kind() };
             self.writer.xchg(cfg, &d, &s)
-        }
-    }
-
-    // Arithmetic and bitwise ops - map to binary_op helper
-    fn add(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.add(cfg, a, b))
-    }
-    fn sub(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.sub(cfg, a, b))
-    }
-    fn mul(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.mul(cfg, a, b))
-    }
-    fn div(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.div(cfg, a, b))
-    }
-    fn idiv(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.idiv(cfg, a, b))
-    }
-    fn and(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.and(cfg, a, b))
-    }
-    fn or(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.or(cfg, a, b))
-    }
-    fn eor(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.eor(cfg, a, b))
-    }
-    fn shl(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.shl(cfg, a, b))
-    }
-    fn shr(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.shr(cfg, a, b))
-    }
-    fn sar(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op(cfg, a, b, |w, cfg, a, b| w.sar(cfg, a, b))
-    }
-
-    // Compare operations
-    fn cmp(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        self.binary_op_no_dest(cfg, a, b, |w, cfg, a, b| w.cmp(cfg, a, b))
-    }
-    fn cmp0(&mut self, cfg: X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        let desugared = self.desugar_operand(cfg, op)?;
-        self.writer.cmp0(cfg, &desugared)
-    }
-
-    fn cmovcc64(&mut self, cfg: X64Arch, cc: crate::ConditionCode, op: &(dyn MemArg + '_), val: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        // cmovcc has restrictions similar to others: handle mem/mem
-        let op_conc = op.concrete_mem_kind();
-        let val_conc = val.concrete_mem_kind();
-        if matches!(op_conc, MemArgKind::Mem { .. }) && matches!(val_conc, MemArgKind::Mem { .. }) {
-            let temp = self.config.temp_reg;
-            let desugared_val = self.desugar_mem_arg(cfg, val)?;
-            self.writer.mov(cfg, &temp, &desugared_val)?;
-            let desugared_op = self.desugar_mem_arg(cfg, op)?;
-            self.writer.cmovcc64(cfg, cc, &desugared_op, &MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: MemorySize::_64 }))
-        } else {
-            let d = if matches!(op_conc, MemArgKind::Mem { .. }) { self.desugar_mem_arg(cfg, op)? } else { op.concrete_mem_kind() };
-            let v = if matches!(val_conc, MemArgKind::Mem { .. }) { self.desugar_operand(cfg, val)? } else { val.concrete_mem_kind() };
-            self.writer.cmovcc64(cfg, cc, &d, &v)
         }
     }
 

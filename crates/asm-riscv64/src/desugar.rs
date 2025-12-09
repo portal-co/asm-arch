@@ -237,6 +237,86 @@ impl Default for DesugarConfig {
     }
 }
 
+/// Simple manager that batches stack spill slots and reuses them.
+///
+/// The manager reserves a small chunk of stack slots in one `addi sp, sp, -N*slot` and
+/// then uses indexed stores/loads within that reserved area. When all slots are freed
+/// the reservation is returned to the stack pointer.
+struct StackSpillManager {
+    reserved_slots: i32,
+    used_slots: i32,
+    slot_size: i32,
+}
+
+impl StackSpillManager {
+    fn new(slot_size: i32) -> Self {
+        Self { reserved_slots: 0, used_slots: 0, slot_size }
+    }
+
+    fn save_reg<W: WriterCore + ?Sized>(
+        &mut self,
+        writer: &mut W,
+        arch: RiscV64Arch,
+        reg: Reg,
+    ) -> Result<(), W::Error> {
+        // Reserve a small batch on first use
+        if self.reserved_slots == 0 {
+            let reserve = 4; // batch size
+            let total = reserve * self.slot_size;
+            let sp = Reg(2);
+            writer.addi(arch, &sp, &sp, -total)?;
+            self.reserved_slots = reserve;
+            self.used_slots = 0;
+        }
+
+        // store reg at offset = used_slots * slot_size
+        let offset = self.used_slots * self.slot_size;
+        let mem = MemArgKind::Mem {
+            base: ArgKind::Reg { reg: Reg(2), size: MemorySize::_64 },
+            offset: None,
+            disp: offset,
+            size: MemorySize::_64,
+            reg_class: crate::RegisterClass::Gpr,
+        };
+        writer.sd(arch, &reg, &mem)?;
+        self.used_slots += 1;
+        Ok(())
+    }
+
+    fn restore_reg<W: WriterCore + ?Sized>(
+        &mut self,
+        writer: &mut W,
+        arch: RiscV64Arch,
+        reg: Reg,
+    ) -> Result<(), W::Error> {
+        if self.used_slots == 0 {
+            // Nothing to restore
+            return Ok(());
+        }
+
+        self.used_slots -= 1;
+        let offset = self.used_slots * self.slot_size;
+        let mem = MemArgKind::Mem {
+            base: ArgKind::Reg { reg: Reg(2), size: MemorySize::_64 },
+            offset: None,
+            disp: offset,
+            size: MemorySize::_64,
+            reg_class: crate::RegisterClass::Gpr,
+        };
+        writer.ld(arch, &reg, &mem)?;
+
+        // If we've freed all used slots, deallocate the reserved chunk
+        if self.used_slots == 0 && self.reserved_slots > 0 {
+            let total = self.reserved_slots * self.slot_size;
+            let sp = Reg(2);
+            writer.addi(arch, &sp, &sp, total)?;
+            self.reserved_slots = 0;
+        }
+
+        Ok(())
+    }
+}
+
 /// Wrapper around WriterCore that desugars complex memory operands.
 ///
 /// This wrapper intercepts memory instructions and desugars complex addressing
@@ -246,23 +326,24 @@ pub struct DesugaringWriter<'a, W: WriterCore + ?Sized> {
     writer: &'a mut W,
     /// Configuration for desugaring.
     config: DesugarConfig,
-    /// Current stack depth (number of spill slots pushed).
-    stack_depth: i32,
+    /// Stack spill manager for saving temporaries when needed.
+    spill_manager: StackSpillManager,
 }
 
 impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
     /// Creates a new desugaring wrapper with default configuration.
     pub fn new(writer: &'a mut W) -> Self {
+        let config = DesugarConfig::default();
         Self {
             writer,
-            config: DesugarConfig::default(),
-            stack_depth: 0,
+            config,
+            spill_manager: StackSpillManager::new(config.stack_save_offset),
         }
     }
 
     /// Creates a new desugaring wrapper with custom configuration.
     pub fn with_config(writer: &'a mut W, config: DesugarConfig) -> Self {
-        Self { writer, config, stack_depth: 0 }
+        Self { writer, config, spill_manager: StackSpillManager::new(config.stack_save_offset) }
     }
 
     /// Selects a temporary register that doesn't conflict with the given registers.
@@ -321,16 +402,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
-        // Adjust stack pointer and store the register
-        let sp = Reg(2);
-        let slot = self.config.stack_save_offset;
-        // addi sp, sp, -slot
-        self.writer.addi(arch, &sp, &sp, -slot)?;
-        // sd reg, 0(sp)
-        let mem = Self::simple_mem(sp, 0, MemorySize::_64, crate::RegisterClass::Gpr);
-        self.writer.sd(arch, &reg, &mem)?;
-        self.stack_depth += 1;
-        Ok(())
+        // Backwards compatibility: delegate to spill_manager
+        self.spill_manager.save_reg(self.writer, arch, reg)
     }
 
     /// Pops a register from the stack (restore reg and adjust sp): `ld reg, 0(sp)`; `addi sp, sp, slot`.
@@ -339,15 +412,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
-        let sp = Reg(2);
-        let slot = self.config.stack_save_offset;
-        let mem = Self::simple_mem(sp, 0, MemorySize::_64, crate::RegisterClass::Gpr);
-        self.writer.ld(arch, &reg, &mem)?;
-        self.writer.addi(arch, &sp, &sp, slot)?;
-        if self.stack_depth > 0 {
-            self.stack_depth -= 1;
-        }
-        Ok(())
+        self.spill_manager.restore_reg(self.writer, arch, reg)
     }
 
     /// Backwards-compatible shim: if previously used, translate to push/pop semantics.

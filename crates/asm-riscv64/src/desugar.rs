@@ -246,6 +246,8 @@ pub struct DesugaringWriter<'a, W: WriterCore + ?Sized> {
     writer: &'a mut W,
     /// Configuration for desugaring.
     config: DesugarConfig,
+    /// Current stack depth (number of spill slots pushed).
+    stack_depth: i32,
 }
 
 impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
@@ -254,12 +256,13 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         Self {
             writer,
             config: DesugarConfig::default(),
+            stack_depth: 0,
         }
     }
 
     /// Creates a new desugaring wrapper with custom configuration.
     pub fn with_config(writer: &'a mut W, config: DesugarConfig) -> Self {
-        Self { writer, config }
+        Self { writer, config, stack_depth: 0 }
     }
 
     /// Selects a temporary register that doesn't conflict with the given registers.
@@ -269,61 +272,99 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         &self,
         avoid_regs: &[Reg],
     ) -> (Reg, bool, Option<Reg>) {
+        // Prefer temps that are not in avoid_regs. If all conflict, prefer to pick a
+        // candidate that is caller-saved (temporaries) over callee-saved. As a simple
+        // heuristic we already configured three temps; try them in order but prefer
+        // the one with fewest conflicts.
         let candidates = [
             self.config.temp_reg,
             self.config.temp_reg2,
             self.config.temp_reg3,
         ];
-        
+
+        // If any candidate is free, return it
         for &candidate in &candidates {
             if !avoid_regs.contains(&candidate) {
                 return (candidate, false, None);
             }
         }
-        
-        // All temp registers conflict, handle based on configuration
+
+        // No free candidate: pick the candidate with minimal conflicts (score)
+        let mut best = candidates[0];
+        let mut best_score = i32::MAX;
+        for &candidate in &candidates {
+            let mut score = 0;
+            for r in avoid_regs {
+                if *r == candidate {
+                    score += 1;
+                }
+            }
+            if score < best_score {
+                best_score = score;
+                best = candidate;
+            }
+        }
+
         if self.config.save_to_stack_on_conflict {
-            // Save the first conflicting register to stack and use it
-            let conflict_reg = avoid_regs[0];
-            (conflict_reg, true, Some(conflict_reg))
+            // Indicate that caller should save the conflicting register and return it
+            (best, true, Some(best))
         } else {
-            // Fall back to temp_reg even if it conflicts (caller must handle)
-            (self.config.temp_reg, false, None)
+            // No spilling desired; return best even though it conflicts
+            (best, false, None)
         }
     }
 
-    /// Saves a register to the stack if needed.
+    /// Pushes a register to the stack (emit prologue to reserve a slot and store reg).
+    /// This implements a simple push: `addi sp, sp, -slot` followed by `sd reg, 0(sp)`.
+    fn push_reg_to_stack(
+        &mut self,
+        arch: RiscV64Arch,
+        reg: Reg,
+    ) -> Result<(), W::Error> {
+        // Adjust stack pointer and store the register
+        let sp = Reg(2);
+        let slot = self.config.stack_save_offset;
+        // addi sp, sp, -slot
+        self.writer.addi(arch, &sp, &sp, -slot)?;
+        // sd reg, 0(sp)
+        let mem = Self::simple_mem(sp, 0, MemorySize::_64, crate::RegisterClass::Gpr);
+        self.writer.sd(arch, &reg, &mem)?;
+        self.stack_depth += 1;
+        Ok(())
+    }
+
+    /// Pops a register from the stack (restore reg and adjust sp): `ld reg, 0(sp)`; `addi sp, sp, slot`.
+    fn pop_reg_from_stack(
+        &mut self,
+        arch: RiscV64Arch,
+        reg: Reg,
+    ) -> Result<(), W::Error> {
+        let sp = Reg(2);
+        let slot = self.config.stack_save_offset;
+        let mem = Self::simple_mem(sp, 0, MemorySize::_64, crate::RegisterClass::Gpr);
+        self.writer.ld(arch, &reg, &mem)?;
+        self.writer.addi(arch, &sp, &sp, slot)?;
+        if self.stack_depth > 0 {
+            self.stack_depth -= 1;
+        }
+        Ok(())
+    }
+
+    /// Backwards-compatible shim: if previously used, translate to push/pop semantics.
     fn save_reg_to_stack(
         &mut self,
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
-        // Use sp as base register
-        let sp = Reg(2); // sp register
-        let mem = Self::simple_mem(
-            sp,
-            -self.config.stack_save_offset,
-            MemorySize::_64,
-            crate::RegisterClass::Gpr,
-        );
-        self.writer.sd(arch, &reg, &mem)
+        self.push_reg_to_stack(arch, reg)
     }
 
-    /// Restores a register from the stack.
     fn restore_reg_from_stack(
         &mut self,
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
-        // Use sp as base register
-        let sp = Reg(2); // sp register
-        let mem = Self::simple_mem(
-            sp,
-            -self.config.stack_save_offset,
-            MemorySize::_64,
-            crate::RegisterClass::Gpr,
-        );
-        self.writer.ld(arch, &reg, &mem)
+        self.pop_reg_from_stack(arch, reg)
     }
 
     /// Checks if a value fits in 12 bits (RISC-V I-type immediate range).

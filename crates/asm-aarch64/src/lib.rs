@@ -159,6 +159,8 @@ impl Default for RegFormatOpts {
     }
 }
 
+/// Desugaring wrapper for complex operands.
+pub mod desugar;
 /// Instruction output generation module.
 pub mod out;
 /// Register handling and formatting module.

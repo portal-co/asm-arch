@@ -74,7 +74,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
     /// be folded into the returned `base_reg` (and disp==0).
     fn desugar_mem_operand(
         &mut self,
-        _arch: X64Arch,
+        arch: X64Arch,
         mem: &MemArgKind<ArgKind>,
     ) -> Result<(Reg, u32), W::Error> {
         match mem {
@@ -86,7 +86,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     ArgKind::Lit(val) => {
                         // Load literal into temp register using mov64
                         let temp = self.config.temp_reg;
-                        self.writer.mov64(_arch, &temp, *val)?;
+                        self.writer.mov64(arch, &temp, *val)?;
                         temp
                     }
                 };
@@ -99,44 +99,48 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         ArgKind::Lit(val) => {
                             // Load literal offset into temp_reg2 (avoid conflict)
                             let tmp = if base_reg == self.config.temp_reg { self.config.temp_reg2 } else { self.config.temp_reg };
-                            self.writer.mov64(_arch, &tmp, *val)?;
+                            self.writer.mov64(arch, &tmp, *val)?;
                             tmp
                         }
                     };
 
-                    // If scale is a legal x86 scale (1,2,4,8) we can use addressing
-                    // directly. If not, materialize scaled index into a register.
+                    // Materialize scaled index into a register if needed; otherwise
+                    // we'll still fold base+index into a register so we return a
+                    // simple base+disp pair.
                     let scaled_index_reg = if Self::valid_scale(*scale) {
-                        // No extra work: use offset_reg as index and rely on scale field
+                        // Use offset_reg directly as the (already-scaled) index value
                         offset_reg
                     } else {
                         // Materialize offset * scale into a register.
                         // If scale is a power of two, use shift; otherwise multiply.
                         let mut result_reg = self.config.temp_reg;
 
-                        // Avoid clobbering offset_reg if same as temp_reg
+                        // Avoid clobbering offset_reg or base_reg
                         if result_reg == offset_reg || result_reg == base_reg {
                             result_reg = self.config.temp_reg2;
                         }
+
+                        // Move offset into result_reg first
+                        self.writer.mov(arch, &result_reg, &offset_reg)?;
 
                         // If scale is power of two, shift
                         if *scale != 0 && (*scale & (*scale - 1)) == 0 {
                             // compute log2(scale)
                             let mut s = *scale;
-                            let mut shift = 0u32;
+                            let mut shift = 0u64;
                             while s > 1 { s >>= 1; shift += 1; }
                             // Use shl with immediate shift
-                            self.writer.shl(_arch, &result_reg, &offset_reg, &ArgKind::Lit(shift as u64))?;
+                            self.writer.shl(arch, &result_reg, &ArgKind::Lit(shift))?;
                         } else {
-                            // Use mul to compute scaled value: result = offset_reg * scale
+                            // Use mul to compute scaled value: result = result_reg * scale
                             // Load scale into temp_reg3
                             let scale_reg = if base_reg == self.config.temp_reg3 || offset_reg == self.config.temp_reg3 {
                                 self.config.temp_reg2
                             } else {
                                 self.config.temp_reg3
                             };
-                            self.writer.mov64(_arch, &scale_reg, *scale as u64)?;
-                            self.writer.mul(_arch, &result_reg, &offset_reg, &scale_reg)?;
+                            self.writer.mov64(arch, &scale_reg, *scale as u64)?;
+                            self.writer.mul(arch, &result_reg, &MemArgKind::NoMem(ArgKind::Reg { reg: scale_reg, size: MemorySize::_64 }))?;
                         }
 
                         result_reg
@@ -148,7 +152,9 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     } else {
                         self.config.temp_reg
                     };
-                    self.writer.add(_arch, &result_reg, &base_reg, &scaled_index_reg)?;
+                    // Move base into result_reg then add scaled index
+                    self.writer.mov(arch, &result_reg, &base_reg)?;
+                    self.writer.add(arch, &result_reg, &MemArgKind::NoMem(ArgKind::Reg { reg: scaled_index_reg, size: MemorySize::_64 }))?;
                     result_reg
                 } else {
                     base_reg
@@ -160,8 +166,9 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 } else {
                     // Fold displacement into base
                     let temp = if effective_base == self.config.temp_reg { self.config.temp_reg2 } else { self.config.temp_reg };
-                    self.writer.mov64(_arch, &temp, *disp as u64)?;
-                    self.writer.add(_arch, &temp, &effective_base, &temp)?;
+                    self.writer.mov64(arch, &temp, *disp as u64)?;
+                    self.writer.mov(arch, &temp, &effective_base)?;
+                    self.writer.add(arch, &temp, &MemArgKind::NoMem(ArgKind::Reg { reg: effective_base, size: MemorySize::_64 }))?;
                     Ok((temp, 0))
                 }
             }
@@ -174,35 +181,35 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
     fn desugar_mem_arg(&mut self, arch: X64Arch, mem_arg: &(dyn MemArg + '_)) -> Result<MemArgKind<ArgKind>, W::Error> {
         let concrete = mem_arg.concrete_mem_kind();
-        match &concrete {
+        match concrete {
             MemArgKind::NoMem(_) => Ok(concrete),
-            MemArgKind::Mem { offset: Some((_, scale)), disp, size, reg_class, .. } if !Self::valid_scale(*scale) => {
+            MemArgKind::Mem { base: ArgKind::Lit(_), offset, disp, size, reg_class, .. } => {
+                // literal base - load into temp (and fold any index/disp as necessary)
+                let (base_reg, new_disp) = self.desugar_mem_operand(arch, &MemArgKind::Mem { base: ArgKind::Lit(0), offset, disp, size, reg_class })?;
+                Ok(Self::simple_mem(base_reg, new_disp, size, reg_class))
+            }
+            MemArgKind::Mem { offset: Some((_, scale)), disp, size, reg_class, .. } if !Self::valid_scale(scale) => {
                 // invalid scale - needs materialization
-                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, *size, *reg_class))
+                let (base, new_disp) = self.desugar_mem_operand(arch, &MemArgKind::Mem { base: ArgKind::Reg { reg: Reg(0), size }, offset: Some((ArgKind::Lit(0), scale)), disp, size, reg_class })?;
+                Ok(Self::simple_mem(base, new_disp, size, reg_class))
             }
-            MemArgKind::Mem { offset: None, disp, size, reg_class, .. } if !Self::fits_in_i32(*disp as u64) => {
+            MemArgKind::Mem { offset: None, disp, size, reg_class, .. } if !Self::fits_in_i32(disp as u64) => {
                 // large displacement - fold into base
-                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, *size, *reg_class))
+                let (base, new_disp) = self.desugar_mem_operand(arch, &MemArgKind::Mem { base: ArgKind::Reg { reg: Reg(0), size }, offset: None, disp, size, reg_class })?;
+                Ok(Self::simple_mem(base, new_disp, size, reg_class))
             }
-            MemArgKind::Mem { base: ArgKind::Lit(_), .. } => {
-                // literal base - load into temp
-                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, mem_arg.concrete_mem_kind().map(&mut |a| Ok::<_, core::convert::Infallible>(a)).unwrap().as_ref().map(|m| match m { _ => MemorySize::_64 }).unwrap_or(MemorySize::_64), mem_arg.concrete_mem_kind().map(&mut |a| Ok::<_, core::convert::Infallible>(a)).unwrap().as_ref().map(|m| match m { _ => crate::RegisterClass::Gpr }).unwrap_or(crate::RegisterClass::Gpr)))
-            }
-            _ => Ok(concrete),
+            m => Ok(m),
         }
     }
 
     fn desugar_operand(&mut self, arch: X64Arch, operand: &(dyn MemArg + '_)) -> Result<MemArgKind<ArgKind>, W::Error> {
         let concrete = operand.concrete_mem_kind();
-        match &concrete {
+        match concrete {
             MemArgKind::NoMem(ArgKind::Reg { .. }) => Ok(concrete),
             MemArgKind::NoMem(ArgKind::Lit(val)) => {
                 // Load literal into temp
                 let temp = self.config.temp_reg;
-                self.writer.mov64(arch, &temp, *val)?;
+                self.writer.mov64(arch, &temp, val)?;
                 Ok(MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: MemorySize::_64 }))
             }
             MemArgKind::Mem { size, .. } => {
@@ -211,7 +218,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 let desugared = self.desugar_mem_arg(arch, operand)?;
                 // Use mov to load from memory into temp
                 self.writer.mov(arch, &temp, &desugared)?;
-                Ok(MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: *size }))
+                Ok(MemArgKind::NoMem(ArgKind::Reg { reg: temp, size }))
             }
         }
     }
@@ -302,15 +309,12 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
             }
             (true, false) => {
                 // dest is mem - ensure src is a valid operand (reg or lit)
-                let desugared_src = if matches!(src_conc, MemArgKind::NoMem(ArgKind::Lit(_))) {
-                    // use mov64 for literal immediates
-                    let val = if let MemArgKind::NoMem(ArgKind::Lit(v)) = src_conc { v } else { 0 };
+                if let MemArgKind::NoMem(ArgKind::Lit(v)) = src_conc {
                     // mov can take immediate via mov64 - forward directly
                     let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
-                    return self.writer.mov64(cfg, &desugared_dest, val);
-                } else {
-                    self.desugar_operand(cfg, src)?
-                };
+                    return self.writer.mov64(cfg, &desugared_dest, v);
+                }
+                let desugared_src = self.desugar_operand(cfg, src)?;
                 let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
                 self.writer.mov(cfg, &desugared_dest, &desugared_src)
             }

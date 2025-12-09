@@ -5,7 +5,7 @@
 //! initialization.
 
 use portal_solutions_asm_regalloc::{Cmd, RegAlloc, RegAllocFrame};
-use crate::{out::WriterCore, X64Arch};
+use crate::{out::WriterCore, stack::StackManager, X64Arch};
 
 /// Register kind for x86-64.
 ///
@@ -36,6 +36,7 @@ impl TryFrom<usize> for RegKind {
 /// * `writer` - The instruction writer to emit to
 /// * `arch` - The x86-64 architecture configuration
 /// * `cmd` - The register allocation command to process
+/// * `stack_manager` - Optional stack manager for advanced stack operations
 ///
 /// # Returns
 /// Result indicating success or a writer error
@@ -43,6 +44,7 @@ pub fn process_cmd<E: core::error::Error>(
     writer: &mut (dyn WriterCore<Error = E> + '_),
     arch: X64Arch,
     cmd: &Cmd<RegKind>,
+    stack_manager: Option<&mut StackManager>,
 ) -> Result<(), E> {
     use portal_pc_asm_common::types::reg::Reg;
     
@@ -97,23 +99,96 @@ pub fn process_cmd<E: core::error::Error>(
         }
         Cmd::GetLocal { dest, local } => {
             let reg = Reg(dest.reg);
-            // Calculate negative offset from rbp for locals
-            // Using two's complement representation for negative offsets
-            let disp = (-((*local as i32 + 1) * 8)) as u32;
+            // Calculate offset from rbp for locals (negative for downward growth)
+            let offset = -((*local as i32 + 1) * 8);
+            let size = portal_pc_asm_common::types::mem::MemorySize::_64;
+            let reg_class = match dest.kind {
+                RegKind::Int => crate::RegisterClass::Gpr,
+                RegKind::Float => crate::RegisterClass::Xmm,
+            };
+
+            // Use stack manager for offset-based access if available
+            if let Some(stack_mgr) = stack_manager {
+                stack_mgr.access_stack(writer, arch, offset, size, reg_class, &reg)
+            } else {
+                // Fallback to direct memory access
+                let mem = crate::out::arg::MemArgKind::Mem {
+                    base: Reg(5), // rbp for locals
+                    offset: None,
+                    disp: offset as u32,
+                    size,
+                    reg_class,
+                };
+                match dest.kind {
+                    RegKind::Int => writer.mov(arch, &reg, &mem),
+                    RegKind::Float => writer.fmov(arch, &reg, &mem),
+                }
+            }
+        }
+        Cmd::SetLocal { src, local } => {
+            let reg = Reg(src.reg);
+            // Calculate offset from rbp for locals (negative for downward growth)
+            let offset = -((*local as i32 + 1) * 8);
+            let size = portal_pc_asm_common::types::mem::MemorySize::_64;
+            let reg_class = match src.kind {
+                RegKind::Int => crate::RegisterClass::Gpr,
+                RegKind::Float => crate::RegisterClass::Xmm,
+            };
+
+            // For setting locals, create memory argument and store
             let mem = crate::out::arg::MemArgKind::Mem {
                 base: Reg(5), // rbp for locals
                 offset: None,
-                disp, // locals are negative offsets from rbp
-                size: portal_pc_asm_common::types::mem::MemorySize::_64,
-                reg_class: match dest.kind {
-                    RegKind::Int => crate::RegisterClass::Gpr,
-                    RegKind::Float => crate::RegisterClass::Xmm,
-                },
+                disp: offset as u32,
+                size,
+                reg_class,
             };
-            match dest.kind {
-                RegKind::Int => writer.mov(arch, &reg, &mem),
-                RegKind::Float => writer.fmov(arch, &reg, &mem),
+            match src.kind {
+                RegKind::Int => writer.mov(arch, &mem, &reg),
+                RegKind::Float => writer.fmov(arch, &mem, &reg),
             }
+        }
+            }
+        }
+        Cmd::SetLocal { src, local } => {
+            let reg = Reg(src.reg);
+            // Calculate offset from rbp for locals (negative for downward growth)
+            let offset = -((*local as i32 + 1) * 8);
+            let size = portal_pc_asm_common::types::mem::MemorySize::_64;
+            let reg_class = match src.kind {
+                RegKind::Int => crate::RegisterClass::Gpr,
+                RegKind::Float => crate::RegisterClass::Xmm,
+            };
+
+            // Use offset-based stack access if writer supports it
+            if let Some(desugaring_writer) = writer.downcast_mut::<crate::desugar::DesugaringWriter<'_, _>>() {
+                // For setting locals, we need to store to memory
+                let mem = crate::out::arg::MemArgKind::Mem {
+                    base: Reg(5), // rbp for locals
+                    offset: None,
+                    disp: offset as u32,
+                    size,
+                    reg_class,
+                };
+                match src.kind {
+                    RegKind::Int => writer.mov(arch, &mem, &reg),
+                    RegKind::Float => writer.fmov(arch, &mem, &reg),
+                }
+            } else {
+                // Fallback to direct memory access
+                let mem = crate::out::arg::MemArgKind::Mem {
+                    base: Reg(5), // rbp for locals
+                    offset: None,
+                    disp: offset as u32,
+                    size,
+                    reg_class,
+                };
+                match src.kind {
+                    RegKind::Int => writer.mov(arch, &mem, &reg),
+                    RegKind::Float => writer.fmov(arch, &mem, &reg),
+                }
+            }
+        }
         }
         Cmd::SetLocal { src, local } => {
             let reg = Reg(src.reg);

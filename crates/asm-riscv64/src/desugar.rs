@@ -93,15 +93,19 @@ use crate::{
 /// Configuration for the desugaring wrapper.
 #[derive(Clone, Copy, Debug)]
 pub struct DesugarConfig {
-    /// Temporary register to use for address calculations.
+    /// Primary temporary register to use for address calculations.
     /// Default: x31 (t6) - last temporary register.
     pub temp_reg: Reg,
+    /// Secondary temporary register to use when primary is in use.
+    /// Default: x28 (t3) - another temporary register.
+    pub temp_reg2: Reg,
 }
 
 impl Default for DesugarConfig {
     fn default() -> Self {
         Self {
-            temp_reg: Reg(31), // t6
+            temp_reg: Reg(31),  // t6
+            temp_reg2: Reg(28), // t3
         }
     }
 }
@@ -185,7 +189,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     // Calculate: temp = offset_reg << scale
                     if *scale > 0 {
                         // Use sll with immediate - need to create a temp register with the shift amount
-                        let shift_amount = Reg(28); // t3 - another temp
+                        let shift_amount = self.config.temp_reg2;
                         self.writer.li(arch, &shift_amount, *scale as u64)?;
                         self.writer.sll(arch, &temp, &offset_reg, &shift_amount)?;
                     } else {
@@ -211,7 +215,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     // Load displacement into temp (or use existing effective_base)
                     if effective_base == temp {
                         // temp already has the effective address, add displacement using li + add
-                        let temp2 = Reg(28); // t3
+                        let temp2 = self.config.temp_reg2;
                         self.writer.li(arch, &temp2, (*disp as i64) as u64)?;
                         self.writer.add(arch, &temp, &temp, &temp2)?;
                     } else {
@@ -446,8 +450,352 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         self.writer.sll(cfg, dest, a, b)
     }
 
-    // Add more forwarding methods as needed...
-    // For now, we rely on the default implementations which will call todo!()
+    // Arithmetic operations - M extension
+    
+    fn mul(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.mul(cfg, dest, a, b)
+    }
+
+    fn mulh(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.mulh(cfg, dest, a, b)
+    }
+
+    fn div(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.div(cfg, dest, a, b)
+    }
+
+    fn divu(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.divu(cfg, dest, a, b)
+    }
+
+    fn rem(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.rem(cfg, dest, a, b)
+    }
+
+    fn remu(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.remu(cfg, dest, a, b)
+    }
+
+    // Bitwise operations
+    
+    fn and(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.and(cfg, dest, a, b)
+    }
+
+    fn or(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.or(cfg, dest, a, b)
+    }
+
+    fn xor(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.xor(cfg, dest, a, b)
+    }
+
+    fn srl(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.srl(cfg, dest, a, b)
+    }
+
+    fn sra(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.sra(cfg, dest, a, b)
+    }
+
+    fn slt(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.slt(cfg, dest, a, b)
+    }
+
+    fn sltu(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.sltu(cfg, dest, a, b)
+    }
+
+    // Control flow operations
+    
+    fn jalr(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        base: &(dyn MemArg + '_),
+        offset: i32,
+    ) -> Result<(), Self::Error> {
+        self.writer.jalr(cfg, dest, base, offset)
+    }
+
+    fn jal(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.jal(cfg, dest, target)
+    }
+
+    fn beq(
+        &mut self,
+        cfg: RiscV64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.beq(cfg, a, b, target)
+    }
+
+    fn bne(
+        &mut self,
+        cfg: RiscV64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.bne(cfg, a, b, target)
+    }
+
+    fn blt(
+        &mut self,
+        cfg: RiscV64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.blt(cfg, a, b, target)
+    }
+
+    fn bge(
+        &mut self,
+        cfg: RiscV64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.bge(cfg, a, b, target)
+    }
+
+    fn bltu(
+        &mut self,
+        cfg: RiscV64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.bltu(cfg, a, b, target)
+    }
+
+    fn bgeu(
+        &mut self,
+        cfg: RiscV64Arch,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.bgeu(cfg, a, b, target)
+    }
+
+    fn ret(&mut self, cfg: RiscV64Arch) -> Result<(), Self::Error> {
+        self.writer.ret(cfg)
+    }
+
+    fn call(&mut self, cfg: RiscV64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        self.writer.call(cfg, target)
+    }
+
+    fn j(&mut self, cfg: RiscV64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        self.writer.j(cfg, target)
+    }
+
+    // Special operations
+    
+    fn lui(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        imm: u32,
+    ) -> Result<(), Self::Error> {
+        self.writer.lui(cfg, dest, imm)
+    }
+
+    fn auipc(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        imm: u32,
+    ) -> Result<(), Self::Error> {
+        self.writer.auipc(cfg, dest, imm)
+    }
+
+    // Floating-point operations
+    
+    fn fadd_d(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fadd_d(cfg, dest, a, b)
+    }
+
+    fn fsub_d(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fsub_d(cfg, dest, a, b)
+    }
+
+    fn fmul_d(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fmul_d(cfg, dest, a, b)
+    }
+
+    fn fdiv_d(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fdiv_d(cfg, dest, a, b)
+    }
+
+    fn fmov_d(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fmov_d(cfg, dest, src)
+    }
+
+    fn fcvt_d_l(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fcvt_d_l(cfg, dest, src)
+    }
+
+    fn fcvt_l_d(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        src: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.writer.fcvt_l_d(cfg, dest, src)
+    }
+}
+
+// Implement Writer trait for DesugaringWriter
+// This enables label support - we simply forward to the underlying writer
+impl<'a, W, L> crate::out::Writer<L> for DesugaringWriter<'a, W>
+where
+    W: crate::out::Writer<L> + ?Sized,
+{
+    fn set_label(&mut self, cfg: RiscV64Arch, label: L) -> Result<(), Self::Error> {
+        self.writer.set_label(cfg, label)
+    }
+
+    fn jal_label(
+        &mut self,
+        cfg: RiscV64Arch,
+        dest: &(dyn MemArg + '_),
+        label: L,
+    ) -> Result<(), Self::Error> {
+        self.writer.jal_label(cfg, dest, label)
+    }
+
+    fn bcond_label(
+        &mut self,
+        cfg: RiscV64Arch,
+        cond: crate::ConditionCode,
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+        label: L,
+    ) -> Result<(), Self::Error> {
+        self.writer.bcond_label(cfg, cond, a, b, label)
+    }
 }
 
 #[cfg(all(test, feature = "alloc"))]
@@ -455,35 +803,39 @@ mod tests {
     use super::*;
     extern crate alloc;
     use alloc::string::String;
-    use alloc::vec::Vec;
-    use crate::out::asm::AsmWriter;
+    use core::fmt::Write;
 
     #[test]
     fn test_desugar_scaled_offset() {
         let mut output = String::new();
-        let mut writer = AsmWriter::new(&mut output);
-        let mut desugar = DesugaringWriter::new(&mut writer);
-        
-        let cfg = RiscV64Arch::default();
-        let dest = Reg(10); // a0
-        
-        // Memory operand: base=x5, offset=x6, scale=3, disp=8
-        let mem = MemArgKind::Mem {
-            base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
-            offset: Some((ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 }, 3)),
-            disp: 8,
-            size: MemorySize::_64,
-            reg_class: crate::RegisterClass::Gpr,
-        };
-        
-        // This should desugar to:
-        // slli t6, x6, 3
-        // add  t6, x5, t6
-        // ld   a0, 8(t6)
-        let _ = desugar.ld(cfg, &dest, &mem);
+        // Use a writer that implements WriterCore (via the writers! macro)
+        // We need to use the output String through a mutable reference
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+            
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+            
+            // Memory operand: base=x5, offset=x6, scale=3, disp=8
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: Some((ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 }, 3)),
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+            
+            // This should desugar to:
+            // li   t3, 3
+            // sll  t6, x6, t3
+            // add  t6, x5, t6
+            // ld   a0, 8(t6)
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
         
         // Check that output contains desugaring instructions
-        assert!(output.contains("slli"));
+        assert!(output.contains("sll") || output.contains("slli"));
         assert!(output.contains("add"));
         assert!(output.contains("ld"));
     }
@@ -491,23 +843,25 @@ mod tests {
     #[test]
     fn test_desugar_large_displacement() {
         let mut output = String::new();
-        let mut writer = AsmWriter::new(&mut output);
-        let mut desugar = DesugaringWriter::new(&mut writer);
-        
-        let cfg = RiscV64Arch::default();
-        let dest = Reg(10); // a0
-        
-        // Memory operand with large displacement (>12 bits)
-        let mem = MemArgKind::Mem {
-            base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
-            offset: None,
-            disp: 4096, // Too large for 12-bit immediate
-            size: MemorySize::_64,
-            reg_class: crate::RegisterClass::Gpr,
-        };
-        
-        // This should desugar to address calculation
-        let _ = desugar.ld(cfg, &dest, &mem);
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+            
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+            
+            // Memory operand with large displacement (>12 bits)
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: None,
+                disp: 4096, // Too large for 12-bit immediate
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+            
+            // This should desugar to address calculation
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
         
         // Check that output contains desugaring instructions
         assert!(output.contains("li") || output.contains("addi"));

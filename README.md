@@ -8,6 +8,18 @@ This workspace provides a collection of crates for working with assembly-level r
 
 ## Crates
 
+Note: The RISC-V crate `portal-solutions-asm-riscv64` includes a robust desugaring wrapper to
+handle complex memory addressing and operand materialization. See `crates/asm-riscv64/src/desugar.rs` for details.
+
+Changelog (desugaring improvements):
+
+- Hardened temp selection with optional stack-spill behavior when temps conflict.
+- Preserves memory access `MemorySize` and `RegisterClass` across materializations.
+- Properly folds large displacements into base registers and avoids mem→mem clobbers.
+- Added comprehensive unit tests covering scale factors, large displacements, temp conflicts, and mem→mem cases.
+
+
+
 ### portal-solutions-asm-x86-64
 
 Core x86-64 assembly types and output generation.

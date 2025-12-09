@@ -319,12 +319,16 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
                 self.writer.mov(cfg, &desugared_dest, &desugared_src)
             }
             (false, true) => {
-                // src is mem - load into temp and mov to dest
+                // src is mem - load into a temp then mov to dest.
                 let desugared_src = self.desugar_mem_arg(cfg, src)?;
-                let temp = self.config.temp_reg;
-                self.writer.mov(cfg, &temp, &desugared_src)?;
+                // Choose a load temp that doesn't clobber any registers used by the address calculation
+                let load_temp = match &desugared_src {
+                    MemArgKind::Mem { base: ArgKind::Reg { reg, .. }, .. } if *reg == self.config.temp_reg => self.config.temp_reg2,
+                    _ => self.config.temp_reg,
+                };
+                self.writer.mov(cfg, &load_temp, &desugared_src)?;
                 let desugared_dest = self.desugar_operand(cfg, dest)?;
-                self.writer.mov(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: temp, size: MemorySize::_64 }))
+                self.writer.mov(cfg, &desugared_dest, &MemArgKind::NoMem(ArgKind::Reg { reg: load_temp, size: MemorySize::_64 }))
             }
             (false, false) => {
                 // both no-mem: if src is literal prefer mov64

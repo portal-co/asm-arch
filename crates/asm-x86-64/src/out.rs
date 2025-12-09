@@ -24,6 +24,9 @@ pub mod arg;
 /// Assembly text output implementations.
 pub mod asm;
 
+#[cfg(feature = "iced")]
+mod iced;
+
 /// Core trait for writing x86-64 instructions.
 ///
 /// Implementors of this trait can emit individual x86-64 instructions.

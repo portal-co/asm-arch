@@ -9,7 +9,9 @@ description.workspace = true
 portal-pc-asm-common.workspace = true
 typeid.workspace = true
 portal-solutions-asm-regalloc = { path = "../asm-regalloc", optional = true }
+iced-x86 = { workspace = true, optional = true, default-features = false, features = ["std", "code_asm"] }
 
 [features]
 alloc=[]
 regalloc-integration=["dep:portal-solutions-asm-regalloc"]
+iced = ["iced-x86"]

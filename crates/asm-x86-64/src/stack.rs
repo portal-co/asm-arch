@@ -25,9 +25,9 @@ pub struct StackSlot {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StackAccess {
     /// Push operation (decreases stack pointer).
-    Push,
+    Push(Reg),
     /// Pop operation (increases stack pointer).
-    Pop,
+    Pop(Reg),
     /// Direct memory access at offset.
     Access { offset: i32, size: MemorySize },
 }
@@ -129,16 +129,20 @@ impl StackManager {
             return Ok(false);
         }
 
-        // Simple optimization: cancel out push/pop pairs
+        // Simple optimization: cancel out push/pop pairs for the same register
         let mut optimized = false;
         let mut i = 0;
         while i < self.pending_count.saturating_sub(1) {
-            if let (Some(StackAccess::Push), Some(StackAccess::Pop)) = (self.pending_ops[i], self.pending_ops[i + 1]) {
-                // Remove both operations - they cancel out
-                self.pending_ops[i] = None;
-                self.pending_ops[i + 1] = None;
-                optimized = true;
-                i += 2; // Skip the next operation
+            if let (Some(StackAccess::Push(push_reg)), Some(StackAccess::Pop(pop_reg))) = (self.pending_ops[i], self.pending_ops[i + 1]) {
+                if push_reg == pop_reg {
+                    // Remove both operations - they cancel out
+                    self.pending_ops[i] = None;
+                    self.pending_ops[i + 1] = None;
+                    optimized = true;
+                    i += 2; // Skip the next operation
+                } else {
+                    i += 1;
+                }
             } else {
                 i += 1;
             }
@@ -148,14 +152,11 @@ impl StackManager {
         for j in 0..self.pending_count {
             if let Some(op) = self.pending_ops[j] {
                 match op {
-                    StackAccess::Push => {
-                        // We need to determine which register to push
-                        // For now, this is a placeholder - in practice, the caller should specify
-                        // For the optimization to work properly, we need to track which register is being pushed
-                        // This is a limitation of the current design
+                    StackAccess::Push(reg) => {
+                        writer.push(arch, &reg)?;
                     }
-                    StackAccess::Pop => {
-                        // Similar issue - we need to know which register to pop
+                    StackAccess::Pop(reg) => {
+                        writer.pop(arch, &reg)?;
                     }
                     StackAccess::Access { offset: _, size: _ } => {
                         // Direct access - no stack pointer change needed
@@ -177,7 +178,7 @@ impl StackManager {
         arch: X64Arch,
         reg: &Reg,
     ) -> Result<(), W::Error> {
-        self.record_operation(StackAccess::Push);
+        self.record_operation(StackAccess::Push(*reg));
         // For now, delegate to writer - in future this could be optimized
         writer.push(arch, reg)
     }
@@ -189,7 +190,7 @@ impl StackManager {
         arch: X64Arch,
         reg: &Reg,
     ) -> Result<(), W::Error> {
-        self.record_operation(StackAccess::Pop);
+        self.record_operation(StackAccess::Pop(*reg));
         // For now, delegate to writer - in future this could be optimized
         writer.pop(arch, reg)
     }
@@ -216,6 +217,74 @@ impl StackManager {
     /// Gets the number of pending operations.
     pub fn pending_count(&self) -> usize {
         self.pending_count
+    }
+
+    /// Gets the current stack depth (number of allocated slots).
+    pub fn stack_depth(&self) -> usize {
+        self.stack_depth
+    }
+
+    /// Gets a reference to the stack slots.
+    pub fn stack_slots(&self) -> &[StackSlot] {
+        &self.stack_slots[..self.stack_depth]
+    }
+
+    /// Checks if RSP (stack pointer) is used in any pending operations.
+    pub fn uses_rsp(&self) -> bool {
+        let rsp = Reg(4); // RSP register
+        for i in 0..self.pending_count {
+            if let Some(op) = self.pending_ops[i] {
+                match op {
+                    StackAccess::Push(reg) | StackAccess::Pop(reg) => {
+                        if reg == rsp {
+                            return true;
+                        }
+                    }
+                    StackAccess::Access { .. } => {
+                        // Access operations use RSP implicitly for addressing
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Flushes all pending stack operations before an RSP-using instruction.
+    /// This ensures the stack is in a consistent state for RSP operations.
+    pub fn flush_before_rsp_use<W: WriterCore + ?Sized>(
+        &mut self,
+        writer: &mut W,
+        arch: X64Arch,
+    ) -> Result<(), W::Error> {
+        if self.pending_count > 0 {
+            self.optimize_and_execute(writer, arch)?;
+        }
+        Ok(())
+    }
+
+    /// Calculates the adjusted offset for a stack access considering pending operations.
+    /// This allows memory accesses to work correctly even with pending stack operations.
+    pub fn adjusted_offset(&self, original_offset: i32) -> i32 {
+        let mut adjustment = 0;
+        for i in 0..self.pending_count {
+            if let Some(op) = self.pending_ops[i] {
+                match op {
+                    StackAccess::Push(_) => {
+                        // Each pending push will decrease the stack pointer
+                        adjustment -= 8; // Assuming 8-byte pushes for simplicity
+                    }
+                    StackAccess::Pop(_) => {
+                        // Each pending pop will increase the stack pointer
+                        adjustment += 8; // Assuming 8-byte pops for simplicity
+                    }
+                    StackAccess::Access { .. } => {
+                        // Access operations don't change the stack pointer
+                    }
+                }
+            }
+        }
+        original_offset + adjustment
     }
 
     /// Resets the stack manager to initial state.

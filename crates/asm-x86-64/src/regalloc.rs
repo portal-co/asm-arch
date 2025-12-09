@@ -52,9 +52,20 @@ pub fn process_cmd<E: core::error::Error>(
         Cmd::Push(target) => {
             let reg = Reg(target.reg);
             match target.kind {
-                RegKind::Int => writer.push(arch, &reg),
+                RegKind::Int => {
+                    // If we have a stack manager, use it for RSP-aware operations
+                    if let Some(stack_mgr) = stack_manager {
+                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                    }
+                    writer.push(arch, &reg)
+                }
                 RegKind::Float => {
                     // For float registers, we need to manually push using movsd
+                    // This involves RSP operations, so flush any pending stack operations
+                    if let Some(stack_mgr) = stack_manager {
+                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                    }
+
                     // Adjust stack: sub rsp, 8
                     let rsp = Reg(4);
                     let imm8 = crate::out::arg::MemArgKind::NoMem(
@@ -76,9 +87,20 @@ pub fn process_cmd<E: core::error::Error>(
         Cmd::Pop(target) => {
             let reg = Reg(target.reg);
             match target.kind {
-                RegKind::Int => writer.pop(arch, &reg),
+                RegKind::Int => {
+                    // If we have a stack manager, use it for RSP-aware operations
+                    if let Some(stack_mgr) = stack_manager {
+                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                    }
+                    writer.pop(arch, &reg)
+                }
                 RegKind::Float => {
                     // For float registers, manually pop using movsd
+                    // This involves RSP operations, so flush any pending stack operations
+                    if let Some(stack_mgr) = stack_manager {
+                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                    }
+
                     // Load the XMM register from [rsp]
                     let rsp = Reg(4);
                     let mem = crate::out::arg::MemArgKind::Mem {

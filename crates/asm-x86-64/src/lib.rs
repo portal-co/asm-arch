@@ -360,10 +360,11 @@ mod tests {
         let mut stack_mgr = StackManager::new();
 
         // Record push/pop operations that should cancel out
-        stack_mgr.record_operation(StackAccess::Push);
-        stack_mgr.record_operation(StackAccess::Pop);
-        stack_mgr.record_operation(StackAccess::Push);
-        stack_mgr.record_operation(StackAccess::Pop);
+        let reg = Reg(0); // Use rax for testing
+        stack_mgr.record_operation(StackAccess::Push(reg));
+        stack_mgr.record_operation(StackAccess::Pop(reg));
+        stack_mgr.record_operation(StackAccess::Push(reg));
+        stack_mgr.record_operation(StackAccess::Pop(reg));
 
         // In a real scenario, optimize_and_execute would be called with a writer
         // For this test, we just check that operations are recorded

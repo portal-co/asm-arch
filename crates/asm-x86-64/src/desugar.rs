@@ -128,10 +128,11 @@ impl TempRegManager {
     pub fn release_all<W: WriterCore + ?Sized>(&mut self, writer: &mut W) -> Result<(), W::Error> {
         // For now, maintain backward compatibility by not using optimization
         // The stack manager will be used for offset-based access in the future
-        while self.stack_manager.stack_depth > 0 {
-            let slot = self.stack_manager.stack_slots[self.stack_manager.stack_depth - 1];
+        while self.stack_manager.stack_depth() > 0 {
+            let slots = self.stack_manager.stack_slots();
+            let slot = &slots[slots.len() - 1];
             writer.pop(X64Arch::default(), &Reg(slot.offset as u8))?; // This is a hack - we need to track actual registers
-            self.stack_manager.stack_depth -= 1;
+            self.stack_manager.deallocate_slot();
         }
         Ok(())
     }
@@ -197,6 +198,12 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         &mut self.stack_manager
     }
 
+    /// Optimize pending stack operations across multiple instructions.
+    /// This enables inter-instruction stack optimization as requested.
+    pub fn optimize_stack_operations(&mut self, arch: X64Arch) -> Result<bool, W::Error> {
+        self.stack_manager.optimize_and_execute(self.writer, arch)
+    }
+
     /// Access stack data at the given offset using optimized stack operations.
     /// This supports offset-based stack data accesses as requested.
     pub fn access_stack_data(
@@ -207,13 +214,29 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         reg_class: RegisterClass,
         dest: &Reg,
     ) -> Result<(), W::Error> {
-        self.stack_manager.access_stack(self.writer, arch, offset, size, reg_class, dest)
+        // Check if this access would conflict with pending RSP operations
+        if self.stack_manager.uses_rsp() {
+            // Flush pending operations before RSP-using access
+            self.stack_manager.flush_before_rsp_use(self.writer, arch)?;
+        }
+
+        // Use adjusted offset if there are pending operations
+        let adjusted_offset = self.stack_manager.adjusted_offset(offset);
+        self.stack_manager.access_stack(self.writer, arch, adjusted_offset, size, reg_class, dest)
     }
 
-    /// Optimize pending stack operations across multiple instructions.
-    /// This enables inter-instruction stack optimization as requested.
-    pub fn optimize_stack_operations(&mut self, arch: X64Arch) -> Result<bool, W::Error> {
-        self.stack_manager.optimize_and_execute(self.writer, arch)
+    /// Handle operations that use RSP directly (like stack pointer arithmetic).
+    /// Either flushes the stack or adjusts offsets as needed.
+    pub fn handle_rsp_operation<F>(&mut self, arch: X64Arch, operation: F) -> Result<(), W::Error>
+    where
+        F: FnOnce(&mut W) -> Result<(), W::Error>,
+    {
+        // For RSP operations, we need to ensure the stack is in a consistent state
+        // Option 1: Flush all pending operations before the RSP operation
+        self.stack_manager.flush_before_rsp_use(self.writer, arch)?;
+
+        // Execute the RSP operation
+        operation(self.writer)
     }
 
     /// Checks if a displacement fits in a signed 32-bit immediate.

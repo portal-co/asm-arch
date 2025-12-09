@@ -675,6 +675,22 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
     }
 
     /// Desugars a memory argument if needed.
+    fn adjust_sp_mem_kind(&self, concrete: MemArgKind<ArgKind>) -> MemArgKind<ArgKind> {
+        match concrete {
+            MemArgKind::Mem { base: ArgKind::Reg { reg, size }, offset, disp, size: msize, reg_class } if reg == Reg(2) && self.spill_manager.reserved_slots > 0 => {
+                let total = self.spill_manager.reserved_slots * self.spill_manager.slot_size;
+                MemArgKind::Mem {
+                    base: ArgKind::Reg { reg: Reg(2), size },
+                    offset,
+                    disp: disp + total,
+                    size: msize,
+                    reg_class,
+                }
+            }
+            other => other,
+        }
+    }
+
     fn desugar_mem_arg(
         &mut self,
         arch: RiscV64Arch,
@@ -683,7 +699,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         let concrete = mem_arg.concrete_mem_kind();
 
         match &concrete {
-            MemArgKind::NoMem(_) => Ok(concrete),
+            MemArgKind::NoMem(_) => Ok(self.adjust_sp_mem_kind(concrete)),
             MemArgKind::Mem {
                 offset: Some(_), // Has scaled offset - needs desugaring
                 disp: _,
@@ -693,7 +709,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             } => {
                 // Has scaled offset - needs desugaring
                 let (base, new_disp, preserved_size, preserved_reg_class) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class))
+                Ok(self.adjust_sp_mem_kind(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class)))
             }
             MemArgKind::Mem {
                 offset: None,
@@ -704,7 +720,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             } if !Self::fits_in_12_bits(*disp) => {
                 // Large displacement - needs desugaring
                 let (base, new_disp, preserved_size, preserved_reg_class) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class))
+                Ok(self.adjust_sp_mem_kind(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class)))
             }
             MemArgKind::Mem {
                 base: ArgKind::Lit(_), // Base is a literal - needs desugaring
@@ -716,9 +732,9 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             } => {
                 // Base is a literal - needs desugaring
                 let (base, new_disp, preserved_size, preserved_reg_class) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class))
+                Ok(self.adjust_sp_mem_kind(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class)))
             }
-            _ => Ok(concrete), // Simple case - no desugaring needed
+            _ => Ok(self.adjust_sp_mem_kind(concrete)), // Simple case - no desugaring needed
         }
     }
 

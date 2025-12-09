@@ -106,6 +106,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-solutions-asm-riscv64"
+version = "0.1.0"
+dependencies = [
+ "portal-pc-asm-common",
+ "portal-solutions-asm-regalloc",
+ "portal-solutions-asm-x86-64",
+ "typeid",
+]
+
+[[package]]
 name = "portal-solutions-asm-semantics"
 version = "0.1.0"
 dependencies = [

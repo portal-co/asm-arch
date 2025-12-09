@@ -429,7 +429,13 @@ pub trait Writer<L>: WriterCore {
     ) -> Result<(), Self::Error> {
         todo!("lea_label not implemented")
     }
-    
+
+    /// Emits a CALL instruction to a label.
+    #[track_caller]
+    fn call_label(&mut self, _cfg: crate::X64Arch, _label: L) -> Result<(), Self::Error> {
+        todo!("call_label not implemented")
+    }
+
     /// Emits an unconditional jump to a label.
     #[track_caller]
     fn jmp_label(&mut self, _cfg: crate::X64Arch, _label: L) -> Result<(), Self::Error> {
@@ -577,6 +583,9 @@ macro_rules! writer_dispatch {
                     }
                     fn lea_label(&mut self, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                        $crate::out:: Writer::lea_label(&mut **self, cfg, dest, label)
+                    }
+                    fn call_label(&mut self, cfg: $crate::X64Arch, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        $crate::out::Writer::call_label(&mut **self, cfg, label)
                     }
                     fn jmp_label(&mut self, cfg: $crate::X64Arch, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                         $crate::out::Writer::jmp_label(&mut **self, cfg, label)

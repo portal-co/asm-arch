@@ -209,6 +209,9 @@ macro_rules! writers {
                     let dest = dest.mem_display(cfg.into());
                     $crate::__::core::write!(self,"lea {dest}, {label}\n")
                 }
+                fn call_label(&mut self, _cfg: $crate::X64Arch, label: L) -> $crate::__::core::result::Result<(), Self::Error> {
+                    $crate::__::core::write!(self, "call {label}\n")
+                }
                 fn jmp_label(&mut self, _cfg: $crate::X64Arch, label: L) -> $crate::__::core::result::Result<(), Self::Error> {
                     $crate::__::core::write!(self, "jmp {label}\n")
                 }

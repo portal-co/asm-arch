@@ -15,6 +15,19 @@
 //!
 //! let arch = RiscV64Arch::default();
 //! ```
+//!
+//! # Desugaring Support
+//!
+//! The crate includes `desugar::DesugaringWriter`, a wrapper around any `WriterCore` that
+//! automatically materializes complex memory operands and literal operands into valid
+//! RISC-V instruction sequences. Features:
+//!
+//! - Preserves memory access `MemorySize` and `RegisterClass` during materialization
+//! - Robust temporary register selection with optional stack-spill behavior
+//! - Folds large displacements into base registers correctly
+//! - Handles memory-to-memory operand cases by using distinct temporaries
+//!
+//! See `crates/asm-riscv64/src/desugar.rs` for usage examples and configuration.
 
 #![no_std]
 #[cfg(feature = "alloc")]

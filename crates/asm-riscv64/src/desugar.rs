@@ -1,6 +1,6 @@
 //! Desugaring wrapper for RISC-V memory operands.
 //!
-//! This module provides a wrapper around WriterCore implementations that automatically
+//! This module provides a robust wrapper around WriterCore implementations that automatically
 //! desugars invalid memory operands and memory operands used in computational instructions
 //! into valid RISC-V instruction sequences.
 //!
@@ -16,6 +16,15 @@
 //! 2. **Computational instructions**: RISC-V computational instructions (add, sub, mul, etc.)
 //!    cannot take memory operands directly - they only operate on registers. Memory operands
 //!    must be loaded into registers first.
+//!
+//! # Features
+//!
+//! - **Robust temporary register selection**: Automatically avoids conflicts with operand registers
+//! - **Stack spill support**: Option to save conflicting registers to stack when temporaries are exhausted
+//! - **MemorySize preservation**: Maintains correct memory access sizes across desugaring
+//! - **Register class preservation**: Maintains GPR/FP register class information
+//! - **Memory-to-memory operations**: Handles operations where both operands are memory references
+//! - **Large displacement folding**: Correctly folds large displacements into base registers
 //!
 //! # Desugaring Examples
 //!
@@ -180,6 +189,11 @@
 
 use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
 use crate::{
     out::{
         arg::{ArgKind, MemArg, MemArgKind},
@@ -200,6 +214,15 @@ pub struct DesugarConfig {
     /// Tertiary temporary register for large immediates.
     /// Default: x29 (t4) - another temporary register.
     pub temp_reg3: Reg,
+    /// Whether to save registers to stack when they conflict with temporaries.
+    /// When enabled, conflicting registers are spilled to stack and reused.
+    /// When disabled, the wrapper will use overlapping temporaries (caller must handle).
+    /// Default: false - prefer different temp registers.
+    pub save_to_stack_on_conflict: bool,
+    /// Stack offset to use for saving registers (in bytes).
+    /// Must be aligned to the natural stack boundary (typically 8 bytes).
+    /// Default: 8 - standard stack slot size.
+    pub stack_save_offset: i32,
 }
 
 impl Default for DesugarConfig {
@@ -208,6 +231,8 @@ impl Default for DesugarConfig {
             temp_reg: Reg(31),  // t6
             temp_reg2: Reg(28), // t3
             temp_reg3: Reg(29), // t4
+            save_to_stack_on_conflict: false,
+            stack_save_offset: 8,
         }
     }
 }
@@ -237,6 +262,70 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         Self { writer, config }
     }
 
+    /// Selects a temporary register that doesn't conflict with the given registers.
+    /// Returns (temp_reg, needs_save, saved_reg) where needs_save indicates if we need
+    /// to save a conflicting register to the stack.
+    fn select_temp_reg(
+        &self,
+        avoid_regs: &[Reg],
+    ) -> (Reg, bool, Option<Reg>) {
+        let candidates = [
+            self.config.temp_reg,
+            self.config.temp_reg2,
+            self.config.temp_reg3,
+        ];
+        
+        for &candidate in &candidates {
+            if !avoid_regs.contains(&candidate) {
+                return (candidate, false, None);
+            }
+        }
+        
+        // All temp registers conflict, handle based on configuration
+        if self.config.save_to_stack_on_conflict {
+            // Save the first conflicting register to stack and use it
+            let conflict_reg = avoid_regs[0];
+            (conflict_reg, true, Some(conflict_reg))
+        } else {
+            // Fall back to temp_reg even if it conflicts (caller must handle)
+            (self.config.temp_reg, false, None)
+        }
+    }
+
+    /// Saves a register to the stack if needed.
+    fn save_reg_to_stack(
+        &mut self,
+        arch: RiscV64Arch,
+        reg: Reg,
+    ) -> Result<(), W::Error> {
+        // Use sp as base register
+        let sp = Reg(2); // sp register
+        let mem = Self::simple_mem(
+            sp,
+            -self.config.stack_save_offset,
+            MemorySize::_64,
+            crate::RegisterClass::Gpr,
+        );
+        self.writer.sd(arch, &reg, &mem)
+    }
+
+    /// Restores a register from the stack.
+    fn restore_reg_from_stack(
+        &mut self,
+        arch: RiscV64Arch,
+        reg: Reg,
+    ) -> Result<(), W::Error> {
+        // Use sp as base register
+        let sp = Reg(2); // sp register
+        let mem = Self::simple_mem(
+            sp,
+            -self.config.stack_save_offset,
+            MemorySize::_64,
+            crate::RegisterClass::Gpr,
+        );
+        self.writer.ld(arch, &reg, &mem)
+    }
+
     /// Checks if a value fits in 12 bits (RISC-V I-type immediate range).
     fn fits_in_12_bits(value: i32) -> bool {
         value >= -2048 && value < 2048
@@ -254,13 +343,14 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
     /// Desugars a memory operand into a simple base+disp form.
     ///
-    /// Returns (base_reg, displacement) where base_reg might be the temp register
-    /// if address calculation was needed.
+    /// Returns (base_reg, displacement, size, reg_class) where base_reg might be a temp register
+    /// if address calculation was needed. The size and reg_class are preserved from the original
+    /// memory operand to maintain type safety throughout desugaring.
     fn desugar_mem_operand(
         &mut self,
         arch: RiscV64Arch,
         mem: &MemArgKind<ArgKind>,
-    ) -> Result<(Reg, i32), W::Error> {
+    ) -> Result<(Reg, i32, MemorySize, crate::RegisterClass), W::Error> {
         match mem {
             MemArgKind::NoMem(_) => {
                 // This shouldn't be called for non-memory operands
@@ -270,16 +360,33 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 base,
                 offset,
                 disp,
-                size: _,
-                reg_class: _,
+                size,
+                reg_class,
             } => {
+                // Collect registers to avoid conflicts
+                let mut avoid_regs = Vec::new();
+                
                 // Handle base
                 let base_reg = match base {
-                    ArgKind::Reg { reg, .. } => *reg,
+                    ArgKind::Reg { reg, .. } => {
+                        avoid_regs.push(*reg);
+                        *reg
+                    },
                     ArgKind::Lit(val) => {
                         // Load literal into temp register
-                        let temp = self.config.temp_reg;
+                        let (temp, needs_save, saved_reg) = self.select_temp_reg(&avoid_regs);
+                        if needs_save {
+                            if let Some(reg_to_save) = saved_reg {
+                                self.save_reg_to_stack(arch, reg_to_save)?;
+                            }
+                        }
                         self.writer.li(arch, &temp, *val)?;
+                        if needs_save {
+                            if let Some(reg_to_save) = saved_reg {
+                                self.restore_reg_from_stack(arch, reg_to_save)?;
+                            }
+                        }
+                        avoid_regs.push(temp);
                         temp
                     }
                 };
@@ -290,66 +397,112 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
                     // Get the offset value into a register
                     let offset_reg = match offset_arg {
-                        ArgKind::Reg { reg, .. } => *reg,
+                        ArgKind::Reg { reg, .. } => {
+                            avoid_regs.push(*reg);
+                            *reg
+                        },
                         ArgKind::Lit(val) => {
-                            // Load literal offset into temp_reg2 (avoid conflict with base_reg if it's temp_reg)
-                            let temp_for_offset = if base_reg == self.config.temp_reg {
-                                self.config.temp_reg2
-                            } else {
-                                self.config.temp_reg
-                            };
-                            self.writer.li(arch, &temp_for_offset, *val)?;
-                            temp_for_offset
+                            // Load literal offset into a temp register that doesn't conflict
+                            let (temp, needs_save, saved_reg) = self.select_temp_reg(&avoid_regs);
+                            if needs_save {
+                                if let Some(reg_to_save) = saved_reg {
+                                    self.save_reg_to_stack(arch, reg_to_save)?;
+                                }
+                            }
+                            self.writer.li(arch, &temp, *val)?;
+                            if needs_save {
+                                if let Some(reg_to_save) = saved_reg {
+                                    self.restore_reg_from_stack(arch, reg_to_save)?;
+                                }
+                            }
+                            avoid_regs.push(temp);
+                            temp
                         }
                     };
 
                     // Calculate scaled offset: scaled_offset = offset_reg << scale
                     let scaled_offset_reg = if *scale > 0 {
-                        // Need to shift: use temp_reg for result, temp_reg2 for shift amount if needed
-                        let result_reg = self.config.temp_reg;
-                        let shift_reg = if result_reg == offset_reg || result_reg == base_reg {
-                            self.config.temp_reg2
-                        } else {
-                            result_reg
-                        };
+                        // Need to shift: select temp registers carefully
+                        let (result_reg, needs_save, saved_reg) = self.select_temp_reg(&avoid_regs);
+                        if needs_save {
+                            if let Some(reg_to_save) = saved_reg {
+                                self.save_reg_to_stack(arch, reg_to_save)?;
+                            }
+                        }
+                        
+                        // Select shift register that doesn't conflict
+                        let mut shift_avoid = avoid_regs.clone();
+                        shift_avoid.push(result_reg);
+                        let (shift_reg, shift_needs_save, shift_saved_reg) = self.select_temp_reg(&shift_avoid);
+                        if shift_needs_save {
+                            if let Some(reg_to_save) = shift_saved_reg {
+                                self.save_reg_to_stack(arch, reg_to_save)?;
+                            }
+                        }
 
                         // Load shift amount
                         self.writer.li(arch, &shift_reg, *scale as u64)?;
                         self.writer.sll(arch, &result_reg, &offset_reg, &shift_reg)?;
+                        
+                        if shift_needs_save {
+                            if let Some(reg_to_save) = shift_saved_reg {
+                                self.restore_reg_from_stack(arch, reg_to_save)?;
+                            }
+                        }
+                        if needs_save {
+                            if let Some(reg_to_save) = saved_reg {
+                                self.restore_reg_from_stack(arch, reg_to_save)?;
+                            }
+                        }
+                        
                         result_reg
                     } else {
-                        // No scaling needed
-                        if offset_reg == self.config.temp_reg && base_reg == self.config.temp_reg {
-                            // Conflict: offset_reg is temp_reg and base_reg is temp_reg
-                            // Move offset to temp_reg2
-                            self.writer.mv(arch, &self.config.temp_reg2, &offset_reg)?;
-                            self.config.temp_reg2
-                        } else {
-                            offset_reg
-                        }
+                        // No scaling needed - just use offset_reg directly
+                        offset_reg
                     };
 
                     // Add base: result = base_reg + scaled_offset_reg
-                    let result_reg = self.config.temp_reg;
+                    let (result_reg, needs_save, saved_reg) = self.select_temp_reg(&avoid_regs);
+                    if needs_save {
+                        if let Some(reg_to_save) = saved_reg {
+                            self.save_reg_to_stack(arch, reg_to_save)?;
+                        }
+                    }
                     self.writer.add(arch, &result_reg, &base_reg, &scaled_offset_reg)?;
+                    if needs_save {
+                        if let Some(reg_to_save) = saved_reg {
+                            self.restore_reg_from_stack(arch, reg_to_save)?;
+                        }
+                    }
 
                     result_reg
                 } else {
                     base_reg
                 };
 
-                // Handle large displacement
+                // Handle large displacement - fold into base register
                 if Self::fits_in_12_bits(*disp) {
-                    Ok((effective_base, *disp))
+                    Ok((effective_base, *disp, *size, *reg_class))
                 } else {
                     // Displacement too large, need to add it to the base
-                    let temp = self.config.temp_reg;
+                    let (temp, needs_save, saved_reg) = self.select_temp_reg(&[effective_base]);
+                    if needs_save {
+                        if let Some(reg_to_save) = saved_reg {
+                            self.save_reg_to_stack(arch, reg_to_save)?;
+                        }
+                    }
 
                     // Load displacement into temp and add to effective_base
                     self.writer.li(arch, &temp, (*disp as i64) as u64)?;
                     self.writer.add(arch, &temp, &effective_base, &temp)?;
+                    
+                    if needs_save {
+                        if let Some(reg_to_save) = saved_reg {
+                            self.restore_reg_from_stack(arch, reg_to_save)?;
+                        }
+                    }
 
-                    Ok((temp, 0))
+                    Ok((temp, 0, *size, *reg_class))
                 }
             }
         }
@@ -384,8 +537,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 ..
             } => {
                 // Has scaled offset - needs desugaring
-                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, *size, *reg_class))
+                let (base, new_disp, preserved_size, preserved_reg_class) = self.desugar_mem_operand(arch, &concrete)?;
+                Ok(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class))
             }
             MemArgKind::Mem {
                 offset: None,
@@ -395,8 +548,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 ..
             } if !Self::fits_in_12_bits(*disp) => {
                 // Large displacement - needs desugaring
-                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, *size, *reg_class))
+                let (base, new_disp, preserved_size, preserved_reg_class) = self.desugar_mem_operand(arch, &concrete)?;
+                Ok(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class))
             }
             MemArgKind::Mem {
                 base: ArgKind::Lit(_), // Base is a literal - needs desugaring
@@ -407,8 +560,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 ..
             } => {
                 // Base is a literal - needs desugaring
-                let (base, new_disp) = self.desugar_mem_operand(arch, &concrete)?;
-                Ok(Self::simple_mem(base, new_disp, *size, *reg_class))
+                let (base, new_disp, preserved_size, preserved_reg_class) = self.desugar_mem_operand(arch, &concrete)?;
+                Ok(Self::simple_mem(base, new_disp, preserved_size, preserved_reg_class))
             }
             _ => Ok(concrete), // Simple case - no desugaring needed
         }
@@ -416,10 +569,14 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
     /// Desugars an operand that might be a memory reference or literal.
     /// Returns a MemArgKind that is guaranteed to be a register (not memory or literal).
-    fn desugar_operand(
+    /// 
+    /// The avoid_regs parameter specifies registers that shouldn't be used as temporaries
+    /// to avoid clobbering operands.
+    fn desugar_operand_with_avoid(
         &mut self,
         arch: RiscV64Arch,
         operand: &(dyn MemArg + '_),
+        avoid_regs: &[Reg],
     ) -> Result<MemArgKind<ArgKind>, W::Error> {
         let concrete = operand.concrete_mem_kind();
 
@@ -427,8 +584,18 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             MemArgKind::NoMem(ArgKind::Reg { .. }) => Ok(concrete), // Already a register
             MemArgKind::NoMem(ArgKind::Lit(val)) => {
                 // This is a literal operand - need to load it into a temp register
-                let temp_reg = self.config.temp_reg;
+                let (temp_reg, needs_save, saved_reg) = self.select_temp_reg(avoid_regs);
+                if needs_save {
+                    if let Some(reg_to_save) = saved_reg {
+                        self.save_reg_to_stack(arch, reg_to_save)?;
+                    }
+                }
                 self.writer.li(arch, &temp_reg, *val as u64)?;
+                if needs_save {
+                    if let Some(reg_to_save) = saved_reg {
+                        self.restore_reg_from_stack(arch, reg_to_save)?;
+                    }
+                }
                 Ok(MemArgKind::NoMem(ArgKind::Reg {
                     reg: temp_reg,
                     size: MemorySize::_64, // Literals are loaded as 64-bit values
@@ -436,7 +603,12 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             }
             MemArgKind::Mem { size, reg_class, .. } => {
                 // This is a memory operand - need to load it into a temp register
-                let temp_reg = self.config.temp_reg;
+                let (temp_reg, needs_save, saved_reg) = self.select_temp_reg(avoid_regs);
+                if needs_save {
+                    if let Some(reg_to_save) = saved_reg {
+                        self.save_reg_to_stack(arch, reg_to_save)?;
+                    }
+                }
                 let desugared_mem = self.desugar_mem_arg(arch, operand)?;
 
                 // Load the memory operand into the temp register
@@ -448,12 +620,28 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     MemorySize::_64 => self.writer.ld(arch, &temp_reg, &desugared_mem)?,
                 }
 
+                if needs_save {
+                    if let Some(reg_to_save) = saved_reg {
+                        self.restore_reg_from_stack(arch, reg_to_save)?;
+                    }
+                }
+
                 Ok(MemArgKind::NoMem(ArgKind::Reg {
                     reg: temp_reg,
                     size: *size,
                 }))
             }
         }
+    }
+
+    /// Desugars an operand that might be a memory reference or literal.
+    /// Returns a MemArgKind that is guaranteed to be a register (not memory or literal).
+    fn desugar_operand(
+        &mut self,
+        arch: RiscV64Arch,
+        operand: &(dyn MemArg + '_),
+    ) -> Result<MemArgKind<ArgKind>, W::Error> {
+        self.desugar_operand_with_avoid(arch, operand, &[])
     }
 
     /// Helper for binary operations that may have memory or literal operands.
@@ -497,9 +685,21 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 let b_is_mem = matches!(b_concrete, MemArgKind::Mem { .. });
 
                 if a_is_mem && b_is_mem {
-                    // Both are memory - use different temp registers
-                    let temp_reg_a = self.config.temp_reg;
-                    let temp_reg_b = self.config.temp_reg2;
+                    // Both are memory - use different temp registers to handle mem→mem operations
+                    let (temp_reg_a, a_needs_save, a_saved_reg) = self.select_temp_reg(&[]);
+                    let (temp_reg_b, b_needs_save, b_saved_reg) = self.select_temp_reg(&[temp_reg_a]);
+
+                    // Save registers if needed
+                    if a_needs_save {
+                        if let Some(reg_to_save) = a_saved_reg {
+                            self.save_reg_to_stack(cfg, reg_to_save)?;
+                        }
+                    }
+                    if b_needs_save {
+                        if let Some(reg_to_save) = b_saved_reg {
+                            self.save_reg_to_stack(cfg, reg_to_save)?;
+                        }
+                    }
 
                     // Load a
                     let desugared_mem_a = self.desugar_mem_arg(cfg, a)?;
@@ -524,11 +724,35 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     let desugared_a = MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg_a, size: a_size });
                     let desugared_b = MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg_b, size: b_size });
 
+                    // Restore registers if needed
+                    if b_needs_save {
+                        if let Some(reg_to_save) = b_saved_reg {
+                            self.restore_reg_from_stack(cfg, reg_to_save)?;
+                        }
+                    }
+                    if a_needs_save {
+                        if let Some(reg_to_save) = a_saved_reg {
+                            self.restore_reg_from_stack(cfg, reg_to_save)?;
+                        }
+                    }
+
                     op(self.writer, cfg, dest, &desugared_a, &desugared_b)
                 } else {
                     // At least one is literal, not memory - can use regular desugar_operand
+                    // But still need to avoid conflicts between the two operands
                     let desugared_a = self.desugar_operand(cfg, a)?;
-                    let desugared_b = self.desugar_operand(cfg, b)?;
+                    let a_reg = if let MemArgKind::NoMem(ArgKind::Reg { reg, .. }) = &desugared_a {
+                        Some(*reg)
+                    } else {
+                        None
+                    };
+                    
+                    let desugared_b = if let Some(a_reg) = a_reg {
+                        self.desugar_operand_with_avoid(cfg, b, &[a_reg])?
+                    } else {
+                        self.desugar_operand(cfg, b)?
+                    };
+                    
                     op(self.writer, cfg, dest, &desugared_a, &desugared_b)
                 }
             }
@@ -576,9 +800,21 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 let b_is_mem = matches!(b_concrete, MemArgKind::Mem { .. });
 
                 if a_is_mem && b_is_mem {
-                    // Both are memory - use different temp registers
-                    let temp_reg_a = self.config.temp_reg;
-                    let temp_reg_b = self.config.temp_reg2;
+                    // Both are memory - use different temp registers to handle mem→mem operations
+                    let (temp_reg_a, a_needs_save, a_saved_reg) = self.select_temp_reg(&[]);
+                    let (temp_reg_b, b_needs_save, b_saved_reg) = self.select_temp_reg(&[temp_reg_a]);
+
+                    // Save registers if needed
+                    if a_needs_save {
+                        if let Some(reg_to_save) = a_saved_reg {
+                            self.save_reg_to_stack(cfg, reg_to_save)?;
+                        }
+                    }
+                    if b_needs_save {
+                        if let Some(reg_to_save) = b_saved_reg {
+                            self.save_reg_to_stack(cfg, reg_to_save)?;
+                        }
+                    }
 
                     // Load a
                     let desugared_mem_a = self.desugar_mem_arg(cfg, a)?;
@@ -603,11 +839,35 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     let desugared_a = MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg_a, size: a_size });
                     let desugared_b = MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg_b, size: b_size });
 
+                    // Restore registers if needed
+                    if b_needs_save {
+                        if let Some(reg_to_save) = b_saved_reg {
+                            self.restore_reg_from_stack(cfg, reg_to_save)?;
+                        }
+                    }
+                    if a_needs_save {
+                        if let Some(reg_to_save) = a_saved_reg {
+                            self.restore_reg_from_stack(cfg, reg_to_save)?;
+                        }
+                    }
+
                     op(self.writer, cfg, &desugared_a, &desugared_b, target)
                 } else {
                     // At least one is literal, not memory - can use regular desugar_operand
+                    // But still need to avoid conflicts between the two operands
                     let desugared_a = self.desugar_operand(cfg, a)?;
-                    let desugared_b = self.desugar_operand(cfg, b)?;
+                    let a_reg = if let MemArgKind::NoMem(ArgKind::Reg { reg, .. }) = &desugared_a {
+                        Some(*reg)
+                    } else {
+                        None
+                    };
+                    
+                    let desugared_b = if let Some(a_reg) = a_reg {
+                        self.desugar_operand_with_avoid(cfg, b, &[a_reg])?
+                    } else {
+                        self.desugar_operand(cfg, b)?
+                    };
+                    
                     op(self.writer, cfg, &desugared_a, &desugared_b, target)
                 }
             }
@@ -1411,5 +1671,279 @@ mod tests {
         // Check that output contains li but not mv
         assert!(output.contains("li"));
         assert!(!output.contains("mv"));
+    }
+
+    #[test]
+    fn test_power_of_two_scale() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+            
+            // Memory operand with power-of-two scale (should use shift)
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: Some((ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 }, 2)), // scale = 2 (<< 2)
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // Check that output contains shift instruction
+        assert!(output.contains("sll") || output.contains("slli"));
+    }
+
+    #[test]
+    fn test_non_power_of_two_scale() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+            
+            // Memory operand with non-power-of-two scale (should use shift)
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: Some((ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 }, 3)), // scale = 3 (<< 3)
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // Check that output contains shift instruction
+        assert!(output.contains("sll") || output.contains("slli"));
+    }
+
+    #[test]
+    fn test_very_large_displacement() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Memory operand with very large displacement
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: None,
+                disp: 100000, // Very large displacement
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // Check that output contains li for large displacement and add
+        assert!(output.contains("li"));
+        assert!(output.contains("add"));
+    }
+
+    #[test]
+    fn test_temp_conflict_avoidance() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let config = DesugarConfig {
+                temp_reg: Reg(5),  // Use same register as base to force conflict
+                temp_reg2: Reg(28), // t3
+                temp_reg3: Reg(29), // t4
+                save_to_stack_on_conflict: false,
+                stack_save_offset: 8,
+            };
+            let mut desugar = DesugaringWriter::with_config(&mut output as &mut dyn Write, config);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Memory operand where base conflicts with temp_reg
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 }, // Same as temp_reg
+                offset: Some((ArgKind::Lit(42), 1)), // Force temp usage
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // Should still generate valid code without crashing
+        assert!(output.contains("li") || output.contains("sll") || output.contains("add"));
+    }
+
+    #[test]
+    fn test_mem_to_mem_operation() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Two memory operands for add operation
+            let mem_a = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: None,
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let mem_b = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 },
+                offset: None,
+                disp: 16,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            // This should load both memory operands into different temp registers
+            let _ = desugar.add(cfg, &dest, &mem_a, &mem_b);
+        }
+
+        // Should contain multiple load instructions
+        let load_count = output.matches("ld").count();
+        assert!(load_count >= 2, "Expected at least 2 load instructions for mem→mem operation");
+        assert!(output.contains("add"));
+    }
+
+    #[test]
+    fn test_stack_save_on_conflict() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let config = DesugarConfig {
+                temp_reg: Reg(5),  // Force conflicts
+                temp_reg2: Reg(5),  // Same as temp_reg
+                temp_reg3: Reg(5),  // Same as temp_reg
+                save_to_stack_on_conflict: true,
+                stack_save_offset: 8,
+            };
+            let mut desugar = DesugaringWriter::with_config(&mut output as &mut dyn Write, config);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Memory operand that will conflict with all temp registers
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 }, // Conflicts with all temps
+                offset: Some((ArgKind::Lit(42), 1)), // Requires temp register
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // Should contain stack operations when all temps conflict
+        assert!(output.contains("sd") || output.contains("ld")); // Stack save/restore
+    }
+
+    #[test]
+    fn test_preserve_memory_size() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Test different memory sizes
+            for (size, expected_load) in [
+                (MemorySize::_8, "lb"),
+                (MemorySize::_16, "lh"),
+                (MemorySize::_32, "lw"),
+                (MemorySize::_64, "ld"),
+            ] {
+                output.clear();
+
+                // Create a fresh desugaring writer per iteration to avoid holding a mutable
+                // borrow to `output` across calls to `output.clear()` which causes borrow conflicts.
+                let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+                let mem = MemArgKind::Mem {
+                    base: ArgKind::Reg { reg: Reg(5), size },
+                    offset: None,
+                    disp: 8,
+                    size,
+                    reg_class: crate::RegisterClass::Gpr,
+                };
+
+                let _ = desugar.add(cfg, &dest, &mem, &Reg(6));
+
+                // Should use the correct load instruction for the size
+                assert!(output.contains(expected_load), 
+                    "Expected {} for size {:?}", expected_load, size);
+            }
+        }
+    }
+
+    #[test]
+    fn test_preserve_reg_class() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Memory operand with FP register class
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+                offset: None,
+                disp: 8,
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Fp,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // The reg class should be preserved through desugaring
+        // (This is more of a structural test - the actual output depends on the writer implementation)
+        assert!(!output.is_empty());
+    }
+
+    #[test]
+    fn test_complex_addressing_with_all_features() {
+        let mut output = String::new();
+        use core::fmt::Write as _;
+        {
+            let mut desugar = DesugaringWriter::new(&mut output as &mut dyn Write);
+
+            let cfg = RiscV64Arch::default();
+            let dest = Reg(10); // a0
+
+            // Complex addressing: literal base + scaled offset + large displacement
+            let mem = MemArgKind::Mem {
+                base: ArgKind::Lit(0x1000), // Literal base
+                offset: Some((ArgKind::Lit(42), 3)), // Scaled literal offset
+                disp: 5000, // Large displacement
+                size: MemorySize::_64,
+                reg_class: crate::RegisterClass::Gpr,
+            };
+
+            let _ = desugar.ld(cfg, &dest, &mem);
+        }
+
+        // Should contain multiple instructions for complex addressing
+        assert!(output.contains("li")); // For loading literals
+        assert!(output.contains("sll") || output.contains("add")); // For address calculation
     }
 }

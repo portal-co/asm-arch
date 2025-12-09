@@ -197,6 +197,8 @@ impl Default for RegFormatOpts {
 pub mod out;
 /// Register handling and formatting module.
 pub mod reg;
+/// Desugaring wrapper for complex memory operands.
+pub mod desugar;
 
 #[cfg(feature = "x64_shim")]
 pub mod shim;

@@ -160,7 +160,7 @@ impl Default for RegFormatOpts {
         Self::default_with_arch(Default::default())
     }
 }
-
+pub mod desugar;
 /// Instruction output generation module.
 pub mod out;
 /// Register handling and formatting module.

@@ -8,14 +8,11 @@
 //! - `alloc`: Enables heap allocation support for dynamic collections
 
 #![no_std]
-#[cfg(feature = "alloc")]
-#[doc(hidden)]
-pub extern crate alloc;
+extern crate alloc;
+use alloc::{boxed::Box, vec::Vec};
 #[doc(hidden)]
 pub use core;
 use core::ops::Deref;
-
-use alloc::{boxed::Box, vec::Vec};
 use portal_pc_asm_common::types::{Arith, Cmp, reg::Reg};
 
 /// Represents the kind of an argument.

@@ -1,198 +1,197 @@
-//! Desugaring wrapper for RISC-V memory operands.
-//!
-//! This module provides a robust wrapper around WriterCore implementations that automatically
-//! desugars invalid memory operands and memory operands used in computational instructions
-//! into valid RISC-V instruction sequences.
-//!
-//! # Overview
-//!
-//! RISC-V has two main constraints that require desugaring:
-//!
-//! 1. **Memory addressing**: RISC-V memory instructions only support `base + disp` addressing
-//!    where disp is a 12-bit signed immediate (-2048 to 2047). Complex addressing modes
-//!    from the x86_64 shim (like `base + offset*scale + disp`) need to be desugared into
-//!    multiple instructions.
-//!
-//! 2. **Computational instructions**: RISC-V computational instructions (add, sub, mul, etc.)
-//!    cannot take memory operands directly - they only operate on registers. Memory operands
-//!    must be loaded into registers first.
-//!
-//! # Features
-//!
-//! - **Robust temporary register selection**: Automatically avoids conflicts with operand registers
-//! - **Stack spill support**: Option to save conflicting registers to stack when temporaries are exhausted
-//! - **MemorySize preservation**: Maintains correct memory access sizes across desugaring
-//! - **Register class preservation**: Maintains GPR/FP register class information
-//! - **Memory-to-memory operations**: Handles operations where both operands are memory references
-//! - **Large displacement folding**: Correctly folds large displacements into base registers
-//!
-//! # Desugaring Examples
-//!
-//! ## Memory Addressing
-//!
-//! ### Scaled Offset
-//!
-//! ```text
-//! Input:  ld x10, mem[base=x5, offset=x6, scale=3, disp=100]
-//! Output: li   t3, 3          // Load shift amount
-//!         sll  t6, x6, t3     // t6 = x6 << 3
-//!         add  t6, x5, t6     // t6 = x5 + t6
-//!         ld   x10, 100(t6)   // x10 = mem[t6 + 100]
-//! ```
-//!
-//! ### Large Displacement
-//!
-//! ```text
-//! Input:  ld x10, mem[base=x5, disp=4096]
-//! Output: li   t6, 4096       // Load large displacement
-//!         add  t6, x5, t6     // t6 = x5 + 4096
-//!         ld   x10, 0(t6)     // x10 = mem[t6 + 0]
-//! ```
-//!
-//! ### Literal Base
-//!
-//! ```text
-//! Input:  ld x10, mem[base=0x1000, disp=8]
-//! Output: li   t6, 0x1000     // Load base address
-//!         ld   x10, 8(t6)     // x10 = mem[t6 + 8]
-//! ```
-//!
-//! ## Computational Instructions
-//!
-//! ### Memory Operands in Arithmetic
-//!
-//! ```text
-//! Input:  add x10, x5, mem[base=x6, disp=8]
-//! Output: ld   t6, 8(x6)      // Load memory operand
-//!         add  x10, x5, t6    // Perform addition
-//! ```
-//!
-//! ### Large Immediates in ALU Operations
-//!
-//! ```text
-//! Input:  addi x10, x5, 5000  // 5000 > 2047 (12-bit limit)
-//! Output: li   t4, 5000       // Load large immediate
-//!         add  x10, x5, t4    // Perform addition
-//! ```
-//!
-//! ### Literal Operands in Computational Instructions
-//!
-//! ```text
-//! Input:  add x10, x5, 42     // Literal operand in add
-//! Output: li   t6, 42         // Load literal
-//!         add  x10, x5, t6    // Perform addition
-//! ```
-//!
-//! ### Literal Operands in Move Instructions
-//!
-//! ```text
-//! Input:  mv x10, 123         // Literal operand in mv
-//! Output: li   x10, 123       // Load literal directly
-//! ```
-//!
-//! ### Branch Instructions
-//!
-//! ```text
-//! Input:  beq mem[base=x5, disp=8], x6, label
-//! Output: ld   t6, 8(x5)      // Load memory operand
-//!         beq  t6, x6, label  // Perform comparison
-//!
-//! Input:  beq 42, x6, label   // Literal operand in branch
-//! Output: li   t6, 42         // Load literal
-//!         beq  t6, x6, label  // Perform comparison
-//! ```
-//!
-//! ### Large Offsets in Jumps
-//!
-//! ```text
-//! Input:  jalr ra, x5, 3000   // 3000 > 2047 (12-bit limit)
-//! Output: li   t4, 3000       // Load large offset
-//!         add  t4, x5, t4     // Compute target address
-//!         jalr ra, t4, 0      // Jump to computed address
-//! ```
-//!
-//! # Usage
-//!
-//! Wrap any WriterCore implementation with DesugaringWriter to automatically handle
-//! all invalid memory operands:
-//!
-//! ```ignore
-//! use portal_solutions_asm_riscv64::{
-//!     desugar::DesugaringWriter,
-//!     out::asm::AsmWriter,
-//!     RiscV64Arch,
-//! };
-//! use portal_pc_asm_common::types::reg::Reg;
-//!
-//! let mut output = String::new();
-//! let mut writer = AsmWriter::new(&mut output);
-//! let mut desugar = DesugaringWriter::new(&mut writer);
-//!
-//! let cfg = RiscV64Arch::default();
-//! let dest = Reg(10); // a0
-//!
-//! // Complex memory operand with scaled offset
-//! let mem = MemArgKind::Mem {
-//!     base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
-//!     offset: Some((ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 }, 3)),
-//!     disp: 8,
-//!     size: MemorySize::_64,
-//!     reg_class: RegisterClass::Gpr,
-//! };
-//!
-//! // This automatically desugars to multiple instructions
-//! desugar.ld(cfg, &dest, &mem)?;
-//!
-//! // Computational instructions with memory operands also work
-//! desugar.add(cfg, &dest, &Reg(5), &mem)?; // Loads mem into temp, then adds
-//!
-//! // Large immediates are also desugared
-//! desugar.addi(cfg, &dest, &Reg(5), 5000)?; // Desugars to li + add
-//!
-//! // Literal operands in computational instructions are desugared
-//! let literal = MemArgKind::NoMem(ArgKind::Lit(42));
-//! desugar.add(cfg, &dest, &Reg(5), &literal)?; // Desugars to li + add
-//! ```
-//!
-//! # Desugaring Examples
-//!
-//! ## Scaled Offset
-//!
-//! ```text
-//! Input:  ld x10, mem[base=x5, offset=x6, scale=3, disp=100]
-//! Output: li   t3, 3          // Load shift amount
-//!         sll  t6, x6, t3     // t6 = x6 << 3
-//!         add  t6, x5, t6     // t6 = x5 + t6
-//!         ld   x10, 100(t6)   // x10 = mem[t6 + 100]
-//! ```
-//!
-//! ## Large Displacement
-//!
-//! ```text
-//! Input:  ld x10, mem[base=x5, disp=4096]
-//! Output: li   t6, 4096       // Load large displacement
-//!         add  t6, x5, t6     // t6 = x5 + 4096
-//!         ld   x10, 0(t6)     // x10 = mem[t6 + 0]
-//! ```
-//!
-//! # Configuration
-//!
-//! By default, the desugaring wrapper uses t6 (x31) as the temporary register.
-//! You can customize this with DesugarConfig:
-//!
-//! ```ignore
-//! let config = DesugarConfig {
-//!     temp_reg: Reg(28), // Use t3 instead
-//! };
-//! let mut desugar = DesugaringWriter::with_config(&mut writer, config);
-//! ```
+// Desugaring wrapper for RISC-V memory operands.
+//
+// This module provides a robust wrapper around WriterCore implementations that automatically
+// desugars invalid memory operands and memory operands used in computational instructions
+// into valid RISC-V instruction sequences.
+//
+// # Overview
+//
+// RISC-V has two main constraints that require desugaring:
+//
+// 1. **Memory addressing**: RISC-V memory instructions only support `base + disp` addressing
+//    where disp is a 12-bit signed immediate (-2048 to 2047). Complex addressing modes
+//    from the x86_64 shim (like `base + offset*scale + disp`) need to be desugared into
+//    multiple instructions.
+//
+// 2. **Computational instructions**: RISC-V computational instructions (add, sub, mul, etc.)
+//    cannot take memory operands directly - they only operate on registers. Memory operands
+//    must be loaded into registers first.
+//
+// # Features
+//
+// - **Robust temporary register selection**: Automatically avoids conflicts with operand registers
+// - **Stack spill support**: Option to save conflicting registers to stack when temporaries are exhausted
+// - **MemorySize preservation**: Maintains correct memory access sizes across desugaring
+// - **Register class preservation**: Maintains GPR/FP register class information
+// - **Memory-to-memory operations**: Handles operations where both operands are memory references
+// - **Large displacement folding**: Correctly folds large displacements into base registers
+//
+// # Desugaring Examples
+//
 
-use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
-
-#[cfg(feature = "alloc")]
 extern crate alloc;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
+// ## Memory Addressing
+//
+// ### Scaled Offset
+//
+// ```text
+// Input:  ld x10, mem[base=x5, offset=x6, scale=3, disp=100]
+// Output: li   t3, 3          // Load shift amount
+//         sll  t6, x6, t3     // t6 = x6 << 3
+//         add  t6, x5, t6     // t6 = x5 + t6
+//         ld   x10, 100(t6)   // x10 = mem[t6 + 100]
+// ```
+//
+// ### Large Displacement
+//
+// ```text
+// Input:  ld x10, mem[base=x5, disp=4096]
+// Output: li   t6, 4096       // Load large displacement
+//         add  t6, x5, t6     // t6 = x5 + 4096
+//         ld   x10, 0(t6)     // x10 = mem[t6 + 0]
+// ```
+//
+// ### Literal Base
+//
+// ```text
+// Input:  ld x10, mem[base=0x1000, disp=8]
+// Output: li   t6, 0x1000     // Load base address
+//         ld   x10, 8(t6)     // x10 = mem[t6 + 8]
+// ```
+//
+// ## Computational Instructions
+//
+// ### Memory Operands in Arithmetic
+//
+// ```text
+// Input:  add x10, x5, mem[base=x6, disp=8]
+// Output: ld   t6, 8(x6)      // Load memory operand
+//         add  x10, x5, t6    // Perform addition
+// ```
+//
+// ### Large Immediates in ALU Operations
+//
+// ```text
+// Input:  addi x10, x5, 5000  // 5000 > 2047 (12-bit limit)
+// Output: li   t4, 5000       // Load large immediate
+//         add  x10, x5, t4    // Perform addition
+// ```
+//
+// ### Literal Operands in Computational Instructions
+//
+// ```text
+// Input:  add x10, x5, 42     // Literal operand in add
+// Output: li   t6, 42         // Load literal
+//         add  x10, x5, t6    // Perform addition
+// ```
+//
+// ### Literal Operands in Move Instructions
+//
+// ```text
+// Input:  mv x10, 123         // Literal operand in mv
+// Output: li   x10, 123       // Load literal directly
+// ```
+//
+// ### Branch Instructions
+//
+// ```text
+// Input:  beq mem[base=x5, disp=8], x6, label
+// Output: ld   t6, 8(x5)      // Load memory operand
+//         beq  t6, x6, label  // Perform comparison
+//
+// Input:  beq 42, x6, label   // Literal operand in branch
+// Output: li   t6, 42         // Load literal
+//         beq  t6, x6, label  // Perform comparison
+// ```
+//
+// ### Large Offsets in Jumps
+//
+// ```text
+// Input:  jalr ra, x5, 3000   // 3000 > 2047 (12-bit limit)
+// Output: li   t4, 3000       // Load large offset
+//         add  t4, x5, t4     // Compute target address
+//         jalr ra, t4, 0      // Jump to computed address
+// ```
+//
+// # Usage
+//
+// Wrap any WriterCore implementation with DesugaringWriter to automatically handle
+// all invalid memory operands:
+//
+// ```ignore
+// use portal_solutions_asm_riscv64::{
+//     desugar::DesugaringWriter,
+//     out::asm::AsmWriter,
+//     RiscV64Arch,
+// };
+// use portal_pc_asm_common::types::reg::Reg;
+//
+// let mut output = String::new();
+// let mut writer = AsmWriter::new(&mut output);
+// let mut desugar = DesugaringWriter::new(&mut writer);
+//
+// let cfg = RiscV64Arch::default();
+// let dest = Reg(10); // a0
+//
+// // Complex memory operand with scaled offset
+// let mem = MemArgKind::Mem {
+//     base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 },
+//     offset: Some((ArgKind::Reg { reg: Reg(6), size: MemorySize::_64 }, 3)),
+//     disp: 8,
+//     size: MemorySize::_64,
+//     reg_class: RegisterClass::Gpr,
+// };
+//
+// // This automatically desugars to multiple instructions
+// desugar.ld(cfg, &dest, &mem)?;
+//
+// // Computational instructions with memory operands also work
+// desugar.add(cfg, &dest, &Reg(5), &mem)?; // Loads mem into temp, then adds
+//
+// // Large immediates are also desugared
+// desugar.addi(cfg, &dest, &Reg(5), 5000)?; // Desugars to li + add
+//
+// // Literal operands in computational instructions are desugared
+// let literal = MemArgKind::NoMem(ArgKind::Lit(42));
+// desugar.add(cfg, &dest, &Reg(5), &literal)?; // Desugars to li + add
+// ```
+//
+// # Desugaring Examples
+//
+// ## Scaled Offset
+//
+// ```text
+// Input:  ld x10, mem[base=x5, offset=x6, scale=3, disp=100]
+// Output: li   t3, 3          // Load shift amount
+//         sll  t6, x6, t3     // t6 = x6 << 3
+//         add  t6, x5, t6     // t6 = x5 + t6
+//         ld   x10, 100(t6)   // x10 = mem[t6 + 100]
+// ```
+//
+// ## Large Displacement
+//
+// ```text
+// Input:  ld x10, mem[base=x5, disp=4096]
+// Output: li   t6, 4096       // Load large displacement
+//         add  t6, x5, t6     // t6 = x5 + 4096
+//         ld   x10, 0(t6)     // x10 = mem[t6 + 0]
+// ```
+//
+// # Configuration
+//
+// By default, the desugaring wrapper uses t6 (x31) as the temporary register.
+// You can customize this with DesugarConfig:
+//
+// ```ignore
+// let config = DesugarConfig {
+//     temp_reg: Reg(28), // Use t3 instead
+// };
+// let mut desugar = DesugaringWriter::with_config(&mut writer, config);
+// ```
+
+use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
 
 use crate::{
     out::{
@@ -246,12 +245,19 @@ struct StackSpillManager {
     reserved_slots: i32,
     used_slots: i32,
     slot_size: i32,
-    saved_regs: Vec<Reg>,
+    saved_regs: [Option<Reg>; 32],
+    saved_regs_len: usize,
 }
 
 impl StackSpillManager {
     fn new(slot_size: i32) -> Self {
-        Self { reserved_slots: 0, used_slots: 0, slot_size, saved_regs: Vec::new() }
+        Self {
+            reserved_slots: 0,
+            used_slots: 0,
+            slot_size,
+            saved_regs: [None; 32],
+            saved_regs_len: 0,
+        }
     }
 
     fn save_reg<W: WriterCore + ?Sized>(
@@ -268,7 +274,8 @@ impl StackSpillManager {
             writer.addi(arch, &sp, &sp, -total)?;
             self.reserved_slots = reserve;
             self.used_slots = 0;
-            self.saved_regs.clear();
+            self.saved_regs = [None; 32];
+            self.saved_regs_len = 0;
         }
 
         // store reg at offset = used_slots * slot_size
@@ -281,7 +288,8 @@ impl StackSpillManager {
             reg_class: crate::RegisterClass::Gpr,
         };
         writer.sd(arch, &reg, &mem)?;
-        self.saved_regs.push(reg);
+        self.saved_regs[self.saved_regs_len] = Some(reg);
+        self.saved_regs_len += 1;
         self.used_slots += 1;
         Ok(())
     }
@@ -298,7 +306,8 @@ impl StackSpillManager {
         }
 
         // Expect LIFO: last saved reg should match 'reg'. If not, search.
-        let last = self.saved_regs.pop().unwrap();
+        self.saved_regs_len -= 1;
+        let last = self.saved_regs[self.saved_regs_len].unwrap();
         self.used_slots -= 1;
         let offset = self.used_slots * self.slot_size;
         let mem = MemArgKind::Mem {
@@ -319,7 +328,8 @@ impl StackSpillManager {
             let sp = Reg(2);
             writer.addi(arch, &sp, &sp, total)?;
             self.reserved_slots = 0;
-            self.saved_regs.clear();
+            self.saved_regs = [None; 32];
+            self.saved_regs_len = 0;
         }
 
         Ok(())
@@ -350,7 +360,8 @@ impl StackSpillManager {
                 reg_class: crate::RegisterClass::Gpr,
             };
             // Load into the corresponding saved register
-            let reg = self.saved_regs.pop().expect("saved_regs mismatch");
+            self.saved_regs_len -= 1;
+            let reg = self.saved_regs[self.saved_regs_len].expect("saved_regs mismatch");
             writer.ld(arch, &reg, &mem)?;
         }
 
@@ -519,12 +530,14 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 reg_class,
             } => {
                 // Collect registers to avoid conflicts
-                let mut avoid_regs = Vec::new();
+                let mut avoid_regs = [Reg(0); 32];
+                let mut avoid_regs_len = 0;
                 
                 // Handle base
                 let base_reg = match base {
                     ArgKind::Reg { reg, .. } => {
-                        avoid_regs.push(*reg);
+                        avoid_regs[avoid_regs_len] = *reg;
+                        avoid_regs_len += 1;
                         *reg
                     },
                     ArgKind::Lit(val) => {
@@ -541,7 +554,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                                 self.restore_reg_from_stack(arch, reg_to_save)?;
                             }
                         }
-                        avoid_regs.push(temp);
+                        avoid_regs[avoid_regs_len] = temp;
+                        avoid_regs_len += 1;
                         temp
                     }
                 };
@@ -553,12 +567,13 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     // Get the offset value into a register
                     let offset_reg = match offset_arg {
                         ArgKind::Reg { reg, .. } => {
-                            avoid_regs.push(*reg);
+                            avoid_regs[avoid_regs_len] = *reg;
+                        avoid_regs_len += 1;
                             *reg
                         },
                         ArgKind::Lit(val) => {
                             // Load literal offset into a temp register that doesn't conflict
-                            let (temp, needs_save, saved_reg) = self.select_temp_reg(&avoid_regs);
+                        let (temp, needs_save, saved_reg) = self.select_temp_reg(&avoid_regs);
                             if needs_save {
                                 if let Some(reg_to_save) = saved_reg {
                                     self.save_reg_to_stack(arch, reg_to_save)?;
@@ -570,7 +585,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                                     self.restore_reg_from_stack(arch, reg_to_save)?;
                                 }
                             }
-                            avoid_regs.push(temp);
+                            avoid_regs[avoid_regs_len] = temp;
+                        avoid_regs_len += 1;
                             temp
                         }
                     };
@@ -586,14 +602,10 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         }
                         
                         // Select shift register that doesn't conflict
-                        let mut shift_avoid = avoid_regs.clone();
-                        shift_avoid.push(result_reg);
-                        let (shift_reg, shift_needs_save, shift_saved_reg) = self.select_temp_reg(&shift_avoid);
-                        if shift_needs_save {
-                            if let Some(reg_to_save) = shift_saved_reg {
-                                self.save_reg_to_stack(arch, reg_to_save)?;
-                            }
-                        }
+                        let mut shift_avoid = [Reg(0); 33]; // avoid_regs_len + 1
+                        shift_avoid[..avoid_regs_len].copy_from_slice(&avoid_regs[..avoid_regs_len]);
+                        shift_avoid[avoid_regs_len] = result_reg;
+                        let (shift_reg, shift_needs_save, shift_saved_reg) = self.select_temp_reg(&shift_avoid[..avoid_regs_len + 1]);
 
                         // Load shift amount
                         self.writer.li(arch, &shift_reg, *scale as u64)?;

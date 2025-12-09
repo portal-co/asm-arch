@@ -1,14 +1,15 @@
-//! Stack management and optimization for x86-64.
+//! Stack management and optimization for AArch64.
 //!
 //! This module provides advanced stack management capabilities including:
 //! - Offset-based stack data access
 //! - Inter-instruction stack optimization
 //! - Stack layout tracking and manipulation
 //! - Push/pop caching with conflict avoidance
+//! - Stack offset fixups for local variable access
 
 use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
 
-use crate::{out::{arg::{ArgKind, MemArgKind}, WriterCore}, RegisterClass, X64Arch};
+use crate::{out::{arg::{ArgKind, MemArgKind}, WriterCore}, RegisterClass, AArch64Arch};
 
 /// Represents a stack slot with its offset and size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,11 +103,12 @@ impl StackManager {
     /// Creates a memory argument for stack access at the given offset.
     pub fn stack_mem_arg(&self, offset: i32, size: MemorySize, reg_class: RegisterClass) -> MemArgKind<ArgKind> {
         MemArgKind::Mem {
-            base: ArgKind::Reg { reg: Reg(4), size: MemorySize::_64 }, // rsp
+            base: ArgKind::Reg { reg: Reg(31), size: MemorySize::_64 }, // sp
             offset: None,
-            disp: offset as u32,
+            disp: offset,
             size,
             reg_class,
+            mode: crate::out::arg::AddressingMode::Offset,
         }
     }
 
@@ -117,11 +119,12 @@ impl StackManager {
         // Each local takes 8 bytes, so local N is at -(N+1)*8 from fp
         let offset = -((local as i32 + 1) * 8);
         MemArgKind::Mem {
-            base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 }, // rbp (frame pointer)
+            base: ArgKind::Reg { reg: Reg(29), size: MemorySize::_64 }, // fp (x29)
             offset: None,
-            disp: offset as u32,
+            disp: offset,
             size,
             reg_class,
+            mode: crate::out::arg::AddressingMode::Offset,
         }
     }
 
@@ -138,7 +141,7 @@ impl StackManager {
     pub fn optimize_and_execute<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
     ) -> Result<bool, W::Error> {
         if self.pending_count == 0 {
             return Ok(false);
@@ -168,10 +171,28 @@ impl StackManager {
             if let Some(op) = self.pending_ops[j] {
                 match op {
                     StackAccess::Push(reg) => {
-                        writer.push(arch, &reg)?;
+                        // AArch64 push: str with pre-indexed addressing
+                        let mem = MemArgKind::Mem {
+                            base: ArgKind::Reg { reg: Reg(31), size: MemorySize::_64 }, // sp
+                            offset: None,
+                            disp: -8,
+                            size: MemorySize::_64,
+                            reg_class: RegisterClass::Gpr,
+                            mode: crate::out::arg::AddressingMode::PreIndex,
+                        };
+                        writer.str(arch, &reg, &mem)?;
                     }
                     StackAccess::Pop(reg) => {
-                        writer.pop(arch, &reg)?;
+                        // AArch64 pop: ldr with post-indexed addressing
+                        let mem = MemArgKind::Mem {
+                            base: ArgKind::Reg { reg: Reg(31), size: MemorySize::_64 }, // sp
+                            offset: None,
+                            disp: 8,
+                            size: MemorySize::_64,
+                            reg_class: RegisterClass::Gpr,
+                            mode: crate::out::arg::AddressingMode::PostIndex,
+                        };
+                        writer.ldr(arch, &reg, &mem)?;
                     }
                     StackAccess::Access { offset: _, size: _ } => {
                         // Direct access - no stack pointer change needed
@@ -190,31 +211,33 @@ impl StackManager {
     pub fn push<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
         reg: &Reg,
     ) -> Result<(), W::Error> {
         self.record_operation(StackAccess::Push(*reg));
-        // For now, delegate to writer - in future this could be optimized
-        writer.push(arch, reg)
+        // For now, delegate to optimized execution
+        self.optimize_and_execute(writer, arch)?;
+        Ok(())
     }
 
     /// Performs an optimized pop operation.
     pub fn pop<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
         reg: &Reg,
     ) -> Result<(), W::Error> {
         self.record_operation(StackAccess::Pop(*reg));
-        // For now, delegate to writer - in future this could be optimized
-        writer.pop(arch, reg)
+        // For now, delegate to optimized execution
+        self.optimize_and_execute(writer, arch)?;
+        Ok(())
     }
 
     /// Accesses stack data at the given offset with optimization.
     pub fn access_stack<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
         offset: i32,
         size: MemorySize,
         reg_class: RegisterClass,
@@ -226,7 +249,7 @@ impl StackManager {
         let mem_arg = self.stack_mem_arg(offset, size, reg_class);
 
         // Perform the access
-        writer.mov(arch, dest, &mem_arg)
+        writer.ldr(arch, dest, &mem_arg)
     }
 
     /// Accesses a local variable using frame pointer with proper offset fixups.
@@ -234,7 +257,7 @@ impl StackManager {
     pub fn get_local<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
         local: u32,
         size: MemorySize,
         reg_class: RegisterClass,
@@ -244,7 +267,7 @@ impl StackManager {
         let mem_arg = self.local_mem_arg(local, size, reg_class);
 
         // Perform the load
-        writer.mov(arch, dest, &mem_arg)
+        writer.ldr(arch, dest, &mem_arg)
     }
 
     /// Stores a value to a local variable using frame pointer with proper offset fixups.
@@ -252,7 +275,7 @@ impl StackManager {
     pub fn set_local<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
         local: u32,
         size: MemorySize,
         reg_class: RegisterClass,
@@ -262,7 +285,7 @@ impl StackManager {
         let mem_arg = self.local_mem_arg(local, size, reg_class);
 
         // Perform the store
-        writer.mov(arch, &mem_arg, src)
+        writer.str(arch, src, &mem_arg)
     }
 
     /// Gets the number of pending operations.
@@ -280,19 +303,19 @@ impl StackManager {
         &self.stack_slots[..self.stack_depth]
     }
 
-    /// Checks if RSP (stack pointer) is used in any pending operations.
-    pub fn uses_rsp(&self) -> bool {
-        let rsp = Reg(4); // RSP register
+    /// Checks if SP (stack pointer) is used in any pending operations.
+    pub fn uses_sp(&self) -> bool {
+        let sp = Reg(31); // SP register
         for i in 0..self.pending_count {
             if let Some(op) = self.pending_ops[i] {
                 match op {
                     StackAccess::Push(reg) | StackAccess::Pop(reg) => {
-                        if reg == rsp {
+                        if reg == sp {
                             return true;
                         }
                     }
                     StackAccess::Access { .. } => {
-                        // Access operations use RSP implicitly for addressing
+                        // Access operations use SP implicitly for addressing
                         return true;
                     }
                 }
@@ -301,12 +324,12 @@ impl StackManager {
         false
     }
 
-    /// Flushes all pending stack operations before an RSP-using instruction.
-    /// This ensures the stack is in a consistent state for RSP operations.
-    pub fn flush_before_rsp_use<W: WriterCore + ?Sized>(
+    /// Flushes all pending stack operations before an SP-using instruction.
+    /// This ensures the stack is in a consistent state for SP operations.
+    pub fn flush_before_sp_use<W: WriterCore + ?Sized>(
         &mut self,
         writer: &mut W,
-        arch: X64Arch,
+        arch: AArch64Arch,
     ) -> Result<(), W::Error> {
         if self.pending_count > 0 {
             self.optimize_and_execute(writer, arch)?;

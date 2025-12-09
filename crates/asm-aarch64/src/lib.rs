@@ -165,6 +165,8 @@ pub mod desugar;
 pub mod out;
 /// Register handling and formatting module.
 pub mod reg;
+/// Stack management and optimization module.
+pub mod stack;
 
 #[cfg(feature = "x64_shim")]
 pub mod shim;

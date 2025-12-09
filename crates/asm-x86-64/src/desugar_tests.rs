@@ -96,7 +96,9 @@ mod tests {
         let dest = Reg(0);
         desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
 
-        assert!(!writer.out.is_empty());
+        // Current desugar uses a placeholder 0 when handling literal base in this code path
+        let expected = "mov64 r15 , 0\nmov r14 , qword ptr [r15+8]\nmov rax , r14\n";
+        assert_eq!(writer.out, expected);
     }
 
     #[test]
@@ -115,7 +117,17 @@ mod tests {
 
         let dest = Reg(1);
         desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
-        assert!(!writer.out.is_empty());
+        // Expected sequence for invalid scale (scale=3) — note: current desugar uses placeholder base/offset
+        // mov64 r15 , 0
+        // mov r14 , r15
+        // mov64 r13 , 3
+        // mul r14 , r13
+        // mov r15 , rax
+        // add r15 , r14
+        // mov r14 , qword ptr [r15+8]
+        // mov rcx , r14
+        let expected = "mov64 r15 , 0\nmov r14 , r15\nmov64 r13 , 3\nmul r14 , r13\nmov r15 , rax\nadd r15 , r14\nmov r14 , qword ptr [r15+8]\nmov rcx , r14\n";
+        assert_eq!(writer.out, expected);
     }
 
     #[test]
@@ -140,6 +152,7 @@ mod tests {
         };
 
         desugar.mov(cfg, &dest, &src).expect("mem->mem mov should succeed");
-        assert!(!writer.out.is_empty());
+        let expected = "mov r15 , qword ptr [rdx+4]\nmov qword ptr [rbx+12] , r15\n";
+        assert_eq!(writer.out, expected);
     }
 }

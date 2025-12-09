@@ -160,7 +160,11 @@ impl Default for RegFormatOpts {
         Self::default_with_arch(Default::default())
     }
 }
+pub mod desugar;
 
+// Include desugar tests module so #[cfg(test)] files are picked up by `cargo test`.
+#[cfg(all(test, feature = "alloc"))]
+mod desugar_tests;
 /// Instruction output generation module.
 pub mod out;
 /// Register handling and formatting module.

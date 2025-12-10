@@ -4,8 +4,8 @@
 //! allocator, including register kind definitions, Cmd processing, and state
 //! initialization.
 
+use crate::{X64Arch, out::WriterCore, stack::StackManager};
 use portal_solutions_asm_regalloc::{Cmd, RegAlloc, RegAllocFrame};
-use crate::{out::WriterCore, stack::StackManager, X64Arch};
 
 /// Register kind for x86-64.
 ///
@@ -20,7 +20,7 @@ pub enum RegKind {
 
 impl TryFrom<usize> for RegKind {
     type Error = ();
-    
+
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(RegKind::Int),
@@ -47,7 +47,7 @@ pub fn process_cmd<E: core::error::Error>(
     stack_manager: Option<&mut StackManager>,
 ) -> Result<(), E> {
     use portal_pc_asm_common::types::reg::Reg;
-    
+
     match cmd {
         Cmd::Push(target) => {
             let reg = Reg(target.reg);
@@ -68,9 +68,7 @@ pub fn process_cmd<E: core::error::Error>(
 
                     // Adjust stack: sub rsp, 8
                     let rsp = Reg(4);
-                    let imm8 = crate::out::arg::MemArgKind::NoMem(
-                        crate::out::arg::ArgKind::Lit(8)
-                    );
+                    let imm8 = crate::out::arg::MemArgKind::NoMem(crate::out::arg::ArgKind::Lit(8));
                     writer.sub(arch, &rsp, &imm8)?;
                     // Store the XMM register to [rsp]
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -112,9 +110,7 @@ pub fn process_cmd<E: core::error::Error>(
                     };
                     writer.fmov(arch, &reg, &mem)?;
                     // Adjust stack back: add rsp, 8
-                    let imm8 = crate::out::arg::MemArgKind::NoMem(
-                        crate::out::arg::ArgKind::Lit(8)
-                    );
+                    let imm8 = crate::out::arg::MemArgKind::NoMem(crate::out::arg::ArgKind::Lit(8));
                     writer.add(arch, &rsp, &imm8)
                 }
             }
@@ -147,31 +143,7 @@ pub fn process_cmd<E: core::error::Error>(
                 }
             }
         }
-        Cmd::SetLocal { src, local } => {
-            let reg = Reg(src.reg);
-            // Calculate offset from rbp for locals (negative for downward growth)
-            let offset = -((*local as i32 + 1) * 8);
-            let size = portal_pc_asm_common::types::mem::MemorySize::_64;
-            let reg_class = match src.kind {
-                RegKind::Int => crate::RegisterClass::Gpr,
-                RegKind::Float => crate::RegisterClass::Xmm,
-            };
 
-            // For setting locals, create memory argument and store
-            let mem = crate::out::arg::MemArgKind::Mem {
-                base: Reg(5), // rbp for locals
-                offset: None,
-                disp: offset as u32,
-                size,
-                reg_class,
-            };
-            match src.kind {
-                RegKind::Int => writer.mov(arch, &mem, &reg),
-                RegKind::Float => writer.fmov(arch, &mem, &reg),
-            }
-        }
-            }
-        }
         Cmd::SetLocal { src, local } => {
             let reg = Reg(src.reg);
             // Calculate offset from rbp for locals (negative for downward growth)
@@ -183,7 +155,9 @@ pub fn process_cmd<E: core::error::Error>(
             };
 
             // Use offset-based stack access if writer supports it
-            if let Some(desugaring_writer) = writer.downcast_mut::<crate::desugar::DesugaringWriter<'_, _>>() {
+            if let Some(desugaring_writer) =
+                writer.downcast_mut::<crate::desugar::DesugaringWriter<'_, _>>()
+            {
                 // For setting locals, we need to store to memory
                 let mem = crate::out::arg::MemArgKind::Mem {
                     base: Reg(5), // rbp for locals
@@ -209,27 +183,6 @@ pub fn process_cmd<E: core::error::Error>(
                     RegKind::Int => writer.mov(arch, &mem, &reg),
                     RegKind::Float => writer.fmov(arch, &mem, &reg),
                 }
-            }
-        }
-        }
-        Cmd::SetLocal { src, local } => {
-            let reg = Reg(src.reg);
-            // Calculate negative offset from rbp for locals
-            // Using two's complement representation for negative offsets
-            let disp = (-((*local as i32 + 1) * 8)) as u32;
-            let mem = crate::out::arg::MemArgKind::Mem {
-                base: Reg(5), // rbp for locals
-                offset: None,
-                disp, // locals are negative offsets from rbp
-                size: portal_pc_asm_common::types::mem::MemorySize::_64,
-                reg_class: match src.kind {
-                    RegKind::Int => crate::RegisterClass::Gpr,
-                    RegKind::Float => crate::RegisterClass::Xmm,
-                },
-            };
-            match src.kind {
-                RegKind::Int => writer.mov(arch, &mem, &reg),
-                RegKind::Float => writer.fmov(arch, &mem, &reg),
             }
         }
     }
@@ -268,22 +221,21 @@ pub fn init_regalloc<const N: usize>(
     _arch: X64Arch,
 ) -> RegAlloc<RegKind, N, [[RegAllocFrame<RegKind>; N]; 2]> {
     // Initialize integer register frame
-    let mut int_frame: [RegAllocFrame<RegKind>; N] = 
-        core::array::from_fn(|_| RegAllocFrame::Empty);
-    
+    let mut int_frame: [RegAllocFrame<RegKind>; N] = core::array::from_fn(|_| RegAllocFrame::Empty);
+
     // Reserve rsp (4) and rbp (5) for stack and frame pointer
-    if N > 4 { int_frame[4] = RegAllocFrame::Reserved; }
-    if N > 5 { int_frame[5] = RegAllocFrame::Reserved; }
-    
+    if N > 4 {
+        int_frame[4] = RegAllocFrame::Reserved;
+    }
+    if N > 5 {
+        int_frame[5] = RegAllocFrame::Reserved;
+    }
+
     // Initialize float register frame
-    let float_frame: [RegAllocFrame<RegKind>; N] = 
-        core::array::from_fn(|_| RegAllocFrame::Empty);
-    
+    let float_frame: [RegAllocFrame<RegKind>; N] = core::array::from_fn(|_| RegAllocFrame::Empty);
+
     // Create frames array directly without MaybeUninit
     let frames = [int_frame, float_frame];
-    
-    RegAlloc {
-        frames,
-        tos: None,
-    }
+
+    RegAlloc { frames, tos: None }
 }

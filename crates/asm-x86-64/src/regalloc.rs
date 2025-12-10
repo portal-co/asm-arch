@@ -154,35 +154,17 @@ pub fn process_cmd<E: core::error::Error>(
                 RegKind::Float => crate::RegisterClass::Xmm,
             };
 
-            // Use offset-based stack access if writer supports it
-            if let Some(desugaring_writer) =
-                writer.downcast_mut::<crate::desugar::DesugaringWriter<'_, _>>()
-            {
-                // For setting locals, we need to store to memory
-                let mem = crate::out::arg::MemArgKind::Mem {
-                    base: Reg(5), // rbp for locals
-                    offset: None,
-                    disp: offset as u32,
-                    size,
-                    reg_class,
-                };
-                match src.kind {
-                    RegKind::Int => writer.mov(arch, &mem, &reg),
-                    RegKind::Float => writer.fmov(arch, &mem, &reg),
-                }
-            } else {
-                // Fallback to direct memory access
-                let mem = crate::out::arg::MemArgKind::Mem {
-                    base: Reg(5), // rbp for locals
-                    offset: None,
-                    disp: offset as u32,
-                    size,
-                    reg_class,
-                };
-                match src.kind {
-                    RegKind::Int => writer.mov(arch, &mem, &reg),
-                    RegKind::Float => writer.fmov(arch, &mem, &reg),
-                }
+            // Fallback to direct memory access
+            let mem = crate::out::arg::MemArgKind::Mem {
+                base: Reg(5), // rbp for locals
+                offset: None,
+                disp: offset as u32,
+                size,
+                reg_class,
+            };
+            match src.kind {
+                RegKind::Int => writer.mov(arch, &mem, &reg),
+                RegKind::Float => writer.fmov(arch, &mem, &reg),
             }
         }
     }

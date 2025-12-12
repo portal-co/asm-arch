@@ -187,7 +187,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
     /// Release all pushed temporary registers, restoring the stack to its original state.
     /// This should be called when desugaring operations are complete to ensure proper stack cleanup.
-    pub fn release_all_temps(&mut self) -> Result<(), W::Error> {
+    pub fn release_all_temps(&mut self, ctx: &mut Context) -> Result<(), W::Error> {
         self.temp_manager.release_all(self.writer, ctx)
     }
 

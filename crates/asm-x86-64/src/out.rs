@@ -401,7 +401,7 @@ macro_rules! writer_dispatch {
     ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
         const _: () = {
             $(
-                impl<$($u)*> $crate::out::WriterCore for $ty{
+                impl<$($t)*, $($u)*> $crate::out::WriterCore for $ty{
                     type Error = $e;
                     fn hlt(&mut self, ctx: &mut Context, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(),Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::hlt(&mut **self, ctx, cfg)

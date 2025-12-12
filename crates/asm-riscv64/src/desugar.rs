@@ -375,7 +375,7 @@ impl StackSpillManager {
 ///
 /// This wrapper intercepts memory instructions and desugars complex addressing
 /// modes into valid RISC-V instruction sequences.
-pub struct DesugaringWriter<'a, W: WriterCore + ?Sized> {
+pub struct DesugaringWriter<'a, W, Context> where W: WriterCore<Context> + ?Sized {
     /// The underlying writer.
     writer: &'a mut W,
     /// Configuration for desugaring.
@@ -384,7 +384,7 @@ pub struct DesugaringWriter<'a, W: WriterCore + ?Sized> {
     spill_manager: StackSpillManager,
 }
 
-impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
+impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Context> {
     /// Creates a new desugaring wrapper with default configuration.
     pub fn new(writer: &'a mut W) -> Self {
         let config = DesugarConfig::default();
@@ -1084,7 +1084,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
 // Implement WriterCore for DesugaringWriter
 // We forward most methods and only intercept memory operations
-impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
+impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for DesugaringWriter<'a, W, Context> {
     type Error = W::Error;
 
     // Memory load/store instructions that need desugaring
@@ -1668,7 +1668,7 @@ self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
 
 // Implement Writer trait for DesugaringWriter
 // This enables label support - we simply forward to the underlying writer
-impl<'a, W, L> crate::out::Writer<L> for DesugaringWriter<'a, W>
+impl<'a, W, L, Context> crate::out::Writer<L, Context> for DesugaringWriter<'a, W, Context>
 where
     W: crate::out::Writer<L> + ?Sized,
 {

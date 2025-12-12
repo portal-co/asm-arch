@@ -431,7 +431,7 @@ macro_rules! writer_dispatch {
     ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
         const _: () = {
             $(
-                impl<$($t)*, $($u)*> $crate::out::WriterCore<Context> for $ty{
+                impl<$($t)*> $crate::out::WriterCore<Context> for $ty{
                     type Error = $e;
                     fn brk(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, imm: u16) -> $crate::__::core::result::Result<(),Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::brk(&mut **self, ctx, cfg, imm)
@@ -533,7 +533,7 @@ macro_rules! writer_dispatch {
                         <$ty as $crate::out::WriterCore<Context>>::fmov(&mut **self, ctx, cfg, dest, src)
                     }
                 }
-                impl<$($t)*, $($u)*>$crate::out::Writer<$l, Context> for $ty{
+                impl<$($u)*>$crate::out::Writer<$l, Context> for $ty{
                     fn set_label(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, s: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                         <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)
                     }

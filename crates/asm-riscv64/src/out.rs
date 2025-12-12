@@ -594,7 +594,7 @@ macro_rules! writer_dispatch {
     ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
         const _: () = {
             $(
-                impl<$($t)*, $($u)*> $crate::out::WriterCore<Context> for $ty{
+                impl<$($t)*> $crate::out::WriterCore<Context> for $ty{
                     type Error = $e;
                     fn ebreak(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::ebreak(&mut **self, cfg)
@@ -642,7 +642,7 @@ macro_rules! writer_dispatch {
                         <$ty as $crate::out::WriterCore<Context>>::li(&mut **self, ctx, cfg, dest, val)
                     }
                 }
-                impl<$($t)*, $($u)*>$crate::out::Writer<$l, Context> for $ty{
+                impl<$($u)*>$crate::out::Writer<$l, Context> for $ty{
                     fn set_label(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, s: $l) -> Result<(), Self::Error> {
                         <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)
                     }

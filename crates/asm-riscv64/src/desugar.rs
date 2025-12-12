@@ -629,7 +629,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                             self.save_reg_to_stack(arch, reg_to_save)?;
                         }
                     }
-                    self.wctx, riter.add(ctx, arch, &result_reg, &base_reg, &scaled_offset_reg)?;
+                    self.writer.add(ctx, arch, &result_reg, &base_reg, &scaled_offset_reg)?;
                     if needs_save {
                         if let Some(reg_to_save) = saved_reg {
                             self.restore_reg_from_stack(arch, reg_to_save)?;
@@ -655,7 +655,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
                     // Load displacement into temp and add to effective_base
                     self.writer.li(ctx, arch, &temp, (*disp as i64) as u64)?;
-                    sctx, elf.writer.add(ctx, arch, &temp, &effective_base, &temp)?;
+                    self.writer.add(ctx, arch, &temp, &effective_base, &temp)?;
                     
                     if needs_save {
                         if let Some(reg_to_save) = saved_reg {
@@ -1228,7 +1228,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-writer.add(ctx, cfg, dest, a, b)
+writer.add(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1261,7 +1261,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
             self.writer.li(ctx, cfg, &temp_reg, imm as u64)?;
             let desugared_src = self.desugar_operand(cfg, src)?;
             self.flush_sp_if_needed(cfg, &[dest, &desugared_src, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
-self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
+self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
         }
     }
 
@@ -2098,7 +2098,7 @@ mod tests {
                     disp: 8,
                     size,
                     reg_class: crate::RegisterClass::Gpr,
-};
+};
 
                 let _ = desugar.add(ctx, &dest, &mem, &Reg(6));
 

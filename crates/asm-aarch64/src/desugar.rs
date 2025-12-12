@@ -829,7 +829,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
-writer.add(ctx, cfg, dest, a, b)
+writer.add(ctx, cfg, dest, a, b)
         })
     }
 

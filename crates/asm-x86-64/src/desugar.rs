@@ -129,7 +129,7 @@ impl TempRegManager {
         while self.stack_manager.stack_depth() > 0 {
             let slots = self.stack_manager.stack_slots();
             let slot = &slots[slots.len() - 1];
-            writerctx, .pop(ctx, X64Arch::default(), &Reg(slot.offset as u8))?; // This is a hack - we need to track actual registers
+            writer, .pop(ctx, X64Arch::default(), &Reg(slot.offset as u8))?; // This is a hack - we need to track actual registers
             self.stack_manager.deallocate_slot();
         }
         Ok(())

@@ -18,13 +18,14 @@
 //! - **Complex addressing**: RISC-V only supports base+imm12, scaled addressing needs extra instructions
 //! - **Parity flags**: No direct equivalent
 
-use portal_pc_asm_common::types::{reg::Reg, mem::MemorySize};
-use portal_solutions_asm_x86_64::{
-    ConditionCode as X64ConditionCode,
-    X64Arch,
-    out::{WriterCore as X64WriterCore, Writer as X64Writer, arg::MemArg as X64MemArg},
-};
+use core::task::Context;
+
 use crate::out::arg::MemArg;
+use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
+use portal_solutions_asm_x86_64::{
+    ConditionCode as X64ConditionCode, X64Arch,
+    out::{Writer as X64Writer, WriterCore as X64WriterCore, arg::MemArg as X64MemArg},
+};
 
 /// Label type for shim system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -50,23 +51,33 @@ impl<'a> MemArgAdapter<'a> {
 }
 
 impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
-    fn mem_kind(&self, go: &mut (dyn FnMut(crate::out::arg::MemArgKind<&'_ (dyn crate::out::arg::Arg + '_)>) + '_)) {
-        use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
+    fn mem_kind(
+        &self,
+        go: &mut (dyn FnMut(crate::out::arg::MemArgKind<&'_ (dyn crate::out::arg::Arg + '_)>) + '_),
+    ) {
         use crate::out::arg::MemArgKind as RiscVMemArgKind;
-        
+        use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
+
         let x64_kind = self.inner.concrete_mem_kind();
-        
+
         match x64_kind {
             X64MemArgKind::NoMem(arg) => {
                 let riscv_arg = convert_arg_kind(arg, self.arch);
                 go(RiscVMemArgKind::NoMem(&riscv_arg));
             }
-            X64MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+            X64MemArgKind::Mem {
+                base,
+                offset,
+                disp,
+                size,
+                reg_class,
+            } => {
                 let riscv_base = convert_arg_kind(base, self.arch);
-                let riscv_offset = offset.map(|(off, scale)| (convert_arg_kind(off, self.arch), scale));
+                let riscv_offset =
+                    offset.map(|(off, scale)| (convert_arg_kind(off, self.arch), scale));
                 let riscv_disp = disp as i32;
                 let riscv_reg_class = convert_register_class(reg_class);
-                
+
                 match &riscv_offset {
                     None => {
                         go(RiscVMemArgKind::Mem {
@@ -97,14 +108,20 @@ impl<'a> crate::out::arg::MemArg for MemArgAdapter<'a> {
 }
 
 /// Converts x86-64 ArgKind to RISC-V ArgKind with register mapping.
-fn convert_arg_kind(arg: portal_solutions_asm_x86_64::out::arg::ArgKind, arch: X64Arch) -> crate::out::arg::ArgKind {
-    use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
+fn convert_arg_kind(
+    arg: portal_solutions_asm_x86_64::out::arg::ArgKind,
+    arch: X64Arch,
+) -> crate::out::arg::ArgKind {
     use crate::out::arg::ArgKind as RiscVArgKind;
-    
+    use portal_solutions_asm_x86_64::out::arg::ArgKind as X64ArgKind;
+
     match arg {
         X64ArgKind::Reg { reg, size } => {
             let riscv_reg = map_x64_register_to_riscv(reg, arch);
-            RiscVArgKind::Reg { reg: riscv_reg, size }
+            RiscVArgKind::Reg {
+                reg: riscv_reg,
+                size,
+            }
         }
         X64ArgKind::Lit(val) => RiscVArgKind::Lit(val),
         _ => RiscVArgKind::Lit(0),
@@ -112,10 +129,12 @@ fn convert_arg_kind(arg: portal_solutions_asm_x86_64::out::arg::ArgKind, arch: X
 }
 
 /// Converts x86-64 RegisterClass to RISC-V RegisterClass.
-fn convert_register_class(reg_class: portal_solutions_asm_x86_64::RegisterClass) -> crate::RegisterClass {
-    use portal_solutions_asm_x86_64::RegisterClass as X64RegClass;
+fn convert_register_class(
+    reg_class: portal_solutions_asm_x86_64::RegisterClass,
+) -> crate::RegisterClass {
     use crate::RegisterClass as RiscVRegClass;
-    
+    use portal_solutions_asm_x86_64::RegisterClass as X64RegClass;
+
     match reg_class {
         X64RegClass::Gpr => RiscVRegClass::Gpr,
         X64RegClass::Xmm => RiscVRegClass::Fp,
@@ -186,7 +205,7 @@ impl<W> X64ToRiscV64Shim<W> {
             shim_counter: 0,
         }
     }
-    
+
     /// Creates a new shim with a specific RISC-V64 configuration.
     pub fn with_config(inner: W, riscv_cfg: crate::RiscV64Arch) -> Self {
         Self {
@@ -195,7 +214,7 @@ impl<W> X64ToRiscV64Shim<W> {
             shim_counter: 0,
         }
     }
-    
+
     /// Generates a unique shim label.
     fn next_shim_label(&mut self) -> ShimLabel {
         let label = ShimLabel(self.shim_counter);
@@ -217,26 +236,29 @@ pub fn translate_condition(cc: X64ConditionCode) -> crate::ConditionCode {
         X64ConditionCode::NL => crate::ConditionCode::GE,
         X64ConditionCode::G => crate::ConditionCode::GT,
         X64ConditionCode::NG => crate::ConditionCode::LE,
-        X64ConditionCode::O => crate::ConditionCode::NE,  // Approximation
+        X64ConditionCode::O => crate::ConditionCode::NE, // Approximation
         X64ConditionCode::NO => crate::ConditionCode::EQ, // Approximation
-        X64ConditionCode::S => crate::ConditionCode::LT,  // Sign bit set
+        X64ConditionCode::S => crate::ConditionCode::LT, // Sign bit set
         X64ConditionCode::NS => crate::ConditionCode::GE, // Sign bit clear
-        X64ConditionCode::P => crate::ConditionCode::EQ,  // No parity equivalent
+        X64ConditionCode::P => crate::ConditionCode::EQ, // No parity equivalent
         X64ConditionCode::NP => crate::ConditionCode::NE, // No parity equivalent
         _ => crate::ConditionCode::EQ,
     }
 }
 
-impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
+impl<W: crate::out::Writer<ShimLabel, Context>, Context> X64WriterCore<Context>
+    for X64ToRiscV64Shim<W>
+{
     type Error = W::Error;
 
-    fn hlt(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn hlt(&mut self, ctx: &mut Context, _cfg: X64Arch) -> Result<(), Self::Error> {
         // x86-64 HLT → RISC-V EBREAK
-        self.inner.ebreak(self.riscv_cfg)
+        self.inner.ebreak(ctx, self.riscv_cfg)
     }
 
     fn xchg(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
@@ -245,68 +267,78 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         let temp = Reg(30); // t5
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.mv(self.riscv_cfg, &temp, &dest_adapter)?;
-        self.inner.mv(self.riscv_cfg, &dest_adapter, &src_adapter)?;
-        self.inner.mv(self.riscv_cfg, &src_adapter, &temp)?;
+        self.inner.mv(ctx, self.riscv_cfg, &temp, &dest_adapter)?;
+        self.inner
+            .mv(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)?;
+        self.inner.mv(ctx, self.riscv_cfg, &src_adapter, &temp)?;
         Ok(())
     }
 
     fn mov(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         use crate::out::arg::MemArgKind;
-        
+
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        
+
         let dest_kind = dest_adapter.concrete_mem_kind();
         let src_kind = src_adapter.concrete_mem_kind();
-        
+
         match (dest_kind, src_kind) {
             (MemArgKind::NoMem(_), MemArgKind::NoMem(_)) => {
-                self.inner.mv(self.riscv_cfg, &dest_adapter, &src_adapter)
+                self.inner
+                    .mv(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)
             }
             (MemArgKind::NoMem(_), MemArgKind::Mem { .. }) => {
-                self.inner.ld(self.riscv_cfg, &dest_adapter, &src_adapter)
+                self.inner
+                    .ld(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)
             }
             (MemArgKind::Mem { .. }, MemArgKind::NoMem(_)) => {
-                self.inner.sd(self.riscv_cfg, &src_adapter, &dest_adapter)
+                self.inner
+                    .sd(ctx, self.riscv_cfg, &src_adapter, &dest_adapter)
             }
             (MemArgKind::Mem { .. }, MemArgKind::Mem { .. }) => {
                 let temp = Reg(30); // t5
-                self.inner.ld(self.riscv_cfg, &temp, &src_adapter)?;
-                self.inner.sd(self.riscv_cfg, &temp, &dest_adapter)
+                self.inner.ld(ctx, self.riscv_cfg, &temp, &src_adapter)?;
+                self.inner.sd(ctx, self.riscv_cfg, &temp, &dest_adapter)
             }
         }
     }
 
     fn sub(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.sub(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .sub(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn add(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.add(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .add(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn movsx(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
@@ -315,11 +347,13 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
         // Simplified: just move for now, proper sign-extension would need size info
-        self.inner.mv(self.riscv_cfg, &dest_adapter, &src_adapter)
+        self.inner
+            .mv(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)
     }
 
     fn movzx(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
@@ -327,15 +361,22 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         // Zero-extend - RISC-V loads are zero-extending by default
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.mv(self.riscv_cfg, &dest_adapter, &src_adapter)
+        self.inner
+            .mv(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)
     }
 
-    fn push(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn push(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         // PUSH: sp = sp - 8; [sp] = op
         let sp = Reg(2);
         let op_adapter = MemArgAdapter::new(op, _cfg);
-        self.inner.addi(self.riscv_cfg, &sp, &sp, -8)?;
+        self.inner.addi(ctx, self.riscv_cfg, &sp, &sp, -8)?;
         self.inner.sd(
+            ctx,
             self.riscv_cfg,
             &op_adapter,
             &crate::out::arg::MemArgKind::Mem {
@@ -348,11 +389,17 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         )
     }
 
-    fn pop(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn pop(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         // POP: op = [sp]; sp = sp + 8
         let sp = Reg(2);
         let op_adapter = MemArgAdapter::new(op, _cfg);
         self.inner.ld(
+            ctx,
             self.riscv_cfg,
             &op_adapter,
             &crate::out::arg::MemArgKind::Mem {
@@ -363,16 +410,17 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
                 reg_class: crate::RegisterClass::Gpr,
             },
         )?;
-        self.inner.addi(self.riscv_cfg, &sp, &sp, 8)
+        self.inner.addi(ctx, self.riscv_cfg, &sp, &sp, 8)
     }
 
-    fn pushf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn pushf(&mut self, ctx: &mut Context, _cfg: X64Arch) -> Result<(), Self::Error> {
         // RISC-V doesn't have flags register - skip or use custom solution
         // For now, push zero as placeholder
         let sp = Reg(2);
         let zero = Reg(0);
-        self.inner.addi(self.riscv_cfg, &sp, &sp, -8)?;
+        self.inner.addi(ctx, self.riscv_cfg, &sp, &sp, -8)?;
         self.inner.sd(
+            ctx,
             self.riscv_cfg,
             &zero,
             &crate::out::arg::MemArgKind::Mem {
@@ -385,24 +433,35 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         )
     }
 
-    fn popf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn popf(&mut self, ctx: &mut Context, _cfg: X64Arch) -> Result<(), Self::Error> {
         // RISC-V doesn't have flags register - skip or use custom solution
         let sp = Reg(2);
-        self.inner.addi(self.riscv_cfg, &sp, &sp, 8)
+        self.inner.addi(ctx, self.riscv_cfg, &sp, &sp, 8)
     }
 
-    fn call(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn call(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         let op_adapter = MemArgAdapter::new(op, _cfg);
-        self.inner.call(self.riscv_cfg, &op_adapter)
+        self.inner.call(ctx, self.riscv_cfg, &op_adapter)
     }
 
-    fn jmp(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn jmp(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         let op_adapter = MemArgAdapter::new(op, _cfg);
-        self.inner.j(self.riscv_cfg, &op_adapter)
+        self.inner.j(ctx, self.riscv_cfg, &op_adapter)
     }
 
     fn cmp(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
@@ -412,18 +471,26 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         let temp = Reg(31); // t6 as comparison result holder
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.sub(self.riscv_cfg, &temp, &a_adapter, &b_adapter)
+        self.inner
+            .sub(ctx, self.riscv_cfg, &temp, &a_adapter, &b_adapter)
     }
 
-    fn cmp0(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn cmp0(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         let temp = Reg(31); // t6
         let zero = Reg(0);
         let op_adapter = MemArgAdapter::new(op, _cfg);
-        self.inner.sub(self.riscv_cfg, &temp, &op_adapter, &zero)
+        self.inner
+            .sub(ctx, self.riscv_cfg, &temp, &op_adapter, &zero)
     }
 
     fn cmovcc64(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         cond: X64ConditionCode,
         op: &(dyn X64MemArg + '_),
@@ -435,16 +502,18 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         let val_adapter = MemArgAdapter::new(val, _cfg);
         let temp = Reg(30); // t5
         let zero = Reg(0);
-        
+
         // Compare and branch past move if condition not met
         let riscv_cond = translate_condition(cond);
         // This is simplified - proper implementation needs condition inversion
-        self.inner.mv(self.riscv_cfg, &op_adapter, &val_adapter)?;
+        self.inner
+            .mv(ctx, self.riscv_cfg, &op_adapter, &val_adapter)?;
         Ok(())
     }
 
     fn jcc(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         cond: X64ConditionCode,
         op: &(dyn X64MemArg + '_),
@@ -454,37 +523,70 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         let zero = Reg(0);
         let op_adapter = MemArgAdapter::new(op, _cfg);
         let riscv_cond = translate_condition(cond);
-        
+
         // Use temp register that holds comparison result
         match riscv_cond {
-            crate::ConditionCode::EQ => self.inner.beq(self.riscv_cfg, &temp, &zero, &op_adapter),
-            crate::ConditionCode::NE => self.inner.bne(self.riscv_cfg, &temp, &zero, &op_adapter),
-            crate::ConditionCode::LT => self.inner.blt(self.riscv_cfg, &temp, &zero, &op_adapter),
-            crate::ConditionCode::GE => self.inner.bge(self.riscv_cfg, &temp, &zero, &op_adapter),
-            crate::ConditionCode::LTU => self.inner.bltu(self.riscv_cfg, &temp, &zero, &op_adapter),
-            crate::ConditionCode::GEU => self.inner.bgeu(self.riscv_cfg, &temp, &zero, &op_adapter),
-            _ => self.inner.bne(self.riscv_cfg, &temp, &zero, &op_adapter),
+            crate::ConditionCode::EQ => {
+                self.inner
+                    .beq(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
+            }
+            crate::ConditionCode::NE => {
+                self.inner
+                    .bne(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
+            }
+            crate::ConditionCode::LT => {
+                self.inner
+                    .blt(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
+            }
+            crate::ConditionCode::GE => {
+                self.inner
+                    .bge(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
+            }
+            crate::ConditionCode::LTU => {
+                self.inner
+                    .bltu(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
+            }
+            crate::ConditionCode::GEU => {
+                self.inner
+                    .bgeu(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
+            }
+            _ => self
+                .inner
+                .bne(ctx, self.riscv_cfg, &temp, &zero, &op_adapter),
         }
     }
 
-    fn u32(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn u32(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         // Zero upper 32 bits - use AND with mask or load word
         let op_adapter = MemArgAdapter::new(op, _cfg);
         let temp = Reg(30);
-        self.inner.li(self.riscv_cfg, &temp, 0xFFFFFFFF)?;
-        self.inner.and(self.riscv_cfg, &op_adapter, &op_adapter, &temp)
+        self.inner.li(ctx, self.riscv_cfg, &temp, 0xFFFFFFFF)?;
+        self.inner
+            .and(ctx, self.riscv_cfg, &op_adapter, &op_adapter, &temp)
     }
 
-    fn not(&mut self, _cfg: X64Arch, op: &(dyn X64MemArg + '_)) -> Result<(), Self::Error> {
+    fn not(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: X64Arch,
+        op: &(dyn X64MemArg + '_),
+    ) -> Result<(), Self::Error> {
         // Bitwise NOT - XOR with all 1s
         let op_adapter = MemArgAdapter::new(op, _cfg);
         let temp = Reg(30);
-        self.inner.li(self.riscv_cfg, &temp, !0u64)?;
-        self.inner.xor(self.riscv_cfg, &op_adapter, &op_adapter, &temp)
+        self.inner.li(ctx, self.riscv_cfg, &temp, !0u64)?;
+        self.inner
+            .xor(ctx, self.riscv_cfg, &op_adapter, &op_adapter, &temp)
     }
 
     fn lea(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
@@ -493,189 +595,239 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToRiscV64Shim<W> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
         // Simplified - would need to extract base+disp and use ADDI
-        self.inner.mv(self.riscv_cfg, &dest_adapter, &src_adapter)
+        self.inner
+            .mv(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)
     }
 
-    fn get_ip(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn get_ip(&mut self, ctx: &mut Context, _cfg: X64Arch) -> Result<(), Self::Error> {
         // Get instruction pointer - use AUIPC
         let ra = Reg(1);
-        self.inner.auipc(self.riscv_cfg, &ra, 0)
+        self.inner.auipc(ctx, self.riscv_cfg, &ra, 0)
     }
 
-    fn ret(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
-        self.inner.ret(self.riscv_cfg)
+    fn ret(&mut self, ctx: &mut Context, _cfg: X64Arch) -> Result<(), Self::Error> {
+        self.inner.ret(ctx, self.riscv_cfg)
     }
 
     fn mov64(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         r: &(dyn X64MemArg + '_),
         val: u64,
     ) -> Result<(), Self::Error> {
         let r_adapter = MemArgAdapter::new(r, _cfg);
-        self.inner.li(self.riscv_cfg, &r_adapter, val)
+        self.inner.li(ctx, self.riscv_cfg, &r_adapter, val)
     }
 
     fn mul(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.mul(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .mul(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn div(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.divu(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .divu(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn idiv(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.div(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .div(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn and(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.and(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .and(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn or(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.or(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .or(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn eor(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.xor(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .xor(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn shl(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.sll(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .sll(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn shr(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         a: &(dyn X64MemArg + '_),
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let a_adapter = MemArgAdapter::new(a, _cfg);
         let b_adapter = MemArgAdapter::new(b, _cfg);
-        self.inner.srl(self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
+        self.inner
+            .srl(ctx, self.riscv_cfg, &a_adapter, &a_adapter, &b_adapter)
     }
 
     fn fadd(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.fadd_d(self.riscv_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+        self.inner.fadd_d(
+            ctx,
+            self.riscv_cfg,
+            &dest_adapter,
+            &dest_adapter,
+            &src_adapter,
+        )
     }
 
     fn fsub(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.fsub_d(self.riscv_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+        self.inner.fsub_d(
+            ctx,
+            self.riscv_cfg,
+            &dest_adapter,
+            &dest_adapter,
+            &src_adapter,
+        )
     }
 
     fn fmul(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.fmul_d(self.riscv_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+        self.inner.fmul_d(
+            ctx,
+            self.riscv_cfg,
+            &dest_adapter,
+            &dest_adapter,
+            &src_adapter,
+        )
     }
 
     fn fdiv(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.fdiv_d(self.riscv_cfg, &dest_adapter, &dest_adapter, &src_adapter)
+        self.inner.fdiv_d(
+            ctx,
+            self.riscv_cfg,
+            &dest_adapter,
+            &dest_adapter,
+            &src_adapter,
+        )
     }
 
     fn fmov(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
         let src_adapter = MemArgAdapter::new(src, _cfg);
-        self.inner.fmov_d(self.riscv_cfg, &dest_adapter, &src_adapter)
+        self.inner
+            .fmov_d(ctx, self.riscv_cfg, &dest_adapter, &src_adapter)
     }
 }
 
-impl<W: crate::out::Writer<ShimLabel>, L> X64Writer<L> for X64ToRiscV64Shim<W>
+impl<W: crate::out::Writer<ShimLabel, Context>, L, Context> X64Writer<L, Context>
+    for X64ToRiscV64Shim<W>
 where
-    W: crate::out::Writer<L>,
+    W: crate::out::Writer<L, Context>,
 {
-    fn set_label(&mut self, _cfg: X64Arch, s: L) -> Result<(), Self::Error> {
-        self.inner.set_label(self.riscv_cfg, s)
+    fn set_label(&mut self, ctx: &mut Context, _cfg: X64Arch, s: L) -> Result<(), Self::Error> {
+        self.inner.set_label(ctx, self.riscv_cfg, s)
     }
 
     fn lea_label(
         &mut self,
+        ctx: &mut Context,
         _cfg: X64Arch,
         dest: &(dyn X64MemArg + '_),
         label: L,
     ) -> Result<(), Self::Error> {
         let dest_adapter = MemArgAdapter::new(dest, _cfg);
-        self.inner.jal_label(self.riscv_cfg, &Reg(0), label)?;
+        self.inner.jal_label(ctx, self.riscv_cfg, &Reg(0), label)?;
         Ok(())
     }
 }

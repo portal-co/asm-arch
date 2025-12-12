@@ -105,7 +105,7 @@ impl TempRegManager {
             let temp_reg = candidates[0];
 
             // Use the stack manager for push/pop operations
-            self.stack_manager.push(ctx, writer, ctx, X64Arch::default(), &temp_reg)?;
+            self.stack_manager.push(writer,  ctx, X64Arch::default(), &temp_reg)?;
 
             Ok(temp_reg)
         } else {
@@ -118,7 +118,7 @@ impl TempRegManager {
     /// If the register is buried deeper in the stack, it remains pushed for potential future use.
     pub fn release_temp<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context, reg: Reg) -> Result<(), W::Error> {
         // Use the stack manager for pop operations
-        self.stack_manager.pop(ctx, writer, ctx, X64Arch::default(), &reg)
+        self.stack_manager.pop(writer, ctx, X64Arch::default(), &reg)
     }
 
     /// Release all pushed registers in reverse order (LIFO).
@@ -170,6 +170,7 @@ pub struct DesugaringWriter<'a, W, Context> where W: WriterCore<Context> + ?Size
     config: DesugarConfig,
     temp_manager: TempRegManager,
     stack_manager: StackManager,
+    phantom: core::marker::PhantomData<Context>,
 }
 
 impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Context> {
@@ -177,12 +178,12 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
         let config = DesugarConfig::default();
         let temp_manager = TempRegManager::new();
         let stack_manager = StackManager::new();
-        Self { writer, config, temp_manager, stack_manager }
+        Self { writer, config, temp_manager, stack_manager, phantom: core::marker::PhantomData }
     }
     pub fn with_config(writer: &'a mut W, config: DesugarConfig) -> Self {
         let temp_manager = TempRegManager::new();
         let stack_manager = StackManager::new();
-        Self { writer, config, temp_manager, stack_manager }
+        Self { writer, config, temp_manager, stack_manager, phantom: core::marker::PhantomData }
     }
 
     /// Release all pushed temporary registers, restoring the stack to its original state.
@@ -223,16 +224,16 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
 
     /// Handle operations that use RSP directly (like stack pointer arithmetic).
     /// Either flushes the stack or adjusts offsets as needed.
-    pub fn handle_rsp_operation(&mut self, ctx: &mut Context, arch: X64Arch, operation: F) -> Result<(), W::Error>
+    pub fn handle_rsp_operation<F>(&mut self, ctx: &mut Context, arch: X64Arch, operation: F) -> Result<(), W::Error>
     where
-        F: FnOnce(&mut W) -> Result<(), W::Error>,
+        F: FnOnce(&mut W,&mut Context) -> Result<(), W::Error>,
     {
         // For RSP operations, we need to ensure the stack is in a consistent state
         // Option 1: Flush all pending operations before the RSP operation
         self.stack_manager.flush_before_rsp_use(self.writer, ctx, arch)?;
 
         // Execute the RSP operation
-        operation(self.writer)
+        operation(self.writer,ctx)
     }
 
     /// Check if an operand involves RSP (stack pointer register).
@@ -522,7 +523,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
     /// Helper for binary ops of the form op(a, b) where `a` is both destination and first source.
     fn binary_op< F >( &mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_), op: F) -> Result<(), W::Error>
     where
-        F: FnOnce(&mut W, X64Arch, &(dyn MemArg + '_), &(dyn MemArg + '_)) -> Result<(), W::Error>,
+        F: FnOnce(&mut W, &mut Context, X64Arch, &(dyn MemArg + '_), &(dyn MemArg + '_)) -> Result<(), W::Error>,
     {
         let a_concrete = a.concrete_mem_kind();
         let b_concrete = b.concrete_mem_kind();
@@ -531,14 +532,14 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
         let b_is_mem = matches!(b_concrete, MemArgKind::Mem { .. });
 
         match (a_is_mem, b_is_mem) {
-            (false, false) => op(self.writer, cfg, a, b),
+            (false, false) => op(self.writer, ctx, cfg, a, b),
             (true, false) => {
                 let desugared_a = self.desugar_mem_arg(ctx, cfg, a)?;
-                op(self.writer, cfg, &desugared_a, b)
+                op(self.writer, ctx, cfg, &desugared_a, b)
             }
             (false, true) => {
                 let desugared_b = self.desugar_operand(ctx, cfg, b)?; // ensure b is register or literal handled
-                op(self.writer, cfg, a, &desugared_b)
+                op(self.writer, ctx, cfg, a, &desugared_b)
             }
             (true, true) => {
                 // both memory - load b into temp and use that
@@ -551,7 +552,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 let desugared_b_mem = self.desugar_mem_arg(ctx, cfg, b)?;
                 self.writer.mov(ctx, cfg, &temp_b, &desugared_b_mem)?;
                 let desugared_a = self.desugar_mem_arg(ctx, cfg, a)?;
-                op(self.writer, cfg, &desugared_a, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_b, size: MemorySize::_64 }))?;
+                op(self.writer, ctx, cfg, &desugared_a, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_b, size: MemorySize::_64 }))?;
 
                 // Release the temp register (will pop if needed)
                 self.temp_manager.release_temp(self.writer, ctx, temp_b)
@@ -560,9 +561,9 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
     }
 
     /// Helper for two-operand comparisons where neither operand is a destination.
-    fn binary_op_no_dest(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_), op: F) -> Result<(), W::Error>
+    fn binary_op_no_dest<F>(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_), op: F) -> Result<(), W::Error>
     where
-        F: FnOnce(&mut W, X64Arch, &(dyn MemArg + '_), &(dyn MemArg + '_)) -> Result<(), W::Error>,
+        F: FnOnce(&mut W, &mut Context, X64Arch, &(dyn MemArg + '_), &(dyn MemArg + '_)) -> Result<(), W::Error>,
     {
         let a_concrete = a.concrete_mem_kind();
         let b_concrete = b.concrete_mem_kind();
@@ -571,14 +572,14 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
         let b_is_mem = matches!(b_concrete, MemArgKind::Mem { .. });
 
         match (a_is_mem, b_is_mem) {
-            (false, false) => op(self.writer, cfg, a, b),
+            (false, false) => op(self.writer, ctx, cfg, a, b),
             (true, false) => {
                 let da = self.desugar_operand(ctx, cfg, a)?;
-                op(self.writer, cfg, &da, b)
+                op(self.writer, ctx, cfg, &da, b)
             }
             (false, true) => {
                 let db = self.desugar_operand(ctx, cfg, b)?;
-                op(self.writer, cfg, a, &db)
+                op(self.writer, ctx, cfg, a, &db)
             }
             (true, true) => {
                 // both memory - load one into temp
@@ -591,7 +592,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 let desugared_a = self.desugar_mem_arg(ctx, cfg, a)?;
                 self.writer.mov(ctx, cfg, &temp_a, &desugared_a)?;
                 let desugared_b = self.desugar_mem_arg(ctx, cfg, b)?;
-                op(self.writer, cfg, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_a, size: MemorySize::_64 }), &desugared_b)?;
+                op(self.writer, ctx, cfg, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_a, size: MemorySize::_64 }), &desugared_b)?;
 
                 // Release the temp register (will pop if needed)
                 self.temp_manager.release_temp(self.writer, ctx, temp_a)
@@ -605,7 +606,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
 
     fn mov(&mut self, ctx: &mut Context, cfg: X64Arch, dest: &(dyn MemArg + '_), src: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[dest, src])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[dest, src])?;
 
         let dest_conc = dest.concrete_mem_kind();
         let src_conc = src.concrete_mem_kind();
@@ -681,7 +682,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
 
     fn xchg(&mut self, ctx: &mut Context, cfg: X64Arch, dest: &(dyn MemArg + '_), src: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[dest, src])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[dest, src])?;
 
         // xchg cannot be mem->mem; desugar similarly to mov
         let dest_conc = dest.concrete_mem_kind();
@@ -732,7 +733,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
 
     fn lea(&mut self, ctx: &mut Context, cfg: X64Arch, dest: &(dyn MemArg + '_), src: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[dest, src])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[dest, src])?;
 
         // lea expects memory-like src; ensure src mem forms are valid
         let src_conc = src.concrete_mem_kind();
@@ -742,109 +743,109 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
 
     fn add(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.add(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.add(ctx, c, x, y))
     }
 
     fn sub(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.sub(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.sub(ctx, c, x, y))
     }
 
     fn cmp(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op_no_dest(cfg, a, b, |w, c, x, y| w.cmp(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op_no_dest(ctx, cfg, a, b, |w, ctx, c, x, y| w.cmp(ctx, c, x, y))
     }
 
     fn cmp0(&mut self, ctx: &mut Context, cfg: X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[op])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[op])?;
         self.writer.cmp0(ctx, cfg, op)
     }
 
     fn cmovcc64(&mut self, ctx: &mut Context, cfg: X64Arch, cond: crate::ConditionCode, op: &(dyn MemArg + '_), val: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[op, val])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[op, val])?;
         self.writer.cmovcc64(ctx, cfg, cond, op, val)
     }
 
     fn u32(&mut self, ctx: &mut Context, cfg: X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[op])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[op])?;
         self.writer.u32(ctx, cfg, op)
     }
 
     fn not(&mut self, ctx: &mut Context, cfg: X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[op])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[op])?;
         self.writer.not(ctx, cfg, op)
     }
 
     fn mul(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.mul(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.mul(ctx, c, x, y))
     }
 
     fn div(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.div(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.div(ctx, c, x, y))
     }
 
     fn idiv(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.idiv(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.idiv(ctx, c, x, y))
     }
 
     fn and(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.and(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.and(ctx, c, x, y))
     }
 
     fn or(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.or(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.or(ctx, c, x, y))
     }
 
     fn eor(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.eor(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.eor(ctx, c, x, y))
     }
 
     fn shl(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.shl(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.shl(ctx, c, x, y))
     }
 
     fn shr(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.shr(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.shr(ctx, c, x, y))
     }
 
     fn sar(&mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(ctx, cfg, a, b, |w, c, x, y| w.sar(ctx, c, x, y))
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[a, b])?;
+        self.binary_op(ctx, cfg, a, b, |w, ctx, c, x, y| w.sar(ctx, c, x, y))
     }
 
     fn movsx(&mut self, ctx: &mut Context, cfg: X64Arch, dest: &(dyn MemArg + '_), src: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[dest, src])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[dest, src])?;
         self.writer.movsx(ctx, cfg, dest, src)
     }
 
     fn movzx(&mut self, ctx: &mut Context, cfg: X64Arch, dest: &(dyn MemArg + '_), src: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[dest, src])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[dest, src])?;
         self.writer.movzx(ctx, cfg, dest, src)
     }
 
@@ -852,7 +853,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     fn ret(&mut self, ctx: &mut Context, cfg: X64Arch) -> Result<(), Self::Error> { self.writer.ret(ctx, cfg) }
     fn mov64(&mut self, ctx: &mut Context, cfg: X64Arch, r: &(dyn MemArg + '_), val: u64) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(cfg, &[r])?;
+        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[r])?;
         self.writer.mov64(ctx, cfg, r, val)
     }
 
@@ -892,21 +893,21 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
 
 impl<'a, W, L, Context> crate::out::Writer<L, Context> for DesugaringWriter<'a, W, Context>
 where
-    W: crate::out::Writer<L> + ?Sized,
+    W: crate::out::Writer<L,Context> + ?Sized,
 {
-    fn set_label(&mut self, cfg: X64Arch, label: L) -> Result<(), Self::Error> {
+    fn set_label(&mut self,ctx: &mut Context, cfg: X64Arch, label: L) -> Result<(), Self::Error> {
         self.writer.set_label(ctx, cfg, label)
     }
-    fn lea_label(&mut self, cfg: X64Arch, dest: &(dyn MemArg + '_), label: L) -> Result<(), Self::Error> {
+    fn lea_label(&mut self,ctx: &mut Context, cfg: X64Arch, dest: &(dyn MemArg + '_), label: L) -> Result<(), Self::Error> {
         self.writer.lea_label(ctx, cfg, dest, label)
     }
-    fn call_label(&mut self, cfg: X64Arch, label: L) -> Result<(), Self::Error> {
+    fn call_label(&mut self,ctx: &mut Context, cfg: X64Arch, label: L) -> Result<(), Self::Error> {
         self.writer.call_label(ctx, cfg, label)
     }
-    fn jmp_label(&mut self, cfg: X64Arch, label: L) -> Result<(), Self::Error> {
+    fn jmp_label(&mut self,ctx: &mut Context, cfg: X64Arch, label: L) -> Result<(), Self::Error> {
         self.writer.jmp_label(ctx, cfg, label)
     }
-    fn jcc_label(&mut self, cfg: X64Arch, cc: crate::ConditionCode, label: L) -> Result<(), Self::Error> {
+    fn jcc_label(&mut self,ctx: &mut Context, cfg: X64Arch, cc: crate::ConditionCode, label: L) -> Result<(), Self::Error> {
         self.writer.jcc_label(ctx, cfg, cc, label)
     }
 }

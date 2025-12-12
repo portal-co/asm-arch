@@ -40,8 +40,9 @@ impl TryFrom<usize> for RegKind {
 ///
 /// # Returns
 /// Result indicating success or a writer error
-pub fn process_cmd<E: core::error::Error>(
-    writer: &mut (dyn WriterCore<Error = E> + '_),
+pub fn process_cmd<Context, E: core::error::Error>(
+    writer: &mut (dyn WriterCore<Context, Error = E> + '_),
+    ctx: &mut Context,
     arch: X64Arch,
     cmd: &Cmd<RegKind>,
     stack_manager: Option<&mut StackManager>,
@@ -55,7 +56,7 @@ pub fn process_cmd<E: core::error::Error>(
                 RegKind::Int => {
                     // If we have a stack manager, use it for RSP-aware operations
                     if let Some(stack_mgr) = stack_manager {
-                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                        stack_mgr.flush_before_rsp_use(writer, ctx, arch)?;
                     }
                     writer.push(ctx, arch, &reg)
                 }
@@ -63,7 +64,7 @@ pub fn process_cmd<E: core::error::Error>(
                     // For float registers, we need to manually push using movsd
                     // This involves RSP operations, so flush any pending stack operations
                     if let Some(stack_mgr) = stack_manager {
-                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                        stack_mgr.flush_before_rsp_use(writer, ctx, arch)?;
                     }
 
                     // Adjust stack: sub rsp, 8
@@ -88,7 +89,7 @@ pub fn process_cmd<E: core::error::Error>(
                 RegKind::Int => {
                     // If we have a stack manager, use it for RSP-aware operations
                     if let Some(stack_mgr) = stack_manager {
-                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                        stack_mgr.flush_before_rsp_use(writer, ctx, arch)?;
                     }
                     writer.pop(ctx, arch, &reg)
                 }
@@ -96,7 +97,7 @@ pub fn process_cmd<E: core::error::Error>(
                     // For float registers, manually pop using movsd
                     // This involves RSP operations, so flush any pending stack operations
                     if let Some(stack_mgr) = stack_manager {
-                        stack_mgr.flush_before_rsp_use(writer, arch)?;
+                        stack_mgr.flush_before_rsp_use(writer, ctx, arch)?;
                     }
 
                     // Load the XMM register from [rsp]
@@ -127,7 +128,7 @@ pub fn process_cmd<E: core::error::Error>(
 
             // Use stack manager for offset-based access if available
             if let Some(stack_mgr) = stack_manager {
-                stack_mgr.access_stack(writer, arch, offset, size, reg_class, &reg)
+                stack_mgr.access_stack(writer,ctx, arch, offset, size, reg_class, &reg)
             } else {
                 // Fallback to direct memory access
                 let mem = crate::out::arg::MemArgKind::Mem {

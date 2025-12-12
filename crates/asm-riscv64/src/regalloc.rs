@@ -39,8 +39,9 @@ impl TryFrom<usize> for RegKind {
 ///
 /// # Returns
 /// Result indicating success or a writer error
-pub fn process_cmd<E: core::error::Error>(
-    writer: &mut (dyn WriterCore<Error = E> + '_),
+pub fn process_cmd<Context, E: core::error::Error>(
+    writer: &mut (dyn WriterCore<Context, Error = E> + '_),
+    ctx: &mut Context,
     arch: RiscV64Arch,
     cmd: &Cmd<RegKind>,
 ) -> Result<(), E> {

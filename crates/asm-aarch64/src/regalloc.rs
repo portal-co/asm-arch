@@ -4,8 +4,8 @@
 //! allocator, including register kind definitions, Cmd processing, and state
 //! initialization.
 
+use crate::{AArch64Arch, out::WriterCore};
 use portal_solutions_asm_regalloc::{Cmd, RegAlloc, RegAllocFrame, Target};
-use crate::{out::WriterCore, AArch64Arch};
 
 /// Register kind for AArch64.
 ///
@@ -20,7 +20,7 @@ pub enum RegKind {
 
 impl TryFrom<usize> for RegKind {
     type Error = ();
-    
+
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(RegKind::Int),
@@ -39,13 +39,14 @@ impl TryFrom<usize> for RegKind {
 ///
 /// # Returns
 /// Result indicating success or a writer error
-pub fn process_cmd<E: core::error::Error>(
-    writer: &mut (dyn WriterCore<Error = E> + '_),
+pub fn process_cmd<Context, E: core::error::Error>(
+    writer: &mut (dyn WriterCore<Context, Error = E> + '_),
+    ctx: &mut Context,
     arch: AArch64Arch,
     cmd: &Cmd<RegKind>,
 ) -> Result<(), E> {
     use portal_pc_asm_common::types::reg::Reg;
-    
+
     match cmd {
         Cmd::Push(target) => {
             let reg = Reg(target.reg);
@@ -175,23 +176,24 @@ pub fn init_regalloc<const N: usize>(
     _arch: AArch64Arch,
 ) -> RegAlloc<RegKind, N, [[RegAllocFrame<RegKind>; N]; 2]> {
     // Initialize integer register frame
-    let mut int_frame: [RegAllocFrame<RegKind>; N] = 
-        core::array::from_fn(|_| RegAllocFrame::Empty);
-    
+    let mut int_frame: [RegAllocFrame<RegKind>; N] = core::array::from_fn(|_| RegAllocFrame::Empty);
+
     // Reserve x29 (frame pointer), x30 (link register), and x31 (stack pointer)
-    if N > 29 { int_frame[29] = RegAllocFrame::Reserved; }
-    if N > 30 { int_frame[30] = RegAllocFrame::Reserved; }
-    if N > 31 { int_frame[31] = RegAllocFrame::Reserved; }
-    
+    if N > 29 {
+        int_frame[29] = RegAllocFrame::Reserved;
+    }
+    if N > 30 {
+        int_frame[30] = RegAllocFrame::Reserved;
+    }
+    if N > 31 {
+        int_frame[31] = RegAllocFrame::Reserved;
+    }
+
     // Initialize float register frame
-    let float_frame: [RegAllocFrame<RegKind>; N] = 
-        core::array::from_fn(|_| RegAllocFrame::Empty);
-    
+    let float_frame: [RegAllocFrame<RegKind>; N] = core::array::from_fn(|_| RegAllocFrame::Empty);
+
     // Create frames array directly without MaybeUninit
     let frames = [int_frame, float_frame];
-    
-    RegAlloc {
-        frames,
-        tos: None,
-    }
+
+    RegAlloc { frames, tos: None }
 }

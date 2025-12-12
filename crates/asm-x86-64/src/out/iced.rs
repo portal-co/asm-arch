@@ -110,8 +110,9 @@ mod helpers {
 
 /// Default instruction handler that translates as many iced instructions as feasible to Writer calls.
 #[cfg(feature = "iced")]
-pub fn default_instruction_handler<W, L>(
+pub fn default_instruction_handler<Context, W, L>(
     writer: &mut W,
+    ctx: &mut Context,
     arch: &crate::X64Arch,
     labels: &mut alloc::collections::BTreeMap<u64, L>,
     instr: &iced_x86::Instruction,
@@ -119,7 +120,7 @@ pub fn default_instruction_handler<W, L>(
     raw_bytes: &[u8],
 ) -> Result<(), W::Error>
 where
-    W: crate::out::Writer<L>,
+    W: crate::out::Writer<L, Context>,
     L: From<u64> + Clone + core::fmt::Display,
 {
     use helpers::*;
@@ -134,89 +135,89 @@ where
     match instr.mnemonic() {
         Mnemonic::Mov => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.mov(*arch, d, s)?;
+                writer.mov(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Add => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.add(*arch, a, b)?;
+                writer.add(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Sub => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.sub(*arch, a, b)?;
+                writer.sub(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Cmp => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.cmp(*arch, a, b)?;
+                writer.cmp(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::And => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.and(*arch, a, b)?;
+                writer.and(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Or => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.or(*arch, a, b)?;
+                writer.or(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Xor => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.eor(*arch, a, b)?;
+                writer.eor(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Shl => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.shl(*arch, a, b)?;
+                writer.shl(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Shr => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.shr(*arch, a, b)?;
+                writer.shr(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Sar => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.sar(*arch, a, b)?;
+                writer.sar(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Not => {
             if let Some(op) = dest {
-                writer.not(*arch, op)?;
+                writer.not(ctx, *arch, op)?;
             }
         }
         Mnemonic::Lea => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.lea(*arch, d, s)?;
+                writer.lea(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Movsx => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.movsx(*arch, d, s)?;
+                writer.movsx(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Movzx => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.movzx(*arch, d, s)?;
+                writer.movzx(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Push => {
             if let Some(op) = dest {
-                writer.push(*arch, op)?;
+                writer.push(ctx, *arch, op)?;
             }
         }
         Mnemonic::Pop => {
             if let Some(op) = dest {
-                writer.pop(*arch, op)?;
+                writer.pop(ctx, *arch, op)?;
             }
         }
         Mnemonic::Pushf => {
-            writer.pushf(*arch)?;
+            writer.pushf(ctx, *arch)?;
         }
         Mnemonic::Popf => {
-            writer.popf(*arch)?;
+            writer.popf(ctx, *arch)?;
         }
         Mnemonic::Call => {
             if instr.op0_kind() == iced_x86::OpKind::NearBranch16
@@ -228,9 +229,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.call_label(*arch, label)?;
+                writer.call_label(ctx, *arch, label)?;
             } else if let Some(op) = dest {
-                writer.call(*arch, op)?;
+                writer.call(ctx, *arch, op)?;
             }
         }
         Mnemonic::Jmp => {
@@ -243,141 +244,141 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jmp_label(*arch, label)?;
+                writer.jmp_label(ctx, *arch, label)?;
             } else if let Some(op) = dest {
-                writer.jmp(*arch, op)?;
+                writer.jmp(ctx, *arch, op)?;
             }
         }
         Mnemonic::Ret => {
-            writer.ret(*arch)?;
+            writer.ret(ctx, *arch)?;
         }
         Mnemonic::Hlt => {
-            writer.hlt(*arch)?;
+            writer.hlt(ctx, *arch)?;
         }
         Mnemonic::Xchg => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.xchg(*arch, d, s)?;
+                writer.xchg(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Imul => {
             if let (Some(a), Some(b)) = (dest, src) {
-                writer.mul(*arch, a, b)?;
+                writer.mul(ctx, *arch, a, b)?;
             }
         }
         Mnemonic::Idiv => {
             if let Some(b) = src {
-                writer.idiv(*arch, dest.unwrap_or(b), b)?;
+                writer.idiv(ctx, *arch, dest.unwrap_or(b), b)?;
             }
         }
         Mnemonic::Div => {
             if let Some(b) = src {
-                writer.div(*arch, dest.unwrap_or(b), b)?;
+                writer.div(ctx, *arch, dest.unwrap_or(b), b)?;
             }
         }
         Mnemonic::Addsd => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.fadd(*arch, d, s)?;
+                writer.fadd(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Subsd => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.fsub(*arch, d, s)?;
+                writer.fsub(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Mulsd => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.fmul(*arch, d, s)?;
+                writer.fmul(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Divsd => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.fdiv(*arch, d, s)?;
+                writer.fdiv(ctx, *arch, d, s)?;
             }
         }
         Mnemonic::Movsd => {
             if let (Some(d), Some(s)) = (dest, src) {
-                writer.fmov(*arch, d, s)?;
+                writer.fmov(ctx, *arch, d, s)?;
             }
         }
         // Conditional moves
         Mnemonic::Cmovo => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::O, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::O, op, v)?;
             }
         }
         Mnemonic::Cmovno => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NO, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NO, op, v)?;
             }
         }
         Mnemonic::Cmovb => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::B, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::B, op, v)?;
             }
         }
         Mnemonic::Cmovae => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NB, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NB, op, v)?;
             }
         }
         Mnemonic::Cmove => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::E, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::E, op, v)?;
             }
         }
         Mnemonic::Cmovne => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NE, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NE, op, v)?;
             }
         }
         Mnemonic::Cmovbe => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NA, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NA, op, v)?;
             }
         }
         Mnemonic::Cmova => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::A, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::A, op, v)?;
             }
         }
         Mnemonic::Cmovs => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::S, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::S, op, v)?;
             }
         }
         Mnemonic::Cmovns => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NS, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NS, op, v)?;
             }
         }
         Mnemonic::Cmovp => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::P, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::P, op, v)?;
             }
         }
         Mnemonic::Cmovnp => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NP, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NP, op, v)?;
             }
         }
         Mnemonic::Cmovl => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::L, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::L, op, v)?;
             }
         }
         Mnemonic::Cmovge => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NL, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NL, op, v)?;
             }
         }
         Mnemonic::Cmovle => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::NG, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NG, op, v)?;
             }
         }
         Mnemonic::Cmovg => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(*arch, crate::ConditionCode::G, op, v)?;
+                writer.cmovcc64(ctx, *arch, crate::ConditionCode::G, op, v)?;
             }
         }
         // Conditional jumps
@@ -391,9 +392,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::O, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::O, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::O, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::O, op)?;
             }
         }
         Mnemonic::Jno => {
@@ -406,9 +407,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NO, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NO, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NO, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NO, op)?;
             }
         }
         Mnemonic::Jb => {
@@ -421,9 +422,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::B, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::B, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::B, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::B, op)?;
             }
         }
         Mnemonic::Jae => {
@@ -436,9 +437,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NB, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NB, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NB, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NB, op)?;
             }
         }
         Mnemonic::Je => {
@@ -451,9 +452,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::E, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::E, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::E, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::E, op)?;
             }
         }
         Mnemonic::Jne => {
@@ -466,9 +467,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NE, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NE, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NE, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NE, op)?;
             }
         }
         Mnemonic::Jbe => {
@@ -481,9 +482,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NA, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NA, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NA, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NA, op)?;
             }
         }
         Mnemonic::Ja => {
@@ -496,9 +497,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::A, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::A, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::A, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::A, op)?;
             }
         }
         Mnemonic::Js => {
@@ -511,9 +512,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::S, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::S, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::S, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::S, op)?;
             }
         }
         Mnemonic::Jns => {
@@ -526,9 +527,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NS, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NS, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NS, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NS, op)?;
             }
         }
         Mnemonic::Jp => {
@@ -541,9 +542,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::P, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::P, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::P, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::P, op)?;
             }
         }
         Mnemonic::Jnp => {
@@ -556,9 +557,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NP, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NP, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NP, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NP, op)?;
             }
         }
         Mnemonic::Jl => {
@@ -571,9 +572,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::L, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::L, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::L, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::L, op)?;
             }
         }
         Mnemonic::Jge => {
@@ -586,9 +587,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NL, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NL, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NL, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NL, op)?;
             }
         }
         Mnemonic::Jle => {
@@ -601,9 +602,9 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::NG, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::NG, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::NG, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::NG, op)?;
             }
         }
         Mnemonic::Jg => {
@@ -616,14 +617,14 @@ where
                     .entry(target)
                     .or_insert_with(|| L::from(target))
                     .clone();
-                writer.jcc_label(*arch, crate::ConditionCode::G, label)?;
+                writer.jcc_label(ctx, *arch, crate::ConditionCode::G, label)?;
             } else if let Some(op) = dest {
-                writer.jcc(*arch, crate::ConditionCode::G, op)?;
+                writer.jcc(ctx, *arch, crate::ConditionCode::G, op)?;
             }
         }
         // For unsupported instructions, emit as raw bytes
         _ => {
-            writer.db(*arch, raw_bytes)?;
+            writer.db(ctx, *arch, raw_bytes)?;
         }
     }
     Ok(())
@@ -745,18 +746,9 @@ macro_rules! to_iced_operand {
 /// can claim ranges of bytes to be emitted via `Writer::db` instead of
 /// decoding them as instructions.
 #[cfg(feature = "iced")]
-pub struct IcedFrontend<'a, W, L, H, D>
+pub struct IcedFrontend<'a, W, L, H, D, Context>
 where
-    W: crate::out::Writer<L> + 'a,
-    H: FnMut(
-        &mut W,
-        &crate::X64Arch,
-        &mut alloc::collections::BTreeMap<u64, L>,
-        &iced_x86::Instruction,
-        u64,
-        &[u8],
-    ) -> Result<(), W::Error>,
-    D: FnMut(&[u8], u64) -> Option<usize>,
+    W: crate::out::Writer<L, Context> + 'a,
 {
     /// Underlying writer to dispatch translated instructions to.
     pub writer: &'a mut W,
@@ -771,21 +763,24 @@ where
     /// as data (these bytes will be emitted via `Writer::db`) or `None` to
     /// let the decoder try to decode an instruction.
     pub inline_data_hook: Option<D>,
+    phantom: core::marker::PhantomData<Context>,
 }
 
 #[cfg(feature = "iced")]
-impl<'a, W, L: Ord + Clone + Display + From<u64>, H, D> IcedFrontend<'a, W, L, H, D>
+impl<'a, Context, W, L: Ord + Clone + Display + From<u64>, H, D>
+    IcedFrontend<'a, W, L, H, D, Context>
 where
-    W: crate::out::Writer<L> + 'a,
+    W: crate::out::Writer<L, Context> + 'a,
     H: FnMut(
         &mut W,
+        &mut Context,
         &crate::X64Arch,
         &mut alloc::collections::BTreeMap<u64, L>,
         &iced_x86::Instruction,
         u64,
         &[u8],
     ) -> Result<(), W::Error>,
-    D: FnMut(&[u8], u64) -> Option<usize>,
+    D: FnMut(&[u8], &mut Context, u64) -> Option<usize>,
 {
     /// Create a new frontend.
     pub fn new(writer: &'a mut W, arch: crate::X64Arch, handler: H) -> Self {
@@ -795,6 +790,7 @@ where
             labels: alloc::collections::BTreeMap::new(),
             handler,
             inline_data_hook: None,
+            phantom: core::marker::PhantomData,
         }
     }
 
@@ -816,6 +812,7 @@ where
         L,
         impl FnMut(
             &mut W,
+            &mut Context,
             &crate::X64Arch,
             &mut alloc::collections::BTreeMap<u64, L>,
             &iced_x86::Instruction,
@@ -823,23 +820,27 @@ where
             &[u8],
         ) -> Result<(), W::Error>,
         D,
+        Context,
     >
     where
         L: From<u64> + Clone + core::fmt::Display,
     {
-        let handler =
-            move |w: &mut W,
-                  a: &crate::X64Arch,
-                  labels: &mut alloc::collections::BTreeMap<u64, L>,
-                  i: &iced_x86::Instruction,
-                  ip: u64,
-                  rb: &[u8]| { default_instruction_handler(w, a, labels, i, ip, rb) };
+        let handler = move |w: &mut W,
+                            ctx: &mut Context,
+                            a: &crate::X64Arch,
+                            labels: &mut alloc::collections::BTreeMap<u64, L>,
+                            i: &iced_x86::Instruction,
+                            ip: u64,
+                            rb: &[u8]| {
+            default_instruction_handler(w, ctx, a, labels, i, ip, rb)
+        };
         IcedFrontend {
             writer,
             arch,
             labels: alloc::collections::BTreeMap::new(),
             handler,
             inline_data_hook: None,
+            phantom: core::marker::PhantomData,
         }
     }
 
@@ -849,22 +850,27 @@ where
     /// instruction. If an `inline_data_hook` is installed and claims a range
     /// of bytes, those bytes are emitted via `Writer::db` and decoding
     /// resumes after them.
-    pub fn process_bytes(&mut self, base_ip: u64, bytes: &[u8]) -> Result<(), W::Error> {
+    pub fn process_bytes(
+        &mut self,
+        ctx: &mut Context,
+        base_ip: u64,
+        bytes: &[u8],
+    ) -> Result<(), W::Error> {
         let mut pos: usize = 0;
         let len = bytes.len();
         while pos < len {
             let current_ip = base_ip + pos as u64;
             // Set label if this IP is a jump target
             if let Some(label) = self.labels.get(&current_ip) {
-                self.writer.set_label(self.arch, label.clone())?;
+                self.writer.set_label(ctx, self.arch, label.clone())?;
             }
 
             // Inline-data hook takes precedence
             if let Some(hook) = &mut self.inline_data_hook {
-                if let Some(n) = hook(&bytes[pos..], current_ip) {
+                if let Some(n) = hook(&bytes[pos..], ctx, current_ip) {
                     let take = core::cmp::min(n, len - pos);
                     // Emit as raw data bytes
-                    self.writer.db(self.arch, &bytes[pos..pos + take])?;
+                    self.writer.db(ctx, self.arch, &bytes[pos..pos + take])?;
                     pos += take;
                     continue;
                 }
@@ -880,18 +886,19 @@ where
             if consumed == 0 {
                 // Defensive: if decoder consumed nothing, treat remaining bytes
                 // as data to avoid infinite loop.
-                self.writer.db(self.arch, slice)?;
+                self.writer.db(ctx, self.arch, slice)?;
                 break;
             }
             // Conservatively create and set label for this instruction start if not already present
             if !self.labels.contains_key(&current_ip) {
                 let label = L::from(current_ip);
                 self.labels.insert(current_ip, label.clone());
-                self.writer.set_label(self.arch, label)?;
+                self.writer.set_label(ctx,self.arch, label)?;
             }
             // Call handler to translate the iced instruction into Writer calls.
             (self.handler)(
                 self.writer,
+                ctx,
                 &self.arch,
                 &mut self.labels,
                 &instr,

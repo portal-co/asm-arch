@@ -428,117 +428,117 @@ pub trait Writer<L, Context>: WriterCore<Context> {
 
 #[macro_export]
 macro_rules! writer_dispatch {
-    ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
+    ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty] [$ctx:ty] [$wrapped:ty]),*) => {
         const _: () = {
             $(
-                impl<$($t)*> $crate::out::WriterCore<Context> for $ty{
+                impl<$($t)*> $crate::out::WriterCore<$ctx> for $ty{
                     type Error = $e;
-                    fn brk(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, imm: u16) -> $crate::__::core::result::Result<(),Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::brk(&mut **self, ctx, cfg, imm)
+                    fn brk(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, imm: u16) -> $crate::__::core::result::Result<(),Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::brk(&mut **self, ctx, cfg, imm)
                     }
-                    fn mov(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::mov(&mut **self, ctx, cfg, dest, src)
+                    fn mov(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::mov(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn str(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, src: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::str(&mut **self, ctx, cfg, src, mem)
+                    fn str(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, src: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::str(&mut **self, ctx, cfg, src, mem)
                     }
-                    fn ldr(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::ldr(&mut **self, ctx, cfg, dest, mem)
+                    fn ldr(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::ldr(&mut **self, ctx, cfg, dest, mem)
                     }
-                    fn stp(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, src1: &(dyn $crate::out::arg::MemArg + '_), src2: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::stp(&mut **self, ctx, cfg, src1, src2, mem)
+                    fn stp(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, src1: &(dyn $crate::out::arg::MemArg + '_), src2: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::stp(&mut **self, ctx, cfg, src1, src2, mem)
                     }
-                    fn ldp(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest1: &(dyn $crate::out::arg::MemArg + '_), dest2: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::ldp(&mut **self, ctx, cfg, dest1, dest2, mem)
+                    fn ldp(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest1: &(dyn $crate::out::arg::MemArg + '_), dest2: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::ldp(&mut **self, ctx, cfg, dest1, dest2, mem)
                     }
-                    fn bl(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::bl(&mut **self, ctx, cfg, target)
+                    fn bl(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::bl(&mut **self, ctx, cfg, target)
                     }
-                    fn br(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::br(&mut **self, ctx, cfg, target)
+                    fn br(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::br(&mut **self, ctx, cfg, target)
                     }
-                    fn b(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::b(&mut **self, ctx, cfg, target)
+                    fn b(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::b(&mut **self, ctx, cfg, target)
                     }
-                    fn cmp(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::cmp(&mut **self, ctx, cfg, a, b)
+                    fn cmp(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::cmp(&mut **self, ctx, cfg, a, b)
                     }
-                    fn csel(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, cond: $crate::ConditionCode, dest: &(dyn $crate::out::arg::MemArg + '_), true_val: &(dyn $crate::out::arg::MemArg + '_), false_val: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::csel(&mut **self, ctx, cfg, cond, dest, true_val, false_val)
+                    fn csel(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, cond: $crate::ConditionCode, dest: &(dyn $crate::out::arg::MemArg + '_), true_val: &(dyn $crate::out::arg::MemArg + '_), false_val: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::csel(&mut **self, ctx, cfg, cond, dest, true_val, false_val)
                     }
-                    fn bcond(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, cond: $crate::ConditionCode, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::bcond(&mut **self, ctx, cfg, cond, target)
+                    fn bcond(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, cond: $crate::ConditionCode, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::bcond(&mut **self, ctx, cfg, cond, target)
                     }
-                    fn adr(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::adr(&mut **self, ctx, cfg, dest, src)
+                    fn adr(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::adr(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn ret(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::ret(&mut **self, ctx, cfg)
+                    fn ret(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::ret(&mut **self, ctx, cfg)
                     }
-                    fn mov_imm(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::mov_imm(&mut **self, ctx, cfg, dest, val)
+                    fn mov_imm(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::mov_imm(&mut **self, ctx, cfg, dest, val)
                     }
-                    fn mul(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::mul(&mut **self, ctx, cfg, dest, a, b)
+                    fn mul(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::mul(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn udiv(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::udiv(&mut **self, ctx, cfg, dest, a, b)
+                    fn udiv(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::udiv(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sdiv(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::sdiv(&mut **self, ctx, cfg, dest, a, b)
+                    fn sdiv(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::sdiv(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn and(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::and(&mut **self, ctx, cfg, dest, a, b)
+                    fn and(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::and(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn orr(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::orr(&mut **self, ctx, cfg, dest, a, b)
+                    fn orr(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::orr(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn eor(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::eor(&mut **self, ctx, cfg, dest, a, b)
+                    fn eor(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::eor(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn lsl(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::lsl(&mut **self, ctx, cfg, dest, a, b)
+                    fn lsl(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::lsl(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn lsr(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::lsr(&mut **self, ctx, cfg, dest, a, b)
+                    fn lsr(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::lsr(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sub(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::sub(&mut **self, ctx, cfg, dest, a, b)
+                    fn sub(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::sub(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn add(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::add(&mut **self, ctx, cfg, dest, a, b)
+                    fn add(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::add(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sxt(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::sxt(&mut **self, ctx, cfg, dest, src)
+                    fn sxt(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::sxt(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn uxt(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::uxt(&mut **self, ctx, cfg, dest, src)
+                    fn uxt(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::uxt(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn mvn(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::mvn(&mut **self, ctx, cfg, dest, src)
+                    fn mvn(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::mvn(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn fadd(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::fadd(&mut **self, ctx, cfg, dest, a, b)
+                    fn fadd(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::fadd(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn fsub(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::fsub(&mut **self, ctx, cfg, dest, a, b)
+                    fn fsub(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::fsub(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn fmul(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::fmul(&mut **self, ctx, cfg, dest, a, b)
+                    fn fmul(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::fmul(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn fdiv(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::fdiv(&mut **self, ctx, cfg, dest, a, b)
+                    fn fdiv(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::fdiv(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn fmov(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::fmov(&mut **self, ctx, cfg, dest, src)
+                    fn fmov(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::fmov(&mut **self, ctx, cfg, dest, src)
                     }
                 }
-                impl<$($u)*>$crate::out::Writer<$l, Context> for $ty{
-                    fn set_label(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, s: $l) -> $crate::__::core::result::Result<(), Self::Error> {
-                        <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)
+                impl<$($u)*>$crate::out::Writer<$l, $ctx> for $ty{
+                    fn set_label(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, s: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::Writer<$l, $ctx>>::set_label(&mut **self, ctx, cfg, s)
                     }
-                    fn adr_label(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
-                       <$ty as $crate::out::Writer<$l, Context>>::adr_label(&mut **self, ctx, cfg, dest, label)
+                    fn adr_label(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                       <$wrapped as $crate::out::Writer<$l, $ctx>>::adr_label(&mut **self, ctx, cfg, dest, label)
                     }
                 }
             )*
@@ -547,10 +547,10 @@ macro_rules! writer_dispatch {
 }
 
 writer_dispatch!(
-    [ T: WriterCore<Context> + ?Sized, Context ] [ T: Writer<L, Context> + ?Sized, L, Context ] &'_ mut T => T::Error [L]
+    [ T: WriterCore<Context> + ?Sized, Context ] [ T: Writer<L, Context> + ?Sized, L, Context ] &'_ mut T => T::Error [L] [ Context ] [T]
 );
 
 #[cfg(feature = "alloc")]
 writer_dispatch!(
-    [ T: WriterCore<Context> + ?Sized, Context ] [ T: Writer<L, Context> + ?Sized, L, Context ] ::alloc::boxed::Box<T> => T::Error [L]
+    [ T: WriterCore<Context> + ?Sized, Context ] [ T: Writer<L, Context> + ?Sized, L, Context ] ::alloc::boxed::Box<T> => T::Error [L] [ Context ] [T]
 );

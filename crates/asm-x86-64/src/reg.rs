@@ -36,12 +36,13 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
     /// * `xchg` - If true, uses xchg instead of mov for the final load
     fn load_from_context<Context, Error: core::error::Error>(
         &self,
+        ctx: &mut Context,
         arch: &X64Arch,
         x: &mut (dyn WriterCore<Context, Error = Error> + '_),
         xchg: bool,
     ) -> Result<(), Error> {
         let (a, b, c) = self.context_handle(arch);
-        x.mov(
+        x.mov(ctx,
             *arch,
             self,
             &MemArgKind::Mem {
@@ -53,7 +54,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
             },
         )?;
         if xchg {
-            x.xchg(
+            x.xchg(ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {
@@ -65,7 +66,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                 },
             )?;
         } else {
-            x.mov(
+            x.mov(ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {

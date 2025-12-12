@@ -34,10 +34,10 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
     /// * `arch` - The architecture configuration
     /// * `x` - The writer to emit instructions to
     /// * `xchg` - If true, uses xchg instead of mov for the final load
-    fn load_from_context<Error: core::error::Error>(
+    fn load_from_context<Context, Error: core::error::Error>(
         &self,
         arch: &X64Arch,
-        x: &mut (dyn WriterCore<Error = Error> + '_),
+        x: &mut (dyn WriterCore<Context, Error = Error> + '_),
         xchg: bool,
     ) -> Result<(), Error> {
         let (a, b, c) = self.context_handle(arch);

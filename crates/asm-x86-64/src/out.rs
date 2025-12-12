@@ -401,7 +401,7 @@ macro_rules! writer_dispatch {
     ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
         const _: () = {
             $(
-                impl<$($t)*> $crate::out::WriterCore<Context> for $ty{
+                impl<$($t)*, $($u)*> $crate::out::WriterCore<Context> for $ty{
                     type Error = $e;
                     fn hlt(&mut self, ctx: &mut Context, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(),Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::hlt(&mut **self, ctx, cfg)
@@ -523,7 +523,7 @@ macro_rules! writer_dispatch {
                         <$ty as $crate::out::WriterCore<Context>>::db(&mut **self, ctx, cfg,bytes)
                     }
                 }
-                impl<$($t)*>$crate::out::Writer<$l, Context> for $ty{
+                impl<$($t)*, $($u)*>$crate::out::Writer<$l, Context> for $ty{
 
                     fn set_label(&mut self, ctx: &mut Context, cfg: $crate::X64Arch, s: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                         <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)

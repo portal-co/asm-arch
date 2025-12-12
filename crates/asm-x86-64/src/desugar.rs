@@ -123,7 +123,7 @@ impl TempRegManager {
 
     /// Release all pushed registers in reverse order (LIFO).
     /// This should be called at the end of a desugaring operation to clean up the stack.
-    pub fn release_all<W: WriterCore + ?Sized>(&mut self, writer: &mut W) -> Result<(), W::Error> {
+    pub fn release_all<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context) -> Result<(), W::Error> {
         // For now, maintain backward compatibility by not using optimization
         // The stack manager will be used for offset-based access in the future
         while self.stack_manager.stack_depth() > 0 {

@@ -54,7 +54,7 @@ pub fn process_cmd<E: core::error::Error>(
             // RISC-V doesn't have push instruction
             // We need to: 1) adjust sp, 2) store to [sp]
             // addi sp, sp, -8
-            writer.addi(arch, &sp, &sp, -8)?;
+            writer.addi(ctx, arch, &sp, &sp, -8)?;
             
             match target.kind {
                 RegKind::Int => {
@@ -65,7 +65,7 @@ pub fn process_cmd<E: core::error::Error>(
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Gpr,
                     };
-                    writer.sd(arch, &reg, &mem)
+                    writer.sd(ctx, arch, &reg, &mem)
                 }
                 RegKind::Float => {
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -75,7 +75,7 @@ pub fn process_cmd<E: core::error::Error>(
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Fp,
                     };
-                    writer.fsd(arch, &reg, &mem)
+                    writer.fsd(ctx, arch, &reg, &mem)
                 }
             }
         }
@@ -92,7 +92,7 @@ pub fn process_cmd<E: core::error::Error>(
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Gpr,
                     };
-                    writer.ld(arch, &reg, &mem)?;
+                    writer.ld(ctx, arch, &reg, &mem)?;
                 }
                 RegKind::Float => {
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -102,13 +102,13 @@ pub fn process_cmd<E: core::error::Error>(
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Fp,
                     };
-                    writer.fld(arch, &reg, &mem)?;
+                    writer.fld(ctx, arch, &reg, &mem)?;
                 }
             }
             
             // RISC-V doesn't have pop instruction
             // After load, adjust sp: addi sp, sp, 8
-            writer.addi(arch, &sp, &sp, 8)
+            writer.addi(ctx, arch, &sp, &sp, 8)
         }
         Cmd::GetLocal { dest, local } => {
             let reg = Reg(dest.reg);
@@ -124,8 +124,8 @@ pub fn process_cmd<E: core::error::Error>(
                 },
             };
             match dest.kind {
-                RegKind::Int => writer.ld(arch, &reg, &mem),
-                RegKind::Float => writer.fld(arch, &reg, &mem),
+                RegKind::Int => writer.ld(ctx, arch, &reg, &mem),
+                RegKind::Float => writer.fld(ctx, arch, &reg, &mem),
             }
         }
         Cmd::SetLocal { src, local } => {
@@ -142,8 +142,8 @@ pub fn process_cmd<E: core::error::Error>(
                 },
             };
             match src.kind {
-                RegKind::Int => writer.sd(arch, &reg, &mem),
-                RegKind::Float => writer.fsd(arch, &reg, &mem),
+                RegKind::Int => writer.sd(ctx, arch, &reg, &mem),
+                RegKind::Float => writer.fsd(ctx, arch, &reg, &mem),
             }
         }
     }

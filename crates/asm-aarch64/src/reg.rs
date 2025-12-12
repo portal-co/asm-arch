@@ -34,14 +34,16 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
     /// * `arch` - The architecture configuration
     /// * `x` - The writer to emit instructions to
     /// * `xchg` - If true, uses a swap pattern instead of simple load
-    fn load_from_context<Error: core::error::Error>(
+    fn load_from_context<Context, Error: core::error::Error>(
         &self,
         arch: &AArch64Arch,
-        x: &mut (dyn WriterCore<Error = Error> + '_),
+        x: &mut (dyn WriterCore<Context, Error = Error> + '_),
+        ctx: &mut Context,
         xchg: bool,
     ) -> Result<(), Error> {
         let (a, b, c) = self.context_handle(arch);
         x.ldr(
+            ctx,
             *arch,
             self,
             &MemArgKind::Mem {
@@ -56,6 +58,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
         if xchg {
             // AArch64 doesn't have direct xchg, simulate with load/store sequence
             x.ldr(
+                ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {
@@ -69,6 +72,7 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
             )?;
         } else {
             x.ldr(
+                ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {

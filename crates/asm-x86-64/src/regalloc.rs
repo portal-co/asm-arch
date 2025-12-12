@@ -57,7 +57,7 @@ pub fn process_cmd<E: core::error::Error>(
                     if let Some(stack_mgr) = stack_manager {
                         stack_mgr.flush_before_rsp_use(writer, arch)?;
                     }
-                    writer.push(arch, &reg)
+                    writer.push(ctx, arch, &reg)
                 }
                 RegKind::Float => {
                     // For float registers, we need to manually push using movsd
@@ -69,7 +69,7 @@ pub fn process_cmd<E: core::error::Error>(
                     // Adjust stack: sub rsp, 8
                     let rsp = Reg(4);
                     let imm8 = crate::out::arg::MemArgKind::NoMem(crate::out::arg::ArgKind::Lit(8));
-                    writer.sub(arch, &rsp, &imm8)?;
+                    writer.sub(ctx, arch, &rsp, &imm8)?;
                     // Store the XMM register to [rsp]
                     let mem = crate::out::arg::MemArgKind::Mem {
                         base: rsp,
@@ -78,7 +78,7 @@ pub fn process_cmd<E: core::error::Error>(
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Xmm,
                     };
-                    writer.fmov(arch, &mem, &reg)
+                    writer.fmov(ctx, arch, &mem, &reg)
                 }
             }
         }
@@ -90,7 +90,7 @@ pub fn process_cmd<E: core::error::Error>(
                     if let Some(stack_mgr) = stack_manager {
                         stack_mgr.flush_before_rsp_use(writer, arch)?;
                     }
-                    writer.pop(arch, &reg)
+                    writer.pop(ctx, arch, &reg)
                 }
                 RegKind::Float => {
                     // For float registers, manually pop using movsd
@@ -108,10 +108,10 @@ pub fn process_cmd<E: core::error::Error>(
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Xmm,
                     };
-                    writer.fmov(arch, &reg, &mem)?;
+                    writer.fmov(ctx, arch, &reg, &mem)?;
                     // Adjust stack back: add rsp, 8
                     let imm8 = crate::out::arg::MemArgKind::NoMem(crate::out::arg::ArgKind::Lit(8));
-                    writer.add(arch, &rsp, &imm8)
+                    writer.add(ctx, arch, &rsp, &imm8)
                 }
             }
         }
@@ -138,8 +138,8 @@ pub fn process_cmd<E: core::error::Error>(
                     reg_class,
                 };
                 match dest.kind {
-                    RegKind::Int => writer.mov(arch, &reg, &mem),
-                    RegKind::Float => writer.fmov(arch, &reg, &mem),
+                    RegKind::Int => writer.mov(ctx, arch, &reg, &mem),
+                    RegKind::Float => writer.fmov(ctx, arch, &reg, &mem),
                 }
             }
         }
@@ -163,8 +163,8 @@ pub fn process_cmd<E: core::error::Error>(
                 reg_class,
             };
             match src.kind {
-                RegKind::Int => writer.mov(arch, &mem, &reg),
-                RegKind::Float => writer.fmov(arch, &mem, &reg),
+                RegKind::Int => writer.mov(ctx, arch, &mem, &reg),
+                RegKind::Float => writer.fmov(ctx, arch, &mem, &reg),
             }
         }
     }

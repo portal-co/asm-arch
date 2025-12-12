@@ -62,7 +62,7 @@ pub fn process_cmd<E: core::error::Error>(
                         reg_class: crate::RegisterClass::Gpr,
                         mode: crate::out::arg::AddressingMode::PreIndex,
                     };
-                    writer.str(arch, &reg, &mem)
+                    writer.str(ctx, arch, &reg, &mem)
                 }
                 RegKind::Float => {
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -73,7 +73,7 @@ pub fn process_cmd<E: core::error::Error>(
                         reg_class: crate::RegisterClass::Simd,
                         mode: crate::out::arg::AddressingMode::PreIndex,
                     };
-                    writer.str(arch, &reg, &mem)
+                    writer.str(ctx, arch, &reg, &mem)
                 }
             }
         }
@@ -92,7 +92,7 @@ pub fn process_cmd<E: core::error::Error>(
                         reg_class: crate::RegisterClass::Gpr,
                         mode: crate::out::arg::AddressingMode::PostIndex,
                     };
-                    writer.ldr(arch, &reg, &mem)
+                    writer.ldr(ctx, arch, &reg, &mem)
                 }
                 RegKind::Float => {
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -103,7 +103,7 @@ pub fn process_cmd<E: core::error::Error>(
                         reg_class: crate::RegisterClass::Simd,
                         mode: crate::out::arg::AddressingMode::PostIndex,
                     };
-                    writer.ldr(arch, &reg, &mem)
+                    writer.ldr(ctx, arch, &reg, &mem)
                 }
             }
         }
@@ -121,7 +121,7 @@ pub fn process_cmd<E: core::error::Error>(
                 },
                 mode: crate::out::arg::AddressingMode::Offset,
             };
-            writer.ldr(arch, &reg, &mem)
+            writer.ldr(ctx, arch, &reg, &mem)
         }
         Cmd::SetLocal { src, local } => {
             let reg = Reg(src.reg);
@@ -137,7 +137,7 @@ pub fn process_cmd<E: core::error::Error>(
                 },
                 mode: crate::out::arg::AddressingMode::Offset,
             };
-            writer.str(arch, &reg, &mem)
+            writer.str(ctx, arch, &reg, &mem)
         }
     }
 }

@@ -381,14 +381,14 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                                 // the SP-relative addressing matches the original intent.
                                 self.temp_manager.release_all(self.writer, ctx)?;
                                 // After restoring, pass through the original memory (no adjustment)
-                                return self.desugar_mem_operand(arch, &concrete);
+                                return self.desugar_mem_operand(ctx, arch, &concrete);
                             }
                         }
                     }
                 }
 
                 // Default: pass through (no SP adjustments needed)
-                self.desugar_mem_operand(arch, &concrete)
+                self.desugar_mem_operand(ctx, arch, &concrete)
             }
         }
     }
@@ -553,7 +553,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                         MemorySize::_64 => self.writer.ldr(ctx,  cfg, &temp_b, &desugared_mem_b)?,
                     }
 
-                    let desugared_a = self.desugar_mem_arg(cfg, a)?;
+                    let desugared_a = self.desugar_mem_arg(ctx, cfg, a)?;
                     let desugared_b = MemArgKind::NoMem(ArgKind::Reg { reg: temp_b, size: b_size });
 
                     op(self.writer, ctx, cfg, dest, &desugared_a, &desugared_b)?;
@@ -760,12 +760,12 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
             }
             (false, true) => {
                 // src is memory, dest is register - load from memory
-                let desugared_src = self.desugar_mem_arg(cfg, src)?;
+                let desugared_src = self.desugar_mem_arg(ctx, cfg, src)?;
                 self.writer.ldr(ctx,  cfg, dest, &desugared_src)
             }
             (true, false) => {
                 // dest is memory, src is register/literal - store to memory
-                let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
+                let desugared_dest = self.desugar_mem_arg(ctx, cfg, dest)?;
                 match &src_concrete {
                     MemArgKind::NoMem(ArgKind::Lit(val)) => {
                         // Source is literal - load to temp then store
@@ -787,7 +787,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                 let total_count = src_count + dest_count;
                 let temp = self.temp_manager.acquire_temp(self.writer, ctx, &self.config, RegisterClass::Gpr, &used, total_count)?;
 
-                let desugared_src = self.desugar_mem_arg(cfg, src)?;
+                let desugared_src = self.desugar_mem_arg(ctx, cfg, src)?;
                 let src_size = if let MemArgKind::Mem { size, .. } = &src_concrete { *size } else { MemorySize::_64 };
                 match src_size {
                     MemorySize::_8 => self.writer.ldr(ctx,  cfg, &temp, &desugared_src)?,
@@ -796,7 +796,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                     MemorySize::_64 => self.writer.ldr(ctx,  cfg, &temp, &desugared_src)?,
                 }
 
-                let desugared_dest = self.desugar_mem_arg(cfg, dest)?;
+                let desugared_dest = self.desugar_mem_arg(ctx, cfg, dest)?;
                 self.writer.str(ctx,  cfg, &temp, &desugared_dest)?;
 
                 // Release temp
@@ -928,7 +928,7 @@ writer.add(ctx, cfg, dest, a, b)
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_src = self.load_operand_to_reg(cfg, src, RegisterClass::Gpr)?;
+        let desugared_src = self.load_operand_to_reg(ctx, cfg, src, RegisterClass::Gpr)?;
         self.writer.sxt(ctx, cfg, dest, &desugared_src)
     }
 
@@ -937,7 +937,7 @@ writer.add(ctx, cfg, dest, a, b)
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_src = self.load_operand_to_reg(cfg, src, RegisterClass::Gpr)?;
+        let desugared_src = self.load_operand_to_reg(ctx, cfg, src, RegisterClass::Gpr)?;
         self.writer.uxt(ctx, cfg, dest, &desugared_src)
     }
 
@@ -946,22 +946,22 @@ writer.add(ctx, cfg, dest, a, b)
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_src = self.load_operand_to_reg(cfg, src, RegisterClass::Gpr)?;
+        let desugared_src = self.load_operand_to_reg(ctx, cfg, src, RegisterClass::Gpr)?;
         self.writer.mvn(ctx, cfg, dest, &desugared_src)
     }
 
     fn bl(&mut self, ctx: &mut Context, cfg: AArch64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        let desugared_target = self.load_operand_to_reg(cfg, target, RegisterClass::Gpr)?;
+        let desugared_target = self.load_operand_to_reg(ctx, cfg, target, RegisterClass::Gpr)?;
         self.writer.bl(ctx,  cfg, &desugared_target)
     }
 
     fn br(&mut self, ctx: &mut Context, cfg: AArch64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        let desugared_target = self.load_operand_to_reg(cfg, target, RegisterClass::Gpr)?;
+        let desugared_target = self.load_operand_to_reg(ctx, cfg, target, RegisterClass::Gpr)?;
         self.writer.br(ctx,  cfg, &desugared_target)
     }
 
     fn b(&mut self, ctx: &mut Context, cfg: AArch64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
-        let desugared_target = self.load_operand_to_reg(cfg, target, RegisterClass::Gpr)?;
+        let desugared_target = self.load_operand_to_reg(ctx, cfg, target, RegisterClass::Gpr)?;
         self.writer.b(ctx,  cfg, &desugared_target)
     }
 
@@ -970,8 +970,8 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_a = self.load_operand_to_reg(cfg, a, RegisterClass::Gpr)?;
-        let desugared_b = self.load_operand_to_reg(cfg, b, RegisterClass::Gpr)?;
+        let desugared_a = self.load_operand_to_reg(ctx, cfg, a, RegisterClass::Gpr)?;
+        let desugared_b = self.load_operand_to_reg(ctx, cfg, b, RegisterClass::Gpr)?;
         self.writer.cmp(ctx,  cfg, &desugared_a, &desugared_b)
     }
 
@@ -982,8 +982,8 @@ writer.add(ctx, cfg, dest, a, b)
         true_val: &(dyn MemArg + '_),
         false_val: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_true = self.load_operand_to_reg(cfg, true_val, RegisterClass::Gpr)?;
-        let desugared_false = self.load_operand_to_reg(cfg, false_val, RegisterClass::Gpr)?;
+        let desugared_true = self.load_operand_to_reg(ctx, cfg, true_val, RegisterClass::Gpr)?;
+        let desugared_false = self.load_operand_to_reg(ctx, cfg, false_val, RegisterClass::Gpr)?;
         self.writer.csel(ctx,  cfg, cond, dest, &desugared_true, &desugared_false)
     }
 
@@ -992,7 +992,7 @@ writer.add(ctx, cfg, dest, a, b)
         cond: crate::ConditionCode,
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_target = self.load_operand_to_reg(cfg, target, RegisterClass::Gpr)?;
+        let desugared_target = self.load_operand_to_reg(ctx, cfg, target, RegisterClass::Gpr)?;
         self.writer.bcond(ctx,  cfg, cond, &desugared_target)
     }
 
@@ -1001,7 +1001,7 @@ writer.add(ctx, cfg, dest, a, b)
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_src = self.load_operand_to_reg(cfg, src, RegisterClass::Gpr)?;
+        let desugared_src = self.load_operand_to_reg(ctx, cfg, src, RegisterClass::Gpr)?;
         self.writer.adr(ctx,  cfg, dest, &desugared_src)
     }
 
@@ -1009,7 +1009,7 @@ writer.add(ctx, cfg, dest, a, b)
         &mut self, ctx: &mut Context, cfg: AArch64Arch,
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_src = self.load_operand_to_reg(cfg, src, RegisterClass::Gpr)?;
+        let desugared_src = self.load_operand_to_reg(ctx, cfg, src, RegisterClass::Gpr)?;
         self.writer.msr_nzcv(ctx,  cfg, &desugared_src)
     }
 
@@ -1077,7 +1077,7 @@ writer.add(ctx, cfg, dest, a, b)
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_src = self.desugar_operand(cfg, src)?;
+        let desugared_src = self.desugar_operand(ctx, cfg, src)?;
         self.writer.fmov(ctx, cfg, dest, &desugared_src)
     }
 

@@ -345,7 +345,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
 
     /// Desugars a memory argument if needed.
     fn desugar_mem_arg(
-        &mut self,
+        &mut self, ctx: &mut Context,
         arch: AArch64Arch,
         mem_arg: &(dyn MemArg + '_),
     ) -> Result<MemArgKind<ArgKind>, W::Error> {
@@ -396,7 +396,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
 
     /// Loads a memory operand into a register if needed, returning a register operand.
     fn load_operand_to_reg(
-        &mut self,
+        &mut self, ctx: &mut Context,
         arch: AArch64Arch,
         operand: &(dyn MemArg + '_),
         reg_class: RegisterClass,
@@ -420,7 +420,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 let count = Self::collect_used_regs(&concrete, &mut used);
                 let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, reg_class, &used, count)?;
 
-                let desugared_mem = self.desugar_mem_arg(arch, operand)?;
+                let desugared_mem = self.desugar_mem_arg(ctx, arch, operand)?;
                 match size {
                     MemorySize::_8 => self.writer.ldr(ctx,  arch, &temp_reg, &desugared_mem)?,
                     MemorySize::_16 => self.writer.ldr(ctx,  arch, &temp_reg, &desugared_mem)?,
@@ -440,7 +440,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
     /// For literals, loads them into a register. For memory, returns the desugared memory form.
     /// The caller is responsible for loading memory operands into registers if needed.
     fn desugar_operand(
-        &mut self,
+        &mut self, ctx: &mut Context,
         arch: AArch64Arch,
         operand: &(dyn MemArg + '_),
     ) -> Result<MemArgKind<ArgKind>, W::Error> {
@@ -469,13 +469,13 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
             MemArgKind::Mem { .. } => {
                 // This is a memory operand - return desugared memory form
                 // Caller will handle loading into register if needed
-                self.desugar_mem_arg(arch, operand)
+                self.desugar_mem_arg(ctx, arch, operand)
             }
         }
     }
 
     /// Restore pushed temps if the given operand reads/writes SP directly.
-    fn restore_temps_if_sp_used(&mut self, operand: &(dyn MemArg + '_)) -> Result<(), W::Error> {
+    fn restore_temps_if_sp_used(&mut self, ctx: &mut Context, operand: &(dyn MemArg + '_)) -> Result<(), W::Error> {
         let concrete = operand.concrete_mem_kind();
         match &concrete {
             MemArgKind::NoMem(ArgKind::Reg { reg, .. }) => {
@@ -503,9 +503,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
 
     /// Helper for binary operations that may have memory or literal operands.
     /// Ensures that operands are loaded into registers as needed.
-    fn binary_op<F>(
-         &mut self,
-         cfg: AArch64Arch,
+    fn binary_op< F >( &mut self, ctx: &mut Context, cfg: AArch64Arch,
          dest: &(dyn MemArg + '_),
          a: &(dyn MemArg + '_),
          b: &(dyn MemArg + '_),
@@ -528,12 +526,12 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
             }
             (true, false) => {
                 // Only a needs desugaring
-                let desugared_a = self.desugar_operand(cfg, a)?;
+                let desugared_a = self.desugar_operand(ctx, cfg, a)?;
                 op(self.writer, ctx, cfg, dest, &desugared_a, b)
             }
             (false, true) => {
                 // Only b needs desugaring
-                let desugared_b = self.desugar_operand(cfg, b)?;
+                let desugared_b = self.desugar_operand(ctx, cfg, b)?;
                 op(self.writer, ctx, cfg, dest, a, &desugared_b)
             }
             (true, true) => {
@@ -549,7 +547,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     let total_count = a_count + b_count;
                     let temp_b = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &all_used, total_count)?;
 
-                    let desugared_mem_b = self.desugar_mem_arg(cfg, b)?;
+                    let desugared_mem_b = self.desugar_mem_arg(ctx, cfg, b)?;
                     let b_size = if let MemArgKind::Mem { size, .. } = &b_concrete { *size } else { MemorySize::_64 };
                     match b_size {
                         MemorySize::_8 => self.writer.ldr(ctx,  cfg, &temp_b, &desugared_mem_b)?,
@@ -568,8 +566,8 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     Ok(())
                 } else {
                     // At least one is literal - use desugar_operand
-                    let desugared_a = self.desugar_operand(cfg, a)?;
-                    let desugared_b = self.desugar_operand(cfg, b)?;
+                    let desugared_a = self.desugar_operand(ctx, cfg, a)?;
+                    let desugared_b = self.desugar_operand(ctx, cfg, b)?;
                     op(self.writer, ctx, cfg, dest, &desugared_a, &desugared_b)?;
                     Ok(())
                 }
@@ -700,7 +698,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         dest: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
+        let desugared_mem = self.desugar_mem_arg(ctx, cfg, mem)?;
         self.writer.ldr(ctx,  cfg, dest, &desugared_mem)
     }
 
@@ -711,7 +709,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         src: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
+        let desugared_mem = self.desugar_mem_arg(ctx, cfg, mem)?;
         self.writer.str(ctx,  cfg, src, &desugared_mem)
     }
 
@@ -723,7 +721,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         src2: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
+        let desugared_mem = self.desugar_mem_arg(ctx, cfg, mem)?;
         self.writer.stp(ctx,  cfg, src1, src2, &desugared_mem)
     }
 
@@ -735,7 +733,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         dest2: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
+        let desugared_mem = self.desugar_mem_arg(ctx, cfg, mem)?;
         self.writer.ldp(ctx,  cfg, dest1, dest2, &desugared_mem)
     }
 
@@ -828,7 +826,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
 writer.add(ctx, cfg, dest, a, b)
         })
     }
@@ -841,7 +839,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.sub(ctx, cfg, dest, a, b)
         })
     }
@@ -864,7 +862,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.mul(ctx, cfg, dest, a, b)
         })
     }
@@ -877,7 +875,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.udiv(ctx, cfg, dest, a, b)
         })
     }
@@ -890,7 +888,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.sdiv(ctx, cfg, dest, a, b)
         })
     }
@@ -903,7 +901,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.and(ctx, cfg, dest, a, b)
         })
     }
@@ -916,7 +914,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.orr(ctx, cfg, dest, a, b)
         })
     }
@@ -929,7 +927,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.eor(ctx, cfg, dest, a, b)
         })
     }
@@ -942,7 +940,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.lsl(ctx, cfg, dest, a, b)
         })
     }
@@ -955,7 +953,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.lsr(ctx, cfg, dest, a, b)
         })
     }
@@ -1091,7 +1089,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.fadd(ctx, cfg, dest, a, b)
         })
     }
@@ -1104,7 +1102,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.fsub(ctx, cfg, dest, a, b)
         })
     }
@@ -1117,7 +1115,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.fmul(ctx, cfg, dest, a, b)
         })
     }
@@ -1130,7 +1128,7 @@ writer.add(ctx, cfg, dest, a, b)
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
             writer.fdiv(ctx, cfg, dest, a, b)
         })
     }

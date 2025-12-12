@@ -515,7 +515,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
             MemArgKind::Mem { size, reg_class, .. } => {
                 // Load memory operand into temp - preserve register class and size
                 let temp = self.select_temp_reg(reg_class);
-                let desugared = self.desugar_mem_arg(arch, operand)?;
+                let desugared = self.desugar_mem_arg(ctx, arch, operand)?;
                 // Use mov to load from memory into temp
                 self.writer.mov(ctx, arch, &temp, &desugared)?;
                 Ok(MemArgKind::NoMem(ArgKind::Reg { reg: temp, size }))
@@ -524,7 +524,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
     }
 
     /// Helper for binary ops of the form op(a, b) where `a` is both destination and first source.
-    fn binary_op<F>(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_), op: F) -> Result<(), W::Error>
+    fn binary_op< F >( &mut self, ctx: &mut Context, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_), op: F) -> Result<(), W::Error>
     where
         F: FnOnce(&mut W, X64Arch, &(dyn MemArg + '_), &(dyn MemArg + '_)) -> Result<(), W::Error>,
     {
@@ -541,7 +541,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 op(self.writer, cfg, &desugared_a, b)
             }
             (false, true) => {
-                let desugared_b = self.desugar_operand(cfg, b)?; // ensure b is register or literal handled
+                let desugared_b = self.desugar_operand(ctx, cfg, b)?; // ensure b is register or literal handled
                 op(self.writer, cfg, a, &desugared_b)
             }
             (true, true) => {
@@ -552,7 +552,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 let total_count = a_count + b_count;
                 let temp_b = self.temp_manager.acquire_temp(self.writer, ctx, &self.config, crate::RegisterClass::Gpr, &all_used, total_count)?;
 
-                let desugared_b_mem = self.desugar_mem_arg(cfg, b)?;
+                let desugared_b_mem = self.desugar_mem_arg(ctx, cfg, b)?;
                 self.writer.mov(ctx, cfg, &temp_b, &desugared_b_mem)?;
                 let desugared_a = self.desugar_mem_arg(cfg, a)?;
                 op(self.writer, cfg, &desugared_a, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_b, size: MemorySize::_64 }))?;
@@ -577,11 +577,11 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         match (a_is_mem, b_is_mem) {
             (false, false) => op(self.writer, cfg, a, b),
             (true, false) => {
-                let da = self.desugar_operand(cfg, a)?;
+                let da = self.desugar_operand(ctx, cfg, a)?;
                 op(self.writer, cfg, &da, b)
             }
             (false, true) => {
-                let db = self.desugar_operand(cfg, b)?;
+                let db = self.desugar_operand(ctx, cfg, b)?;
                 op(self.writer, cfg, a, &db)
             }
             (true, true) => {
@@ -594,7 +594,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
 
                 let desugared_a = self.desugar_mem_arg(cfg, a)?;
                 self.writer.mov(ctx, cfg, &temp_a, &desugared_a)?;
-                let desugared_b = self.desugar_mem_arg(cfg, b)?;
+                let desugared_b = self.desugar_mem_arg(ctx, cfg, b)?;
                 op(self.writer, cfg, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_a, size: MemorySize::_64 }), &desugared_b)?;
 
                 // Release the temp register (will pop if needed)

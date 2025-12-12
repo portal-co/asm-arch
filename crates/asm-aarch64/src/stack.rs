@@ -138,9 +138,10 @@ impl StackManager {
 
     /// Optimizes pending stack operations and executes them.
     /// Returns true if any optimizations were applied.
-    pub fn optimize_and_execute<W: WriterCore + ?Sized>(
+    pub fn optimize_and_execute<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
     ) -> Result<bool, W::Error> {
         if self.pending_count == 0 {
@@ -180,7 +181,7 @@ impl StackManager {
                             reg_class: RegisterClass::Gpr,
                             mode: crate::out::arg::AddressingMode::PreIndex,
                         };
-                        writer.str(arch, &reg, &mem)?;
+                        writer.str(ctx, arch, &reg, &mem)?;
                     }
                     StackAccess::Pop(reg) => {
                         // AArch64 pop: ldr with post-indexed addressing
@@ -192,7 +193,7 @@ impl StackManager {
                             reg_class: RegisterClass::Gpr,
                             mode: crate::out::arg::AddressingMode::PostIndex,
                         };
-                        writer.ldr(arch, &reg, &mem)?;
+                        writer.ldr(ctx, arch, &reg, &mem)?;
                     }
                     StackAccess::Access { offset: _, size: _ } => {
                         // Direct access - no stack pointer change needed
@@ -208,35 +209,38 @@ impl StackManager {
     }
 
     /// Performs an optimized push operation.
-    pub fn push<W: WriterCore + ?Sized>(
+    pub fn push<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
         reg: &Reg,
     ) -> Result<(), W::Error> {
         self.record_operation(StackAccess::Push(*reg));
         // For now, delegate to optimized execution
-        self.optimize_and_execute(writer, arch)?;
+        self.optimize_and_execute(writer, ctx, arch)?;
         Ok(())
     }
 
     /// Performs an optimized pop operation.
-    pub fn pop<W: WriterCore + ?Sized>(
+    pub fn pop<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
         reg: &Reg,
     ) -> Result<(), W::Error> {
         self.record_operation(StackAccess::Pop(*reg));
         // For now, delegate to optimized execution
-        self.optimize_and_execute(writer, arch)?;
+        self.optimize_and_execute(writer, ctx, arch)?;
         Ok(())
     }
 
     /// Accesses stack data at the given offset with optimization.
-    pub fn access_stack<W: WriterCore + ?Sized>(
+    pub fn access_stack<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
         offset: i32,
         size: MemorySize,
@@ -249,14 +253,15 @@ impl StackManager {
         let mem_arg = self.stack_mem_arg(offset, size, reg_class);
 
         // Perform the access
-        writer.ldr(arch, dest, &mem_arg)
+        writer.ldr(ctx, arch, dest, &mem_arg)
     }
 
     /// Accesses a local variable using frame pointer with proper offset fixups.
     /// This mirrors the RISC-V GetLocal functionality.
-    pub fn get_local<W: WriterCore + ?Sized>(
+    pub fn get_local<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
         local: u32,
         size: MemorySize,
@@ -267,14 +272,15 @@ impl StackManager {
         let mem_arg = self.local_mem_arg(local, size, reg_class);
 
         // Perform the load
-        writer.ldr(arch, dest, &mem_arg)
+        writer.ldr(ctx, arch, dest, &mem_arg)
     }
 
     /// Stores a value to a local variable using frame pointer with proper offset fixups.
     /// This mirrors the RISC-V SetLocal functionality.
-    pub fn set_local<W: WriterCore + ?Sized>(
+    pub fn set_local<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
         local: u32,
         size: MemorySize,
@@ -285,7 +291,7 @@ impl StackManager {
         let mem_arg = self.local_mem_arg(local, size, reg_class);
 
         // Perform the store
-        writer.str(arch, src, &mem_arg)
+        writer.str(ctx, arch, src, &mem_arg)
     }
 
     /// Gets the number of pending operations.
@@ -326,13 +332,14 @@ impl StackManager {
 
     /// Flushes all pending stack operations before an SP-using instruction.
     /// This ensures the stack is in a consistent state for SP operations.
-    pub fn flush_before_sp_use<W: WriterCore + ?Sized>(
+    pub fn flush_before_sp_use<W: WriterCore<Context> + ?Sized, Context>(
         &mut self,
         writer: &mut W,
+        ctx: &mut Context,
         arch: AArch64Arch,
     ) -> Result<(), W::Error> {
         if self.pending_count > 0 {
-            self.optimize_and_execute(writer, arch)?;
+            self.optimize_and_execute(writer, ctx, arch)?;
         }
         Ok(())
     }

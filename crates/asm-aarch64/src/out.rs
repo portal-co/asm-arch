@@ -533,7 +533,7 @@ macro_rules! writer_dispatch {
                         <$ty as $crate::out::WriterCore<Context>>::fmov(&mut **self, ctx, cfg, dest, src)
                     }
                 }
-                impl<$($t)*, Context>$crate::out::Writer<$l, Context> for $ty{
+                impl<$($t)*>$crate::out::Writer<$l, Context> for $ty{
                     fn set_label(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, s: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                         <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)
                     }

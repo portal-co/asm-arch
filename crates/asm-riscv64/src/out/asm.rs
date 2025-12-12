@@ -349,7 +349,7 @@ macro_rules! writers {
                 }
             }
             
-            impl<L: Display> Writer<L> for $ty {
+            impl<L: Display, Context> $crate::out::Writer<L, Context> for $ty {
                 fn set_label(&mut self, _cfg: $crate::RiscV64Arch, s: L) -> Result<(), Self::Error> {
                     $crate::__::core::write!(self, "{s}:\n")
                 }

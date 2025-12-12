@@ -15,7 +15,7 @@ macro_rules! writers {
     ($($ty:ty),*) => {
         const _: () = {
             $(
-            impl $crate::out::WriterCore for $ty{
+            impl<Context> $crate::out::WriterCore<Context> for $ty{
                 type Error = $crate::__::core::fmt::Error;
                 
                 fn ebreak(&mut self, _ctx: &mut Context, _cfg: $crate::RiscV64Arch) -> Result<(),Self::Error>{

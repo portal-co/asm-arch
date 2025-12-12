@@ -15,7 +15,7 @@ macro_rules! writers {
     ($($ty:ty),*) => {
         const _: () = {
             $(
-            impl $crate::out::WriterCore for $ty{
+            impl<Context> $crate::out::WriterCore<Context> for $ty{
                 type Error = $crate::__::core::fmt::Error;
                 fn hlt(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch) -> $crate::__::core::result::Result<(),Self::Error>{
                     $crate::__::core::write!(self,"hlt\n")

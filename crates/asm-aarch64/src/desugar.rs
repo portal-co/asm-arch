@@ -145,7 +145,7 @@ impl TempRegManager {
     }
 
     /// Acquire a temporary register, pushing it to the stack if needed and not already pushed.
-    pub fn acquire_temp<W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context,
+    pub fn acquire_temp<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context,
         config: &DesugarConfig,
         reg_class: RegisterClass,
         used_regs: &[Reg],
@@ -212,7 +212,7 @@ impl TempRegManager {
 
     /// Release a temporary register, popping it from the stack if it's at the top.
     /// If the register is buried deeper in the stack, it remains pushed for potential future use.
-    pub fn release_temp<W: WriterCore + ?Sized>(&mut self, writer: &mut W, reg: Reg) -> Result<(), W::Error> {
+    pub fn release_temp<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context, reg: Reg) -> Result<(), W::Error> {
         // Only pop if this register is at the top of the stack
         if self.stack_depth > 0 && self.pushed_stack[self.stack_depth - 1] == reg {
             let sp = Reg(31); // SP register
@@ -234,7 +234,7 @@ impl TempRegManager {
 
     /// Release all pushed registers in reverse order (LIFO).
     /// This should be called at the end of a desugaring operation to clean up the stack.
-    pub fn release_all<W: WriterCore + ?Sized>(&mut self, writer: &mut W) -> Result<(), W::Error> {
+    pub fn release_all<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context) -> Result<(), W::Error> {
         while self.stack_depth > 0 {
             let reg = self.pushed_stack[self.stack_depth - 1];
             let sp = Reg(31); // SP register
@@ -276,6 +276,8 @@ pub struct DesugaringWriter<'a, W: WriterCore<Context> + ?Sized, Context> {
     config: DesugarConfig,
     /// Manager for temporary register allocation with push/pop caching.
     temp_manager: TempRegManager,
+    /// Marker to keep the Context generic parameter.
+    _marker: core::marker::PhantomData<Context>,
 }
 
 impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Context> {
@@ -285,6 +287,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
             writer,
             config: DesugarConfig::default(),
             temp_manager: TempRegManager::new(),
+            _marker: core::marker::PhantomData,
         }
     }
 
@@ -294,6 +297,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
             writer,
             config,
             temp_manager: TempRegManager::new(),
+            _marker: core::marker::PhantomData,
         }
     }
 
@@ -414,7 +418,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 // This is a memory operand - load it into a temp register
                 let mut used = [Reg(0); 2];
                 let count = Self::collect_used_regs(&concrete, &mut used);
-                let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, reg_class, &used, count)?;
+                let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx, ctx,  &self.config, reg_class, &used, count)?;
 
                 let desugared_mem = self.desugar_mem_arg(arch, operand)?;
                 match size {
@@ -543,7 +547,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     let a_count = Self::collect_used_regs(&a_concrete, &mut all_used[0..3]);
                     let b_count = Self::collect_used_regs(&b_concrete, &mut all_used[3..6]);
                     let total_count = a_count + b_count;
-                    let temp_b = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &all_used, total_count)?;
+                    let temp_b = self.temp_manager.acquire_temp(self.writer, ctx, ctx,  &self.config, RegisterClass::Gpr, &all_used, total_count)?;
 
                     let desugared_mem_b = self.desugar_mem_arg(cfg, b)?;
                     let b_size = if let MemArgKind::Mem { size, .. } = &b_concrete { *size } else { MemorySize::_64 };
@@ -560,7 +564,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     op(self.writer, ctx, cfg, dest, &desugared_a, &desugared_b)?;
 
                     // Release the temp register
-                    self.temp_manager.release_temp(self.writer, ctx, temp_b)?;
+                    self.temp_manager.release_temp(self.writer, ctx, ctx, temp_b)?;
                     Ok(())
                 } else {
                     // At least one is literal - use desugar_operand
@@ -796,7 +800,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                 let src_count = Self::collect_used_regs(&src_concrete, &mut used[0..2]);
                 let dest_count = Self::collect_used_regs(&dest_concrete, &mut used[2..4]);
                 let total_count = src_count + dest_count;
-                let temp = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &used, total_count)?;
+                let temp = self.temp_manager.acquire_temp(self.writer, ctx, ctx,  &self.config, RegisterClass::Gpr, &used, total_count)?;
 
                 let desugared_src = self.desugar_mem_arg(cfg, src)?;
                 let src_size = if let MemArgKind::Mem { size, .. } = &src_concrete { *size } else { MemorySize::_64 };
@@ -811,7 +815,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                 self.writer.str(ctx,  cfg, &temp, &desugared_dest)?;
 
                 // Release temp
-                self.temp_manager.release_temp(self.writer, ctx, temp)
+                self.temp_manager.release_temp(self.writer, ctx, ctx, temp)
             }
         }
     }
@@ -1147,11 +1151,11 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
 
 // Implement Writer trait for DesugaringWriter
 // This enables label support - we simply forward to the underlying writer
-impl<'a, W, L> crate::out::Writer<L> for DesugaringWriter<'a, W>
+impl<'a, W, L, Context> crate::out::Writer<L, Context> for DesugaringWriter<'a, W, Context>
 where
-    W: crate::out::Writer<L> + ?Sized,
+    W: crate::out::Writer<L, Context> + ?Sized,
 {
-    fn set_label(&mut self, cfg: AArch64Arch, label: L) -> Result<(), Self::Error> {
+    fn set_label(&mut self, ctx: &mut Context, cfg: AArch64Arch, label: L) -> Result<(), Self::Error> {
         self.writer.set_label(ctx, cfg, label)
     }
 

@@ -260,9 +260,7 @@ impl StackSpillManager {
         }
     }
 
-    fn save_reg<W: WriterCore + ?Sized>(
-        &mut self,
-        writer: &mut W,
+    fn save_reg<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context,
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
@@ -271,7 +269,7 @@ impl StackSpillManager {
             let reserve = 4; // batch size
             let total = reserve * self.slot_size;
             let sp = Reg(2);
-            writer.addi(arch, &sp, &sp, -total)?;
+            writer.addi(ctx, arch, &sp, &sp, -total)?;
             self.reserved_slots = reserve;
             self.used_slots = 0;
             self.saved_regs = [None; 32];
@@ -287,16 +285,14 @@ impl StackSpillManager {
             size: MemorySize::_64,
             reg_class: crate::RegisterClass::Gpr,
         };
-        writer.sd(arch, &reg, &mem)?;
+        writer.sd(ctx, arch, &reg, &mem)?;
         self.saved_regs[self.saved_regs_len] = Some(reg);
         self.saved_regs_len += 1;
         self.used_slots += 1;
         Ok(())
     }
 
-    fn restore_reg<W: WriterCore + ?Sized>(
-        &mut self,
-        writer: &mut W,
+    fn restore_reg<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context,
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
@@ -320,13 +316,13 @@ impl StackSpillManager {
 
         // Load into the requested reg. This assumes the caller passes the same reg
         // they saved earlier; otherwise the semantics are "restore value into reg".
-        writer.ld(arch, &reg, &mem)?;
+        writer.ld(ctx, arch, &reg, &mem)?;
 
         // If we've freed all used slots, deallocate the reserved chunk
         if self.used_slots == 0 && self.reserved_slots > 0 {
             let total = self.reserved_slots * self.slot_size;
             let sp = Reg(2);
-            writer.addi(arch, &sp, &sp, total)?;
+            writer.addi(ctx, arch, &sp, &sp, total)?;
             self.reserved_slots = 0;
             self.saved_regs = [None; 32];
             self.saved_regs_len = 0;
@@ -339,9 +335,7 @@ impl StackSpillManager {
     /// deallocate the reserved stack area. This is required before emitting any
     /// memory operation that directly uses `sp` as its base, to avoid accidental
     /// aliasing with the reserved spill area.
-    fn flush_all<W: WriterCore + ?Sized>(
-        &mut self,
-        writer: &mut W,
+    fn flush_all<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context,
         arch: RiscV64Arch,
     ) -> Result<(), W::Error> {
         if self.reserved_slots == 0 {
@@ -362,14 +356,14 @@ impl StackSpillManager {
             // Load into the corresponding saved register
             self.saved_regs_len -= 1;
             let reg = self.saved_regs[self.saved_regs_len].expect("saved_regs mismatch");
-            writer.ld(arch, &reg, &mem)?;
+            writer.ld(ctx, arch, &reg, &mem)?;
         }
 
         // Deallocate reserved chunk
         if self.reserved_slots > 0 {
             let total = self.reserved_slots * self.slot_size;
             let sp = Reg(2);
-            writer.addi(arch, &sp, &sp, total)?;
+            writer.addi(ctx, arch, &sp, &sp, total)?;
             self.reserved_slots = 0;
         }
 
@@ -463,7 +457,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         reg: Reg,
     ) -> Result<(), W::Error> {
         // Backwards compatibility: delegate to spill_manager
-        self.spill_manager.save_reg(self.writer, arch, reg)
+        self.spill_manager.save_reg(self.writer, ctx, ctx, arch, reg)
     }
 
     /// Pops a register from the stack (restore reg and adjust sp): `ld reg, 0(sp)`; `addi sp, sp, slot`.
@@ -472,7 +466,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
-        self.spill_manager.restore_reg(self.writer, arch, reg)
+        self.spill_manager.restore_reg(self.writer, ctx, ctx, arch, reg)
     }
 
     /// Backwards-compatible shim: if previously used, translate to push/pop semantics.
@@ -548,7 +542,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                                 self.save_reg_to_stack(arch, reg_to_save)?;
                             }
                         }
-                        self.writer.li(arch, &temp, *val)?;
+                        self.writer.li(ctx, arch, &temp, *val)?;
                         if needs_save {
                             if let Some(reg_to_save) = saved_reg {
                                 self.restore_reg_from_stack(arch, reg_to_save)?;
@@ -579,7 +573,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                                     self.save_reg_to_stack(arch, reg_to_save)?;
                                 }
                             }
-                            self.writer.li(arch, &temp, *val)?;
+                            self.writer.li(ctx, arch, &temp, *val)?;
                             if needs_save {
                                 if let Some(reg_to_save) = saved_reg {
                                     self.restore_reg_from_stack(arch, reg_to_save)?;
@@ -608,8 +602,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         let (shift_reg, shift_needs_save, shift_saved_reg) = self.select_temp_reg(&shift_avoid[..avoid_regs_len + 1]);
 
                         // Load shift amount
-                        self.writer.li(arch, &shift_reg, *scale as u64)?;
-                        self.writer.sll(arch, &result_reg, &offset_reg, &shift_reg)?;
+                        self.writer.li(ctx, arch, &shift_reg, *scale as u64)?;
+                        self.writer.sll(ctx, arch, &result_reg, &offset_reg, &shift_reg)?;
                         
                         if shift_needs_save {
                             if let Some(reg_to_save) = shift_saved_reg {
@@ -635,7 +629,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                             self.save_reg_to_stack(arch, reg_to_save)?;
                         }
                     }
-                    self.writer.add(arch, &result_reg, &base_reg, &scaled_offset_reg)?;
+                    self.writer.add(ctx, arch, &result_reg, &base_reg, &scaled_offset_reg)?;
                     if needs_save {
                         if let Some(reg_to_save) = saved_reg {
                             self.restore_reg_from_stack(arch, reg_to_save)?;
@@ -660,8 +654,8 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     }
 
                     // Load displacement into temp and add to effective_base
-                    self.writer.li(arch, &temp, (*disp as i64) as u64)?;
-                    self.writer.add(arch, &temp, &effective_base, &temp)?;
+                    self.writer.li(ctx, arch, &temp, (*disp as i64) as u64)?;
+                    self.writer.add(ctx, arch, &temp, &effective_base, &temp)?;
                     
                     if needs_save {
                         if let Some(reg_to_save) = saved_reg {
@@ -773,7 +767,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                         self.save_reg_to_stack(arch, reg_to_save)?;
                     }
                 }
-                self.writer.li(arch, &temp_reg, *val as u64)?;
+                self.writer.li(ctx, arch, &temp_reg, *val as u64)?;
                 if needs_save {
                     if let Some(reg_to_save) = saved_reg {
                         self.restore_reg_from_stack(arch, reg_to_save)?;
@@ -797,10 +791,10 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                 // Load the memory operand into the temp register
                 // Use the appropriate load instruction based on size
                 match size {
-                    MemorySize::_8 => self.writer.lb(arch, &temp_reg, &desugared_mem)?,
-                    MemorySize::_16 => self.writer.lh(arch, &temp_reg, &desugared_mem)?,
-                    MemorySize::_32 => self.writer.lw(arch, &temp_reg, &desugared_mem)?,
-                    MemorySize::_64 => self.writer.ld(arch, &temp_reg, &desugared_mem)?,
+                    MemorySize::_8 => self.writer.lb(ctx, arch, &temp_reg, &desugared_mem)?,
+                    MemorySize::_16 => self.writer.lh(ctx, arch, &temp_reg, &desugared_mem)?,
+                    MemorySize::_32 => self.writer.lw(ctx, arch, &temp_reg, &desugared_mem)?,
+                    MemorySize::_64 => self.writer.ld(ctx, arch, &temp_reg, &desugared_mem)?,
                 }
 
                 if needs_save {
@@ -912,20 +906,20 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     let desugared_mem_a = self.desugar_mem_arg(cfg, a)?;
                     let a_size = if let MemArgKind::Mem { size, .. } = &a_concrete { *size } else { MemorySize::_64 };
                     match a_size {
-                        MemorySize::_8 => self.writer.lb(cfg, &temp_reg_a, &desugared_mem_a)?,
-                        MemorySize::_16 => self.writer.lh(cfg, &temp_reg_a, &desugared_mem_a)?,
-                        MemorySize::_32 => self.writer.lw(cfg, &temp_reg_a, &desugared_mem_a)?,
-                        MemorySize::_64 => self.writer.ld(cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_8 => self.writer.lb(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_16 => self.writer.lh(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_32 => self.writer.lw(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_64 => self.writer.ld(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
                     }
 
                     // Load b
                     let desugared_mem_b = self.desugar_mem_arg(cfg, b)?;
                     let b_size = if let MemArgKind::Mem { size, .. } = &b_concrete { *size } else { MemorySize::_64 };
                     match b_size {
-                        MemorySize::_8 => self.writer.lb(cfg, &temp_reg_b, &desugared_mem_b)?,
-                        MemorySize::_16 => self.writer.lh(cfg, &temp_reg_b, &desugared_mem_b)?,
-                        MemorySize::_32 => self.writer.lw(cfg, &temp_reg_b, &desugared_mem_b)?,
-                        MemorySize::_64 => self.writer.ld(cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_8 => self.writer.lb(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_16 => self.writer.lh(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_32 => self.writer.lw(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_64 => self.writer.ld(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
                     }
 
                     let desugared_a = MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg_a, size: a_size });
@@ -1033,20 +1027,20 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
                     let desugared_mem_a = self.desugar_mem_arg(cfg, a)?;
                     let a_size = if let MemArgKind::Mem { size, .. } = &a_concrete { *size } else { MemorySize::_64 };
                     match a_size {
-                        MemorySize::_8 => self.writer.lb(cfg, &temp_reg_a, &desugared_mem_a)?,
-                        MemorySize::_16 => self.writer.lh(cfg, &temp_reg_a, &desugared_mem_a)?,
-                        MemorySize::_32 => self.writer.lw(cfg, &temp_reg_a, &desugared_mem_a)?,
-                        MemorySize::_64 => self.writer.ld(cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_8 => self.writer.lb(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_16 => self.writer.lh(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_32 => self.writer.lw(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
+                        MemorySize::_64 => self.writer.ld(ctx, cfg, &temp_reg_a, &desugared_mem_a)?,
                     }
 
                     // Load b
                     let desugared_mem_b = self.desugar_mem_arg(cfg, b)?;
                     let b_size = if let MemArgKind::Mem { size, .. } = &b_concrete { *size } else { MemorySize::_64 };
                     match b_size {
-                        MemorySize::_8 => self.writer.lb(cfg, &temp_reg_b, &desugared_mem_b)?,
-                        MemorySize::_16 => self.writer.lh(cfg, &temp_reg_b, &desugared_mem_b)?,
-                        MemorySize::_32 => self.writer.lw(cfg, &temp_reg_b, &desugared_mem_b)?,
-                        MemorySize::_64 => self.writer.ld(cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_8 => self.writer.lb(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_16 => self.writer.lh(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_32 => self.writer.lw(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
+                        MemorySize::_64 => self.writer.ld(ctx, cfg, &temp_reg_b, &desugared_mem_b)?,
                     }
 
                     let desugared_a = MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg_a, size: a_size });
@@ -1104,7 +1098,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.ld(cfg, dest, &desugared_mem)
+        self.writer.ld(ctx, cfg, dest, &desugared_mem)
     }
 
     fn sd(
@@ -1114,7 +1108,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.sd(cfg, src, &desugared_mem)
+        self.writer.sd(ctx, cfg, src, &desugared_mem)
     }
 
     fn lw(
@@ -1124,7 +1118,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.lw(cfg, dest, &desugared_mem)
+        self.writer.lw(ctx, cfg, dest, &desugared_mem)
     }
 
     fn sw(
@@ -1134,7 +1128,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.sw(cfg, src, &desugared_mem)
+        self.writer.sw(ctx, cfg, src, &desugared_mem)
     }
 
     fn lb(
@@ -1144,7 +1138,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.lb(cfg, dest, &desugared_mem)
+        self.writer.lb(ctx, cfg, dest, &desugared_mem)
     }
 
     fn sb(
@@ -1154,7 +1148,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.sb(cfg, src, &desugared_mem)
+        self.writer.sb(ctx, cfg, src, &desugared_mem)
     }
 
     fn lh(
@@ -1164,7 +1158,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.lh(cfg, dest, &desugared_mem)
+        self.writer.lh(ctx, cfg, dest, &desugared_mem)
     }
 
     fn sh(
@@ -1174,7 +1168,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.sh(cfg, src, &desugared_mem)
+        self.writer.sh(ctx, cfg, src, &desugared_mem)
     }
 
     fn fld(
@@ -1184,7 +1178,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.fld(cfg, dest, &desugared_mem)
+        self.writer.fld(ctx, cfg, dest, &desugared_mem)
     }
 
     fn fsd(
@@ -1194,14 +1188,14 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_mem = self.desugar_mem_arg(cfg, mem)?;
-        self.writer.fsd(cfg, src, &desugared_mem)
+        self.writer.fsd(ctx, cfg, src, &desugared_mem)
     }
 
     // Forward all non-memory instructions directly to the underlying writer
     // (We only need to implement the trait - the default implementations will forward via todo!())
     
     fn ebreak(&mut self, cfg: RiscV64Arch) -> Result<(), Self::Error> {
-        self.writer.ebreak(cfg)
+        self.writer.ebreak(ctx, cfg)
     }
 
     fn mv(
@@ -1215,13 +1209,13 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
             MemArgKind::NoMem(ArgKind::Lit(val)) => {
                 // Source is a literal - use li instead of mv
                 self.flush_sp_if_needed(cfg, &[dest, src])?;
-                self.writer.li(cfg, dest, *val as u64)
+                self.writer.li(ctx, cfg, dest, *val as u64)
             }
             _ => {
                 // Source is register or memory - desugar and use mv
                 let desugared_src = self.desugar_operand(cfg, src)?;
                 self.flush_sp_if_needed(cfg, &[dest, &desugared_src])?;
-                self.writer.mv(cfg, dest, &desugared_src)
+                self.writer.mv(ctx, cfg, dest, &desugared_src)
             }
         }
     }
@@ -1234,7 +1228,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.add(cfg, dest, a, b)
+            writer.add(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1246,7 +1240,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.sub(cfg, dest, a, b)
+            writer.sub(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1260,14 +1254,14 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         if Self::fits_in_12_bits(imm) {
             let desugared_src = self.desugar_operand(cfg, src)?;
             self.flush_sp_if_needed(cfg, &[dest, &desugared_src])?;
-            self.writer.addi(cfg, dest, &desugared_src, imm)
+            self.writer.addi(ctx, cfg, dest, &desugared_src, imm)
         } else {
             // Large immediate - load into temp and add
             let temp_reg = self.config.temp_reg3;
-            self.writer.li(cfg, &temp_reg, imm as u64)?;
+            self.writer.li(ctx, cfg, &temp_reg, imm as u64)?;
             let desugared_src = self.desugar_operand(cfg, src)?;
             self.flush_sp_if_needed(cfg, &[dest, &desugared_src, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
-            self.writer.add(cfg, dest, &desugared_src, &temp_reg)
+            self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
         }
     }
 
@@ -1277,7 +1271,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         dest: &(dyn MemArg + '_),
         val: u64,
     ) -> Result<(), Self::Error> {
-        self.writer.li(cfg, dest, val)
+        self.writer.li(ctx, cfg, dest, val)
     }
 
     fn sll(
@@ -1288,7 +1282,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.sll(cfg, dest, a, b)
+            writer.sll(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1302,7 +1296,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.mul(cfg, dest, a, b)
+            writer.mul(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1314,7 +1308,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.mulh(cfg, dest, a, b)
+            writer.mulh(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1326,7 +1320,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.div(cfg, dest, a, b)
+            writer.div(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1338,7 +1332,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.divu(cfg, dest, a, b)
+            writer.divu(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1350,7 +1344,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.rem(cfg, dest, a, b)
+            writer.rem(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1362,7 +1356,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.remu(cfg, dest, a, b)
+            writer.remu(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1376,7 +1370,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.and(cfg, dest, a, b)
+            writer.and(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1388,7 +1382,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.or(cfg, dest, a, b)
+            writer.or(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1400,7 +1394,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.xor(cfg, dest, a, b)
+            writer.xor(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1412,7 +1406,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.srl(cfg, dest, a, b)
+            writer.srl(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1424,7 +1418,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.sra(cfg, dest, a, b)
+            writer.sra(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1436,7 +1430,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.slt(cfg, dest, a, b)
+            writer.slt(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1448,7 +1442,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.sltu(cfg, dest, a, b)
+            writer.sltu(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1464,15 +1458,15 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         if Self::fits_in_12_bits(offset) {
             let desugared_base = self.desugar_operand(cfg, base)?;
             self.flush_sp_if_needed(cfg, &[dest, &desugared_base])?;
-            self.writer.jalr(cfg, dest, &desugared_base, offset)
+            self.writer.jalr(ctx, cfg, dest, &desugared_base, offset)
         } else {
             // Large offset - compute address in temp register
             let temp_reg = self.config.temp_reg3;
-            self.writer.li(cfg, &temp_reg, offset as u64)?;
+            self.writer.li(ctx, cfg, &temp_reg, offset as u64)?;
             let desugared_base = self.desugar_operand(cfg, base)?;
             self.flush_sp_if_needed(cfg, &[dest, &desugared_base, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
-            self.writer.add(cfg, &temp_reg, &desugared_base, &temp_reg)?;
-            self.writer.jalr(cfg, dest, &temp_reg, 0)
+            self.writer.add(ctx, cfg, &temp_reg, &desugared_base, &temp_reg)?;
+            self.writer.jalr(ctx, cfg, dest, &temp_reg, 0)
         }
     }
 
@@ -1484,7 +1478,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
     ) -> Result<(), Self::Error> {
         let desugared_target = self.desugar_operand(cfg, target)?;
         self.flush_sp_if_needed(cfg, &[dest, &desugared_target])?;
-        self.writer.jal(cfg, dest, &desugared_target)
+        self.writer.jal(ctx, cfg, dest, &desugared_target)
     }
 
     fn beq(
@@ -1495,7 +1489,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op_no_dest(cfg, a, b, target, |writer, cfg, a, b, target| {
-            writer.beq(cfg, a, b, target)
+            writer.beq(ctx, cfg, a, b, target)
         })
     }
 
@@ -1507,7 +1501,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op_no_dest(cfg, a, b, target, |writer, cfg, a, b, target| {
-            writer.bne(cfg, a, b, target)
+            writer.bne(ctx, cfg, a, b, target)
         })
     }
 
@@ -1519,7 +1513,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op_no_dest(cfg, a, b, target, |writer, cfg, a, b, target| {
-            writer.blt(cfg, a, b, target)
+            writer.blt(ctx, cfg, a, b, target)
         })
     }
 
@@ -1531,7 +1525,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op_no_dest(cfg, a, b, target, |writer, cfg, a, b, target| {
-            writer.bge(cfg, a, b, target)
+            writer.bge(ctx, cfg, a, b, target)
         })
     }
 
@@ -1543,7 +1537,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op_no_dest(cfg, a, b, target, |writer, cfg, a, b, target| {
-            writer.bltu(cfg, a, b, target)
+            writer.bltu(ctx, cfg, a, b, target)
         })
     }
 
@@ -1555,22 +1549,22 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op_no_dest(cfg, a, b, target, |writer, cfg, a, b, target| {
-            writer.bgeu(cfg, a, b, target)
+            writer.bgeu(ctx, cfg, a, b, target)
         })
     }
 
     fn ret(&mut self, cfg: RiscV64Arch) -> Result<(), Self::Error> {
-        self.writer.ret(cfg)
+        self.writer.ret(ctx, cfg)
     }
 
     fn call(&mut self, cfg: RiscV64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let desugared_target = self.desugar_operand(cfg, target)?;
-        self.writer.call(cfg, &desugared_target)
+        self.writer.call(ctx, cfg, &desugared_target)
     }
 
     fn j(&mut self, cfg: RiscV64Arch, target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let desugared_target = self.desugar_operand(cfg, target)?;
-        self.writer.j(cfg, &desugared_target)
+        self.writer.j(ctx, cfg, &desugared_target)
     }
 
     // Special operations
@@ -1581,7 +1575,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         dest: &(dyn MemArg + '_),
         imm: u32,
     ) -> Result<(), Self::Error> {
-        self.writer.lui(cfg, dest, imm)
+        self.writer.lui(ctx, cfg, dest, imm)
     }
 
     fn auipc(
@@ -1590,7 +1584,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         dest: &(dyn MemArg + '_),
         imm: u32,
     ) -> Result<(), Self::Error> {
-        self.writer.auipc(cfg, dest, imm)
+        self.writer.auipc(ctx, cfg, dest, imm)
     }
 
     // Floating-point operations
@@ -1603,7 +1597,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.fadd_d(cfg, dest, a, b)
+            writer.fadd_d(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1615,7 +1609,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.fsub_d(cfg, dest, a, b)
+            writer.fsub_d(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1627,7 +1621,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.fmul_d(cfg, dest, a, b)
+            writer.fmul_d(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1639,7 +1633,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-            writer.fdiv_d(cfg, dest, a, b)
+            writer.fdiv_d(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1650,7 +1644,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_src = self.desugar_operand(cfg, src)?;
-        self.writer.fmov_d(cfg, dest, &desugared_src)
+        self.writer.fmov_d(ctx, cfg, dest, &desugared_src)
     }
 
     fn fcvt_d_l(
@@ -1660,7 +1654,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_src = self.desugar_operand(cfg, src)?;
-        self.writer.fcvt_d_l(cfg, dest, &desugared_src)
+        self.writer.fcvt_d_l(ctx, cfg, dest, &desugared_src)
     }
 
     fn fcvt_l_d(
@@ -1670,7 +1664,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_src = self.desugar_operand(cfg, src)?;
-        self.writer.fcvt_l_d(cfg, dest, &desugared_src)
+        self.writer.fcvt_l_d(ctx, cfg, dest, &desugared_src)
     }
 }
 
@@ -1681,7 +1675,7 @@ where
     W: crate::out::Writer<L> + ?Sized,
 {
     fn set_label(&mut self, cfg: RiscV64Arch, label: L) -> Result<(), Self::Error> {
-        self.writer.set_label(cfg, label)
+        self.writer.set_label(ctx, cfg, label)
     }
 
     fn jal_label(
@@ -1690,7 +1684,7 @@ where
         dest: &(dyn MemArg + '_),
         label: L,
     ) -> Result<(), Self::Error> {
-        self.writer.jal_label(cfg, dest, label)
+        self.writer.jal_label(ctx, cfg, dest, label)
     }
 
     fn bcond_label(
@@ -1701,7 +1695,7 @@ where
         b: &(dyn MemArg + '_),
         label: L,
     ) -> Result<(), Self::Error> {
-        self.writer.bcond_label(cfg, cond, a, b, label)
+        self.writer.bcond_label(ctx, cfg, cond, a, b, label)
     }
 }
 

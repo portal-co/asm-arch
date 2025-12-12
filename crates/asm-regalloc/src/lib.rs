@@ -123,7 +123,7 @@ impl<
         let mut c = None;
         loop {
             for j in 0..self.frames.len() {
-                let f = &mut self.frames[K::try_from(j)?][(i & ((N - 1) & 0xff))];
+                let f = &mut self.frames[K::try_from(j)?][i & ((N - 1) & 0xff)];
 
                 match f {
                     RegAllocFrame::Reserved => {
@@ -237,8 +237,8 @@ impl<
                 i += 1;
                 i = i & ((N - 1) & 0xff);
             }
-            let mut i = self.tos.as_mut();
-            if let Some(mut i) = i {
+            let i = self.tos.as_mut();
+            if let Some(i) = i {
                 let mut i3 = 0u8;
                 let i2 = loop {
                     let f = &self.frames[i.kind.clone()][i.reg as usize & ((N - 1) & 0xff)];
@@ -271,7 +271,7 @@ impl<
     ///
     /// Marks the specified register as holding a stack value.
     pub fn push_existing(&mut self, a: Target<K>) -> impl Iterator<Item = Cmd<K>> {
-        let mut c: Option<Cmd<K>> = None;
+        let c: Option<Cmd<K>> = None;
         if let RegAllocFrame::Empty = &self.frames[a.kind.clone()][a.reg as usize] {
             self.frames[a.kind.clone()][a.reg as usize] = RegAllocFrame::Stack {
                 elem: match replace(&mut self.tos, Some(a.clone())) {
@@ -326,7 +326,7 @@ impl<
     /// Pops a value from the virtual stack into a local variable.
     ///
     /// The value is stored in the specified local variable slot.
-    pub fn pop_local(&mut self, kind: K, target: u32) -> (impl Iterator<Item = Cmd<K>>) {
+    pub fn pop_local(&mut self, kind: K, target: u32) -> impl Iterator<Item = Cmd<K>> {
         let mut c = None;
         'a: loop {
             match self.tos.take() {
@@ -338,7 +338,7 @@ impl<
                             StackElement::Above(v) => Some(v),
                             StackElement::Native => None,
                         };
-                        return (c.into_iter());
+                        return c.into_iter();
                     }
                 }
                 None => {

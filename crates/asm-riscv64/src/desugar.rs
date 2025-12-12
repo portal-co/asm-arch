@@ -844,7 +844,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 }))
             }
             MemArgKind::Mem {
-                size, reg_class, ..
+                size,  ..
             } => {
                 // This is a memory operand - need to load it into a temp register
                 let (temp_reg, needs_save, saved_reg) = self.select_temp_reg(avoid_regs);

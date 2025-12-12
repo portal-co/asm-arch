@@ -223,4 +223,4 @@ macro_rules! writers {
         };
     };
 }
-writers!(Formatter<'_>, (dyn Write + '_));
+writers!(Formatter<'_>, dyn Write + '_);

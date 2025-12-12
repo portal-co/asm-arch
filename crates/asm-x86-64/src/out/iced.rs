@@ -1,19 +1,16 @@
 //! iced-x86 backend for assembling machine code.
 #![allow(unused)]
 
-#[cfg(feature = "iced")]
-mod _inner {
-    extern crate alloc;
-    use alloc::collections::BTreeMap;
-    use core::fmt::Display;
+extern crate alloc;
+use alloc::collections::BTreeMap;
+use core::fmt::Display;
 
-    use crate::out::{Writer, WriterCore};
-    use crate::{ConditionCode, X64Arch};
+use crate::out::{Writer, WriterCore};
+use crate::{ConditionCode, X64Arch};
 
-    pub struct IcedX86Writer<L> {
-        pub asm: iced_x86::code_asm::CodeAssembler,
-        pub labels: BTreeMap<L, iced_x86::code_asm::CodeLabel>,
-    }
+pub struct IcedX86Writer<L> {
+    pub asm: iced_x86::code_asm::CodeAssembler,
+    pub labels: BTreeMap<L, iced_x86::code_asm::CodeLabel>,
 }
 
 /// Helper functions for translating iced-x86 components to crate types.
@@ -25,13 +22,13 @@ mod helpers {
 
     /// Convert an iced register to our Reg type.
     pub fn iced_register_to_reg(reg: iced_x86::Register) -> Option<Reg> {
-        reg.raw().try_into().ok().map(Reg)
+        (reg as u32).try_into().ok().map(Reg)
     }
 
     /// Convert an iced operand to our MemArgKind.
     pub fn iced_operand_to_mem_arg_kind(
         instr: &iced_x86::Instruction,
-        op_index: usize,
+        op_index: u32,
     ) -> Option<MemArgKind<ArgKind>> {
         if op_index >= instr.op_count() {
             return None;
@@ -40,13 +37,7 @@ mod helpers {
             iced_x86::OpKind::Register => {
                 let reg = instr.op_register(op_index);
                 iced_register_to_reg(reg).map(|r| {
-                    let size = match reg.size() {
-                        1 => MemorySize::_8,
-                        2 => MemorySize::_16,
-                        4 => MemorySize::_32,
-                        8 => MemorySize::_64,
-                        _ => MemorySize::_64, // default
-                    };
+                    let size = MemorySize::_64; // default for registers
                     MemArgKind::NoMem(ArgKind::Reg { reg: r, size })
                 })
             }
@@ -68,8 +59,8 @@ mod helpers {
                 instr.immediate8to64() as u64,
             ))),
             iced_x86::OpKind::Memory => {
-                let base = instr.memory_base().and_then(iced_register_to_reg);
-                let index = instr.memory_index().and_then(iced_register_to_reg);
+                let base = iced_register_to_reg(instr.memory_base());
+                let index = iced_register_to_reg(instr.memory_index());
                 let scale = instr.memory_index_scale();
                 let disp = instr.memory_displacement64() as u32;
                 let size = match instr.memory_size().size() {
@@ -229,7 +220,7 @@ where
             writer.popf(*arch)?;
         }
         Mnemonic::Call => {
-            if instr.is_call_near() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -241,7 +232,7 @@ where
             }
         }
         Mnemonic::Jmp => {
-            if instr.is_jmp_near() || instr.is_jmp_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -386,7 +377,7 @@ where
         }
         // Conditional jumps
         Mnemonic::Jo => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -398,7 +389,7 @@ where
             }
         }
         Mnemonic::Jno => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -410,7 +401,7 @@ where
             }
         }
         Mnemonic::Jb => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -422,7 +413,7 @@ where
             }
         }
         Mnemonic::Jae => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -434,7 +425,7 @@ where
             }
         }
         Mnemonic::Je => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -446,7 +437,7 @@ where
             }
         }
         Mnemonic::Jne => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -458,7 +449,7 @@ where
             }
         }
         Mnemonic::Jbe => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -470,7 +461,7 @@ where
             }
         }
         Mnemonic::Ja => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -482,7 +473,7 @@ where
             }
         }
         Mnemonic::Js => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -494,7 +485,7 @@ where
             }
         }
         Mnemonic::Jns => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -506,7 +497,7 @@ where
             }
         }
         Mnemonic::Jp => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -518,7 +509,7 @@ where
             }
         }
         Mnemonic::Jnp => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -530,7 +521,7 @@ where
             }
         }
         Mnemonic::Jl => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -542,7 +533,7 @@ where
             }
         }
         Mnemonic::Jge => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -554,7 +545,7 @@ where
             }
         }
         Mnemonic::Jle => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -566,7 +557,7 @@ where
             }
         }
         Mnemonic::Jg => {
-            if instr.is_jcc_near() || instr.is_jcc_short() {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -590,7 +581,7 @@ use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
 
 // Helper: map our Reg to iced Register
 fn reg_to_register(r: Reg) -> Option<iced_x86::Register> {
-    iced_x86::Register::try_from(r.0 as u32).ok()
+    iced_x86::Register::try_from(r.0 as usize).ok()
 }
 
 // Helper: map our Reg to iced registers
@@ -609,28 +600,37 @@ fn map_gpr8(r: Reg) -> Option<iced_x86::code_asm::AsmRegister8> {
 fn map_xmm(r: Reg) -> Option<iced_x86::code_asm::AsmRegisterXmm> {
     reg_to_register(r).and_then(|reg| iced_x86::code_asm::registers::xmm::get_xmm(reg))
 }
-
-// Helper to convert our MemArgKind to iced Operand
-fn to_iced_operand(mem: &MemArgKind<ArgKind>) -> iced_x86::code_asm::Operand {
-    match mem {
+macro_rules! to_iced_operand {
+    ($mem:expr => |$on:pat_param|$body:expr) => {
+        match $mem {
         MemArgKind::NoMem(ArgKind::Reg { reg, size }) => match size {
-            MemorySize::_64 => map_gpr64(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr64::rax())
-                .into(),
-            MemorySize::_32 => map_gpr32(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr32::eax())
-                .into(),
-            MemorySize::_16 => map_gpr16(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr16::ax())
-                .into(),
-            MemorySize::_8 => map_gpr8(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr8::al())
-                .into(),
-            _ => map_gpr64(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr64::rax())
-                .into(),
+            MemorySize::_64 => match map_gpr64(*reg)
+                .unwrap_or(iced_x86::code_asm::registers::gpr64::rax){
+                    $on => $body
+                }
+                ,
+            MemorySize::_32 => match map_gpr32(*reg)
+                .unwrap_or(iced_x86::code_asm::registers::gpr32::eax){
+                    $on => $body
+                }
+                ,
+            MemorySize::_16 => match map_gpr16(*reg)
+                .unwrap_or(iced_x86::code_asm::registers::gpr16::ax){
+                    $on => $body
+                }
+                ,
+            MemorySize::_8 => match map_gpr8(*reg)
+                .unwrap_or(iced_x86::code_asm::registers::gpr8::al){
+                    $on => $body
+                }
+                ,
+            _ => match map_gpr64(*reg)
+                .unwrap_or(iced_x86::code_asm::registers::gpr64::rax){
+                    $on => $body
+                }
+                ,
         },
-        MemArgKind::NoMem(ArgKind::Lit(v)) => (*v).into(),
+        MemArgKind::NoMem(ArgKind::Lit(v)) => match *v{$on => $body},
         MemArgKind::Mem {
             base,
             offset,
@@ -639,14 +639,14 @@ fn to_iced_operand(mem: &MemArgKind<ArgKind>) -> iced_x86::code_asm::Operand {
             reg_class,
         } => {
             let base_r = if let ArgKind::Reg { reg, .. } = base {
-                map_gpr64(*reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax())
+                map_gpr64(*reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax)
             } else {
-                iced_x86::code_asm::registers::gpr64::rax()
+                iced_x86::code_asm::registers::gpr64::rax
             };
             let mem_operand = if let Some((off, scale)) = offset {
                 if let ArgKind::Reg { reg: off_reg, .. } = off {
                     let off_r =
-                        map_gpr64(*off_reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax());
+                        map_gpr64(*off_reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax);
                     base_r + off_r * (*scale as i32) + (*disp as i32)
                 } else {
                     base_r + (*disp as i32)
@@ -655,22 +655,35 @@ fn to_iced_operand(mem: &MemArgKind<ArgKind>) -> iced_x86::code_asm::Operand {
                 base_r + (*disp as i32)
             };
             match (size, reg_class) {
-                (MemorySize::_8, _) => iced_x86::code_asm::byte_ptr(mem_operand).into(),
-                (MemorySize::_16, _) => iced_x86::code_asm::word_ptr(mem_operand).into(),
-                (MemorySize::_32, _) => iced_x86::code_asm::dword_ptr(mem_operand).into(),
-                (MemorySize::_64, _) => iced_x86::code_asm::qword_ptr(mem_operand).into(),
+                (MemorySize::_8, _) => match iced_x86::code_asm::byte_ptr(mem_operand){
+                    $on => $body
+                },
+                (MemorySize::_16, _) => match iced_x86::code_asm::word_ptr(mem_operand){
+                    $on => $body
+                },
+                (MemorySize::_32, _) => match iced_x86::code_asm::dword_ptr(mem_operand){
+                    $on => $body
+                },
+                (MemorySize::_64, _) => match iced_x86::code_asm::qword_ptr(mem_operand){
+                    $on => $body
+                },
                 (_, &crate::RegisterClass::Xmm) => {
-                    iced_x86::code_asm::xmmword_ptr(mem_operand).into()
+                    match iced_x86::code_asm::xmmword_ptr(mem_operand){
+                        $on => $body
+                    }
                 }
-                _ => iced_x86::code_asm::qword_ptr(mem_operand).into(),
+                _ => match iced_x86::code_asm::qword_ptr(mem_operand){
+                    $on => $body
+                },
             }
         }
     }
+    };
 }
 
-impl<L: Ord + Clone + Display> Writer<L> for IcedX86Writer<L> {
-    type Error = iced_x86::IcedError;
-    fn set_label(&mut self, _cfg: X64Arch, s: L) -> Result<(), Self::Error> {
+
+impl<L: Ord + Clone + Display + From<u64>> Writer<L> for IcedX86Writer<L> {
+    fn set_label(&mut self, _cfg: X64Arch, s: L) -> Result<(), iced_x86::IcedError> {
         let mut lbl = self.asm.create_label();
         self.labels.insert(s, lbl);
         self.asm.set_label(&mut lbl);
@@ -682,7 +695,7 @@ impl<L: Ord + Clone + Display> Writer<L> for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         label: L,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let mem = dest.concrete_mem_kind();
         let iced_dest = to_iced_operand(&mem);
         if let Some(&lbl) = self.labels.get(&label) {
@@ -691,14 +704,14 @@ impl<L: Ord + Clone + Display> Writer<L> for IcedX86Writer<L> {
         Ok(())
     }
 
-    fn call_label(&mut self, _cfg: X64Arch, label: L) -> Result<(), Self::Error> {
+    fn call_label(&mut self, _cfg: X64Arch, label: L) -> Result<(), iced_x86::IcedError> {
         if let Some(&lbl) = self.labels.get(&label) {
             self.asm.call(lbl)?;
         }
         Ok(())
     }
 
-    fn jmp_label(&mut self, _cfg: X64Arch, label: L) -> Result<(), Self::Error> {
+    fn jmp_label(&mut self, _cfg: X64Arch, label: L) -> Result<(), iced_x86::IcedError> {
         if let Some(&lbl) = self.labels.get(&label) {
             self.asm.jmp(lbl)?;
         }
@@ -710,7 +723,7 @@ impl<L: Ord + Clone + Display> Writer<L> for IcedX86Writer<L> {
         _cfg: X64Arch,
         cc: crate::ConditionCode,
         label: L,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         use crate::ConditionCode as CC;
         if let Some(&lbl) = self.labels.get(&label) {
             match cc {
@@ -738,10 +751,10 @@ impl<L: Ord + Clone + Display> Writer<L> for IcedX86Writer<L> {
 }
 
 // -- WriterCore instruction implementations --
-impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
+impl<L: Ord + Clone + Display + From<u64>> WriterCore for IcedX86Writer<L> {
     type Error = iced_x86::IcedError;
 
-    fn hlt(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn hlt(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
         self.asm.hlt()?;
         Ok(())
     }
@@ -751,7 +764,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -765,7 +778,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -779,7 +792,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -793,7 +806,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -807,7 +820,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -821,7 +834,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -834,7 +847,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         self.asm.push(iced_o)?;
@@ -845,19 +858,19 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         self.asm.pop(iced_o)?;
         Ok(())
     }
 
-    fn pushf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn pushf(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
         self.asm.pushf()?;
         Ok(())
     }
 
-    fn popf(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn popf(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
         self.asm.popf()?;
         Ok(())
     }
@@ -866,7 +879,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         self.asm.call(iced_o)?;
@@ -877,7 +890,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         self.asm.jmp(iced_o)?;
@@ -889,7 +902,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -902,7 +915,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         self.asm.cmp(iced_o, 0u64)?;
@@ -915,7 +928,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         cond: crate::ConditionCode,
         op: &(dyn crate::out::arg::MemArg + '_),
         val: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let a = op.concrete_mem_kind();
         let b = val.concrete_mem_kind();
         let iced_a = to_iced_operand(&a);
@@ -948,7 +961,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         cond: crate::ConditionCode,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         use crate::ConditionCode as CC;
@@ -977,11 +990,11 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         // and op, 0xffffffff
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
-        self.asm.and(iced_o, iced_o, 0xffffffffu64)?;
+        self.asm.and(iced_o, 0xffffffffu64)?;
         Ok(())
     }
 
@@ -989,7 +1002,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         &mut self,
         _cfg: X64Arch,
         op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let o = op.concrete_mem_kind();
         let iced_o = to_iced_operand(&o);
         self.asm.not(iced_o)?;
@@ -1001,7 +1014,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -1010,7 +1023,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         Ok(())
     }
 
-    fn get_ip(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn get_ip(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
         // use call/pop trick: create label and lea into reg? For simplicity, emit call 1f; 1: ; but CodeAssembler supports call with label
         let mut lbl = self.asm.create_label();
         self.asm.call(lbl)?;
@@ -1018,7 +1031,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         Ok(())
     }
 
-    fn ret(&mut self, _cfg: X64Arch) -> Result<(), Self::Error> {
+    fn ret(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
         self.asm.ret()?;
         Ok(())
     }
@@ -1028,7 +1041,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         r: &(dyn crate::out::arg::MemArg + '_),
         val: u64,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let reg_kind = r.concrete_mem_kind();
         let iced_r = to_iced_operand(&reg_kind);
         self.asm.mov(iced_r, val)?;
@@ -1040,7 +1053,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -1054,7 +1067,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -1068,7 +1081,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -1082,12 +1095,12 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
         let iced_b = to_iced_operand(&B);
-        self.asm.and(iced_a, iced_a, iced_b)?;
+        self.asm.and(iced_a, iced_b)?;
         Ok(())
     }
 
@@ -1096,12 +1109,12 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
         let iced_b = to_iced_operand(&B);
-        self.asm.or(iced_a, iced_a, iced_b)?;
+        self.asm.or(iced_a, iced_b)?;
         Ok(())
     }
 
@@ -1110,12 +1123,12 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
         let iced_b = to_iced_operand(&B);
-        self.asm.xor(iced_a, iced_a, iced_b)?;
+        self.asm.xor(iced_a, iced_b)?;
         Ok(())
     }
 
@@ -1124,7 +1137,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -1138,7 +1151,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -1152,7 +1165,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         a: &(dyn crate::out::arg::MemArg + '_),
         b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let A = a.concrete_mem_kind();
         let B = b.concrete_mem_kind();
         let iced_a = to_iced_operand(&A);
@@ -1166,7 +1179,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -1180,7 +1193,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -1194,7 +1207,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -1208,7 +1221,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -1222,7 +1235,7 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         _cfg: X64Arch,
         dest: &(dyn crate::out::arg::MemArg + '_),
         src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), iced_x86::IcedError> {
         let d = dest.concrete_mem_kind();
         let s = src.concrete_mem_kind();
         let iced_d = to_iced_operand(&d);
@@ -1231,17 +1244,13 @@ impl<L: Ord + Clone + Display> WriterCore for IcedX86Writer<L> {
         Ok(())
     }
 
-    fn db(&mut self, _cfg: X64Arch, bytes: &[u8]) -> Result<(), Self::Error> {
-        for &b in bytes {
-            self.asm.byte(b)?;
-        }
+    fn db(&mut self, _cfg: X64Arch, bytes: &[u8]) -> Result<(), iced_x86::IcedError> {
+        self.asm.db(bytes)?;
         Ok(())
     }
 }
 
 #[cfg(feature = "iced")]
-pub use _inner::IcedX86Writer;
-
 /// Minimal, flexible frontend for one‑the‑fly decoding using iced-x86.
 ///
 /// This type wraps a `Writer` and provides a streaming decoder loop. It
@@ -1281,7 +1290,7 @@ where
 }
 
 #[cfg(feature = "iced")]
-impl<'a, W, L, H, D> IcedFrontend<'a, W, L, H, D>
+impl<'a, W, L: Ord + Clone + Display + From<u64>, H, D> IcedFrontend<'a, W, L, H, D>
 where
     W: crate::out::Writer<L> + 'a,
     H: FnMut(
@@ -1381,10 +1390,6 @@ where
             let slice = &bytes[pos..];
             let mut decoder =
                 iced_x86::Decoder::with_ip(64, slice, current_ip, iced_x86::DecoderOptions::NONE);
-            // If there are no bytes left for decoder (shouldn't happen), break
-            if decoder.can_decode() == false {
-                break;
-            }
             // Decode one instruction
             let instr = decoder.decode();
             let consumed = decoder.position();

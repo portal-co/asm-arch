@@ -647,55 +647,55 @@ macro_rules! writer_dispatch {
                     fn ebreak(&mut self, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::ebreak(&mut **self, cfg)
                     }
-                    fn mv(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::mv(&mut **self, cfg, dest, src)
+                    fn mv(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+                        <$ty as $crate::out::WriterCore<Context>>::mv(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn sd(&mut self, cfg: $crate::RiscV64Arch, src: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::sd(&mut **self, cfg, src, mem)
+                    fn sd(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, src: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+                        <$ty as $crate::out::WriterCore<Context>>::sd(&mut **self, ctx, cfg, src, mem)
                     }
-                    fn ld(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
-                        <$ty as $crate::out::WriterCore<Context>>::ld(&mut **self, cfg, dest, mem)
+                    fn ld(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+                        <$ty as $crate::out::WriterCore<Context>>::ld(&mut **self, ctx, cfg, dest, mem)
                     }
-                    fn add(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::add(&mut **self, cfg, dest, a, b)
+                    fn add(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::add(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sub(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::sub(&mut **self, cfg, dest, a, b)
+                    fn sub(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::sub(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn mul(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::mul(&mut **self, cfg, dest, a, b)
+                    fn mul(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::mul(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn div(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::div(&mut **self, cfg, dest, a, b)
+                    fn div(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::div(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn and(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::and(&mut **self, cfg, dest, a, b)
+                    fn and(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::and(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn or(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::or(&mut **self, cfg, dest, a, b)
+                    fn or(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::or(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn xor(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::xor(&mut **self, cfg, dest, a, b)
+                    fn xor(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::xor(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sll(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::sll(&mut **self, cfg, dest, a, b)
+                    fn sll(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::sll(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn srl(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::srl(&mut **self, cfg, dest, a, b)
+                    fn srl(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::srl(&mut **self, ctx, cfg, dest, a, b)
                     }
                     fn ret(&mut self, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::ret(&mut **self, cfg)
                     }
-                    fn li(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::li(&mut **self, cfg, dest, val)
+                    fn li(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> Result<(), Self::Error>{
+                        <$ty as $crate::out::WriterCore<Context>>::li(&mut **self, ctx, cfg, dest, val)
                     }
                 }
-                impl<$($t)*>$crate::out::Writer<$l> for $ty{
-                    fn set_label(&mut self, cfg: $crate::RiscV64Arch, s: $l) -> Result<(), Self::Error> {
-                        <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, cfg, s)
+                impl<$($t)*, Context>$crate::out::Writer<$l, Context> for $ty{
+                    fn set_label(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, s: $l) -> Result<(), Self::Error> {
+                        <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)
                     }
-                    fn jal_label(&mut self, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> Result<(), Self::Error> {
-                       <$ty as $crate::out::Writer<$l, Context>>::jal_label(&mut **self, cfg, dest, label)
+                    fn jal_label(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> Result<(), Self::Error> {
+                       <$ty as $crate::out::Writer<$l, Context>>::jal_label(&mut **self, ctx, cfg, dest, label)
                     }
                 }
             )*

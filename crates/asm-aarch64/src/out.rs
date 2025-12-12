@@ -431,7 +431,7 @@ macro_rules! writer_dispatch {
     ($( [ $($t:tt)* ] [$($u:tt)*] $ty:ty => $e:ty [$l:ty]),*) => {
         const _: () = {
             $(
-                impl<$($t)*, $($u)*> $crate::out::WriterCore for $ty{
+                impl<$($t)*> $crate::out::WriterCore<Context> for $ty{
                     type Error = $e;
                     fn brk(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, imm: u16) -> $crate::__::core::result::Result<(),Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::brk(&mut **self, ctx, cfg, imm)
@@ -473,7 +473,7 @@ macro_rules! writer_dispatch {
                         <$ty as $crate::out::WriterCore<Context>>::adr(&mut **self, ctx, cfg, dest, src)
                     }
                     fn ret(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$ty as $crate::out::WriterCore<Context>>::ret(&mut **self, cfg)
+                        <$ty as $crate::out::WriterCore<Context>>::ret(&mut **self, ctx, cfg)
                     }
                     fn mov_imm(&mut self, ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> $crate::__::core::result::Result<(),Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::mov_imm(&mut **self, ctx, cfg, dest, val)

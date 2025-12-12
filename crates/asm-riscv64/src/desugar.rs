@@ -1228,7 +1228,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, cfg, dest, a, b| {
-   ctx,          writer.add(ctx, cfg, dest, a, b)
+writer.add(ctx, cfg, dest, a, b)
         })
     }
 
@@ -1261,7 +1261,7 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
             self.writer.li(ctx, cfg, &temp_reg, imm as u64)?;
             let desugared_src = self.desugar_operand(cfg, src)?;
             self.flush_sp_if_needed(cfg, &[dest, &desugared_src, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
-   ctx,          self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
+self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
         }
     }
 
@@ -1859,7 +1859,7 @@ mod tests {
             let b_literal = MemArgKind::NoMem(ArgKind::Lit(42));
 
             // This should desugar to li + actx, dd
-            let _ = desugar.add(cfg, &dest, &a, &b_literal);
+            let _ = desugar.add(ctx, &dest, &a, &b_literal);
         }
 
         // Check that output contains li and add
@@ -2029,7 +2029,7 @@ mod tests {
             };
 
             // This should load both memory operands into different temp rectx, gisters
-            let _ = desugar.add(cfg, &dest, &mem_a, &mem_b);
+            let _ = desugar.add(ctx, &dest, &mem_a, &mem_b);
         }
 
         // Should contain multiple load instructions
@@ -2098,9 +2098,9 @@ mod tests {
                     disp: 8,
                     size,
                     reg_class: crate::RegisterClass::Gpr,
-           ctx,      };
+};
 
-                let _ = desugar.add(cfg, &dest, &mem, &Reg(6));
+                let _ = desugar.add(ctx, &dest, &mem, &Reg(6));
 
                 // Should use the correct load instruction for the size
                 assert!(output.contains(expected_load), 

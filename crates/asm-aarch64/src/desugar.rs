@@ -627,7 +627,7 @@ mod tests {
             let b_literal = MemArgKind::NoMem(ArgKind::Lit(42));
 
             // This should desugar to mov + add
-            let _ = dectx, sugar.add(cfg, &dest, &a, &b_literal);
+            let _ = desugar.add(ctx, &dest, &a, &b_literal);
         }
 
         // Check that output contains mov and add
@@ -679,7 +679,7 @@ mod tests {
             };
 
             // This should desugar to ldr + add
-            let _ctx,  = desugar.add(cfg, &dest, &a, &b_mem);
+            let _ = desugar.add(ctx, &dest, &a, &b_mem);
         }
 
         // Check that output contains ldr and add
@@ -769,7 +769,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                     }
                     _ => {
                         // Both registers
-                        self.writerctx, .mov(ctx, cfg, dest, src)
+                        self.writer.mov(ctx, cfg, dest, src)
                     }
                 }
             }
@@ -829,7 +829,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
-   ctx,          writer.add(ctx, cfg, dest, a, b)
+writer.add(ctx, cfg, dest, a, b)
         })
     }
 

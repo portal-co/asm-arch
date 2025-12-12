@@ -411,11 +411,11 @@ impl<W: crate::out::Writer<ShimLabel>> WriterShimExt for W {}
 /// Pattern: INSTR a, b where a = INSTR(a, b)
 /// Handles all combinations of register/memory operands using LDR/STR as needed.
 macro_rules! handle_two_operand_instr {
-    ($self:expr, $a:expr, $b:expr, $instr:ident) => {{
+    ($self:expr, $a:expr, $b:expr, $instr:ident, $cfg:expr) => {{
         use crate::out::arg::MemArgKind;
         
-        let a_adapter = MemArgAdapter::new($a, _cfg);
-        let b_adapter = MemArgAdapter::new($b, _cfg);
+        let a_adapter = MemArgAdapter::new($a, $cfg);
+        let b_adapter = MemArgAdapter::new($b, $cfg);
         
         let a_kind = a_adapter.concrete_mem_kind();
         let b_kind = b_adapter.concrete_mem_kind();
@@ -454,11 +454,11 @@ macro_rules! handle_two_operand_instr {
 /// Helper for two-operand instructions where result overwrites first operand (like SUB in x86).
 /// For SUB, the AArch64 instruction is: SUB a, a, b (but only takes 2 args in trait)
 macro_rules! handle_two_operand_instr_2arg {
-    ($self:expr, $a:expr, $b:expr, $instr:ident) => {{
+    ($self:expr, $a:expr, $b:expr, $instr:ident, $cfg:expr) => {{
         use crate::out::arg::MemArgKind;
         
-        let a_adapter = MemArgAdapter::new($a, _cfg);
-        let b_adapter = MemArgAdapter::new($b, _cfg);
+        let a_adapter = MemArgAdapter::new($a, $cfg);
+        let b_adapter = MemArgAdapter::new($b, $cfg);
         
         let a_kind = a_adapter.concrete_mem_kind();
         let b_kind = b_adapter.concrete_mem_kind();
@@ -716,7 +716,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     ) -> Result<(), Self::Error> {
         // x86-64 SUB a, b (a = a - b) -> AArch64 SUB a, a, b
         // Handle memory operands with LDR/STR
-        handle_two_operand_instr_2arg!(self, a, b, sub)
+        handle_two_operand_instr_2arg!(self, a, b, sub,_cfg)
     }
 
     fn add(
@@ -727,7 +727,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
     ) -> Result<(), Self::Error> {
         // x86-64 ADD a, b (a = a + b) -> AArch64 ADD a, a, b
         // Handle memory operands with LDR/STR
-        handle_two_operand_instr_2arg!(self, a, b, add)
+        handle_two_operand_instr_2arg!(self, a, b, add,_cfg)
     }
 
     fn movsx(
@@ -1189,7 +1189,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 MUL a, b -> AArch64 MUL a, a, b
-        handle_two_operand_instr!(self, a, b, mul)
+        handle_two_operand_instr!(self, a, b, mul, _cfg)
     }
 
     fn div(
@@ -1199,7 +1199,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 DIV a, b -> AArch64 UDIV a, a, b
-        handle_two_operand_instr!(self, a, b, udiv)
+        handle_two_operand_instr!(self, a, b, udiv, _cfg)
     }
 
     fn idiv(
@@ -1209,7 +1209,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 IDIV a, b -> AArch64 SDIV a, a, b
-        handle_two_operand_instr!(self, a, b, sdiv)
+        handle_two_operand_instr!(self, a, b, sdiv  , _cfg)
     }
 
     fn and(
@@ -1219,7 +1219,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 AND a, b -> AArch64 AND a, a, b
-        handle_two_operand_instr!(self, a, b, and)
+        handle_two_operand_instr!(self, a, b, and,_cfg)
     }
 
     fn or(
@@ -1229,7 +1229,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 OR a, b -> AArch64 ORR a, a, b
-        handle_two_operand_instr!(self, a, b, orr)
+        handle_two_operand_instr!(self, a, b, orr,_cfg)
     }
 
     fn eor(
@@ -1239,7 +1239,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 XOR a, b -> AArch64 EOR a, a, b
-        handle_two_operand_instr!(self, a, b, eor)
+        handle_two_operand_instr!(self, a, b, eor,_cfg)
     }
 
     fn shl(
@@ -1249,7 +1249,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SHL a, b -> AArch64 LSL a, a, b
-        handle_two_operand_instr!(self, a, b, lsl)
+        handle_two_operand_instr!(self, a, b, lsl,_cfg)
     }
 
     fn shr(
@@ -1259,7 +1259,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         b: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SHR a, b -> AArch64 LSR a, a, b
-        handle_two_operand_instr!(self, a, b, lsr)
+        handle_two_operand_instr!(self, a, b, lsr,_cfg)
     }
 
     fn fadd(
@@ -1269,7 +1269,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 ADDSD -> AArch64 FADD
-        handle_two_operand_instr!(self, dest, src, fadd)
+        handle_two_operand_instr!(self, dest, src, fadd,_cfg)
     }
 
     fn fsub(
@@ -1279,7 +1279,7 @@ impl<W: crate::out::Writer<ShimLabel>> X64WriterCore for X64ToAArch64Shim<W> {
         src: &(dyn X64MemArg + '_),
     ) -> Result<(), Self::Error> {
         // x86-64 SUBSD -> AArch64 FSUB
-        handle_two_operand_instr!(self, dest, src, fsub)
+        handle_two_operand_instr!(self, dest, src, fsub,_cfg)
     }
 
     fn fmul(

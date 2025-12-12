@@ -284,11 +284,12 @@ mod tests {
     #[cfg(feature = "x64_shim")]
     fn test_memarg_adapter() {
         use portal_pc_asm_common::types::reg::Reg;
+        use portal_solutions_asm_x86_64::X64Arch;
         use crate::{shim::MemArgAdapter, out::arg::MemArg as AArch64MemArg};
         
         // Test with a simple register
         let x64_reg = Reg(0);
-        let adapter = MemArgAdapter::new(&x64_reg);
+        let adapter = MemArgAdapter::new(&x64_reg,X64Arch::default());
         
         // Verify the adapter implements the AArch64 MemArg trait
         let kind = adapter.concrete_mem_kind();

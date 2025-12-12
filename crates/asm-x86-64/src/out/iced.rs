@@ -8,11 +8,6 @@ use core::fmt::Display;
 use crate::out::{Writer, WriterCore};
 use crate::{ConditionCode, X64Arch};
 
-pub struct IcedX86Writer<L> {
-    pub asm: iced_x86::code_asm::CodeAssembler,
-    pub labels: BTreeMap<L, iced_x86::code_asm::CodeLabel>,
-}
-
 /// Helper functions for translating iced-x86 components to crate types.
 #[cfg(feature = "iced")]
 mod helpers {
@@ -71,7 +66,15 @@ mod helpers {
                     _ => MemorySize::_64,
                 };
                 let reg_class = crate::RegisterClass::Gpr; // default, could be Xmm for floats
-                let offset = index.map(|idx| (idx, scale as u32));
+                let offset = index.map(|idx| {
+                    (
+                        ArgKind::Reg {
+                            reg: idx,
+                            size: MemorySize::_64,
+                        },
+                        scale as u32,
+                    )
+                });
                 Some(MemArgKind::Mem {
                     base: base
                         .map(|r| ArgKind::Reg {
@@ -121,16 +124,12 @@ where
 {
     use helpers::*;
     use iced_x86::Mnemonic;
-
-    let dest = op0(instr)
-        .as_ref()
-        .map(|m| m as &dyn crate::out::arg::MemArg);
-    let src = op1(instr)
-        .as_ref()
-        .map(|m| m as &dyn crate::out::arg::MemArg);
-    let val = op2(instr)
-        .as_ref()
-        .map(|m| m as &dyn crate::out::arg::MemArg);
+    let dest = op0(instr);
+    let dest = dest.as_ref().map(|m| m as &dyn crate::out::arg::MemArg);
+    let src = op1(instr);
+    let src = src.as_ref().map(|m| m as &dyn crate::out::arg::MemArg);
+    let val = op2(instr);
+    let val = val.as_ref().map(|m| m as &dyn crate::out::arg::MemArg);
 
     match instr.mnemonic() {
         Mnemonic::Mov => {
@@ -220,7 +219,10 @@ where
             writer.popf(*arch)?;
         }
         Mnemonic::Call => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -232,7 +234,10 @@ where
             }
         }
         Mnemonic::Jmp => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -377,7 +382,10 @@ where
         }
         // Conditional jumps
         Mnemonic::Jo => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -389,7 +397,10 @@ where
             }
         }
         Mnemonic::Jno => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -401,7 +412,10 @@ where
             }
         }
         Mnemonic::Jb => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -413,7 +427,10 @@ where
             }
         }
         Mnemonic::Jae => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -425,7 +442,10 @@ where
             }
         }
         Mnemonic::Je => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -437,7 +457,10 @@ where
             }
         }
         Mnemonic::Jne => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -449,7 +472,10 @@ where
             }
         }
         Mnemonic::Jbe => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -461,7 +487,10 @@ where
             }
         }
         Mnemonic::Ja => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -473,7 +502,10 @@ where
             }
         }
         Mnemonic::Js => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -485,7 +517,10 @@ where
             }
         }
         Mnemonic::Jns => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -497,7 +532,10 @@ where
             }
         }
         Mnemonic::Jp => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -509,7 +547,10 @@ where
             }
         }
         Mnemonic::Jnp => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -521,7 +562,10 @@ where
             }
         }
         Mnemonic::Jl => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -533,7 +577,10 @@ where
             }
         }
         Mnemonic::Jge => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -545,7 +592,10 @@ where
             }
         }
         Mnemonic::Jle => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -557,7 +607,10 @@ where
             }
         }
         Mnemonic::Jg => {
-            if instr.op0_kind() == iced_x86::OpKind::NearBranch16 || instr.op0_kind() == iced_x86::OpKind::NearBranch32 || instr.op0_kind() == iced_x86::OpKind::NearBranch64 {
+            if instr.op0_kind() == iced_x86::OpKind::NearBranch16
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch32
+                || instr.op0_kind() == iced_x86::OpKind::NearBranch64
+            {
                 let target = instr.near_branch64();
                 let label = labels
                     .entry(target)
@@ -603,651 +656,82 @@ fn map_xmm(r: Reg) -> Option<iced_x86::code_asm::AsmRegisterXmm> {
 macro_rules! to_iced_operand {
     ($mem:expr => |$on:pat_param|$body:expr) => {
         match $mem {
-        MemArgKind::NoMem(ArgKind::Reg { reg, size }) => match size {
-            MemorySize::_64 => match map_gpr64(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr64::rax){
-                    $on => $body
-                }
-                ,
-            MemorySize::_32 => match map_gpr32(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr32::eax){
-                    $on => $body
-                }
-                ,
-            MemorySize::_16 => match map_gpr16(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr16::ax){
-                    $on => $body
-                }
-                ,
-            MemorySize::_8 => match map_gpr8(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr8::al){
-                    $on => $body
-                }
-                ,
-            _ => match map_gpr64(*reg)
-                .unwrap_or(iced_x86::code_asm::registers::gpr64::rax){
-                    $on => $body
-                }
-                ,
-        },
-        MemArgKind::NoMem(ArgKind::Lit(v)) => match *v{$on => $body},
-        MemArgKind::Mem {
-            base,
-            offset,
-            disp,
-            size,
-            reg_class,
-        } => {
-            let base_r = if let ArgKind::Reg { reg, .. } = base {
-                map_gpr64(*reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax)
-            } else {
-                iced_x86::code_asm::registers::gpr64::rax
-            };
-            let mem_operand = if let Some((off, scale)) = offset {
-                if let ArgKind::Reg { reg: off_reg, .. } = off {
-                    let off_r =
-                        map_gpr64(*off_reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax);
-                    base_r + off_r * (*scale as i32) + (*disp as i32)
-                } else {
-                    base_r + (*disp as i32)
-                }
-            } else {
-                base_r + (*disp as i32)
-            };
-            match (size, reg_class) {
-                (MemorySize::_8, _) => match iced_x86::code_asm::byte_ptr(mem_operand){
-                    $on => $body
-                },
-                (MemorySize::_16, _) => match iced_x86::code_asm::word_ptr(mem_operand){
-                    $on => $body
-                },
-                (MemorySize::_32, _) => match iced_x86::code_asm::dword_ptr(mem_operand){
-                    $on => $body
-                },
-                (MemorySize::_64, _) => match iced_x86::code_asm::qword_ptr(mem_operand){
-                    $on => $body
-                },
-                (_, &crate::RegisterClass::Xmm) => {
-                    match iced_x86::code_asm::xmmword_ptr(mem_operand){
-                        $on => $body
+            MemArgKind::NoMem(ArgKind::Reg { reg, size }) => match size {
+                MemorySize::_64 => {
+                    match map_gpr64(*reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax) {
+                        $on => $body,
                     }
                 }
-                _ => match iced_x86::code_asm::qword_ptr(mem_operand){
-                    $on => $body
+                MemorySize::_32 => {
+                    match map_gpr32(*reg).unwrap_or(iced_x86::code_asm::registers::gpr32::eax) {
+                        $on => $body,
+                    }
+                }
+                MemorySize::_16 => {
+                    match map_gpr16(*reg).unwrap_or(iced_x86::code_asm::registers::gpr16::ax) {
+                        $on => $body,
+                    }
+                }
+                MemorySize::_8 => {
+                    match map_gpr8(*reg).unwrap_or(iced_x86::code_asm::registers::gpr8::al) {
+                        $on => $body,
+                    }
+                }
+                _ => match map_gpr64(*reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax) {
+                    $on => $body,
                 },
+            },
+            MemArgKind::NoMem(ArgKind::Lit(v)) => match *v {
+                $on => $body,
+            },
+            MemArgKind::Mem {
+                base,
+                offset,
+                disp,
+                size,
+                reg_class,
+            } => {
+                let base_r = if let ArgKind::Reg { reg, .. } = base {
+                    map_gpr64(*reg).unwrap_or(iced_x86::code_asm::registers::gpr64::rax)
+                } else {
+                    iced_x86::code_asm::registers::gpr64::rax
+                };
+                let mem_operand = if let Some((off, scale)) = offset {
+                    if let ArgKind::Reg { reg: off_reg, .. } = off {
+                        let off_r = map_gpr64(*off_reg)
+                            .unwrap_or(iced_x86::code_asm::registers::gpr64::rax);
+                        base_r + off_r * (*scale as i32) + (*disp as i32)
+                    } else {
+                        base_r + (*disp as i32)
+                    }
+                } else {
+                    base_r + (*disp as i32)
+                };
+                match (size, reg_class) {
+                    (MemorySize::_8, _) => match iced_x86::code_asm::byte_ptr(mem_operand) {
+                        $on => $body,
+                    },
+                    (MemorySize::_16, _) => match iced_x86::code_asm::word_ptr(mem_operand) {
+                        $on => $body,
+                    },
+                    (MemorySize::_32, _) => match iced_x86::code_asm::dword_ptr(mem_operand) {
+                        $on => $body,
+                    },
+                    (MemorySize::_64, _) => match iced_x86::code_asm::qword_ptr(mem_operand) {
+                        $on => $body,
+                    },
+                    (_, &crate::RegisterClass::Xmm) => {
+                        match iced_x86::code_asm::xmmword_ptr(mem_operand) {
+                            $on => $body,
+                        }
+                    }
+                    _ => match iced_x86::code_asm::qword_ptr(mem_operand) {
+                        $on => $body,
+                    },
+                }
             }
         }
-    }
     };
-}
-
-
-impl<L: Ord + Clone + Display + From<u64>> Writer<L> for IcedX86Writer<L> {
-    fn set_label(&mut self, _cfg: X64Arch, s: L) -> Result<(), iced_x86::IcedError> {
-        let mut lbl = self.asm.create_label();
-        self.labels.insert(s, lbl);
-        self.asm.set_label(&mut lbl);
-        Ok(())
-    }
-
-    fn lea_label(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        label: L,
-    ) -> Result<(), iced_x86::IcedError> {
-        let mem = dest.concrete_mem_kind();
-        let iced_dest = to_iced_operand(&mem);
-        if let Some(&lbl) = self.labels.get(&label) {
-            self.asm.lea(iced_dest, lbl)?;
-        }
-        Ok(())
-    }
-
-    fn call_label(&mut self, _cfg: X64Arch, label: L) -> Result<(), iced_x86::IcedError> {
-        if let Some(&lbl) = self.labels.get(&label) {
-            self.asm.call(lbl)?;
-        }
-        Ok(())
-    }
-
-    fn jmp_label(&mut self, _cfg: X64Arch, label: L) -> Result<(), iced_x86::IcedError> {
-        if let Some(&lbl) = self.labels.get(&label) {
-            self.asm.jmp(lbl)?;
-        }
-        Ok(())
-    }
-
-    fn jcc_label(
-        &mut self,
-        _cfg: X64Arch,
-        cc: crate::ConditionCode,
-        label: L,
-    ) -> Result<(), iced_x86::IcedError> {
-        use crate::ConditionCode as CC;
-        if let Some(&lbl) = self.labels.get(&label) {
-            match cc {
-                CC::E => self.asm.je(lbl)?,
-                CC::NE => self.asm.jne(lbl)?,
-                CC::B => self.asm.jb(lbl)?,
-                CC::NB => self.asm.jnb(lbl)?,
-                CC::A => self.asm.ja(lbl)?,
-                CC::NA => self.asm.jna(lbl)?,
-                CC::L => self.asm.jl(lbl)?,
-                CC::NL => self.asm.jnl(lbl)?,
-                CC::G => self.asm.jg(lbl)?,
-                CC::NG => self.asm.jng(lbl)?,
-                CC::O => self.asm.jo(lbl)?,
-                CC::NO => self.asm.jno(lbl)?,
-                CC::S => self.asm.js(lbl)?,
-                CC::NS => self.asm.jns(lbl)?,
-                CC::P => self.asm.jp(lbl)?,
-                CC::NP => self.asm.jnp(lbl)?,
-                _ => self.asm.jmp(lbl)?,
-            }
-        }
-        Ok(())
-    }
-}
-
-// -- WriterCore instruction implementations --
-impl<L: Ord + Clone + Display + From<u64>> WriterCore for IcedX86Writer<L> {
-    type Error = iced_x86::IcedError;
-
-    fn hlt(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
-        self.asm.hlt()?;
-        Ok(())
-    }
-
-    fn xchg(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.xchg(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn mov(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.mov(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn sub(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.sub(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn add(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.add(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn movsx(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.movsx(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn movzx(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.movzx(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn push(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.push(iced_o)?;
-        Ok(())
-    }
-
-    fn pop(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.pop(iced_o)?;
-        Ok(())
-    }
-
-    fn pushf(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
-        self.asm.pushf()?;
-        Ok(())
-    }
-
-    fn popf(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
-        self.asm.popf()?;
-        Ok(())
-    }
-
-    fn call(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.call(iced_o)?;
-        Ok(())
-    }
-
-    fn jmp(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.jmp(iced_o)?;
-        Ok(())
-    }
-
-    fn cmp(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.cmp(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn cmp0(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.cmp(iced_o, 0u64)?;
-        Ok(())
-    }
-
-    fn cmovcc64(
-        &mut self,
-        _cfg: X64Arch,
-        cond: crate::ConditionCode,
-        op: &(dyn crate::out::arg::MemArg + '_),
-        val: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let a = op.concrete_mem_kind();
-        let b = val.concrete_mem_kind();
-        let iced_a = to_iced_operand(&a);
-        let iced_b = to_iced_operand(&b);
-        // map cond to conditional move - use cmov<conds>
-        use crate::ConditionCode as CC;
-        match cond {
-            CC::E => self.asm.cmove(iced_a, iced_b)?,
-            CC::NE => self.asm.cmovne(iced_a, iced_b)?,
-            CC::B => self.asm.cmovb(iced_a, iced_b)?,
-            CC::NB => self.asm.cmovnb(iced_a, iced_b)?,
-            CC::A => self.asm.cmova(iced_a, iced_b)?,
-            CC::NA => self.asm.cmovna(iced_a, iced_b)?,
-            CC::L => self.asm.cmovl(iced_a, iced_b)?,
-            CC::NL => self.asm.cmovnl(iced_a, iced_b)?,
-            CC::G => self.asm.cmovg(iced_a, iced_b)?,
-            CC::NG => self.asm.cmovng(iced_a, iced_b)?,
-            CC::O => self.asm.cmovo(iced_a, iced_b)?,
-            CC::NO => self.asm.cmovno(iced_a, iced_b)?,
-            CC::S => self.asm.cmovs(iced_a, iced_b)?,
-            CC::NS => self.asm.cmovns(iced_a, iced_b)?,
-            CC::P => self.asm.cmovp(iced_a, iced_b)?,
-            CC::NP => self.asm.cmovnp(iced_a, iced_b)?,
-        }
-        Ok(())
-    }
-
-    fn jcc(
-        &mut self,
-        _cfg: X64Arch,
-        cond: crate::ConditionCode,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        use crate::ConditionCode as CC;
-        match cond {
-            CC::E => self.asm.je(iced_o)?,
-            CC::NE => self.asm.jne(iced_o)?,
-            CC::B => self.asm.jb(iced_o)?,
-            CC::NB => self.asm.jnb(iced_o)?,
-            CC::A => self.asm.ja(iced_o)?,
-            CC::NA => self.asm.jna(iced_o)?,
-            CC::L => self.asm.jl(iced_o)?,
-            CC::NL => self.asm.jnl(iced_o)?,
-            CC::G => self.asm.jg(iced_o)?,
-            CC::NG => self.asm.jng(iced_o)?,
-            CC::O => self.asm.jo(iced_o)?,
-            CC::NO => self.asm.jno(iced_o)?,
-            CC::S => self.asm.js(iced_o)?,
-            CC::NS => self.asm.jns(iced_o)?,
-            CC::P => self.asm.jp(iced_o)?,
-            CC::NP => self.asm.jnp(iced_o)?,
-        }
-        Ok(())
-    }
-
-    fn u32(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        // and op, 0xffffffff
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.and(iced_o, 0xffffffffu64)?;
-        Ok(())
-    }
-
-    fn not(
-        &mut self,
-        _cfg: X64Arch,
-        op: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let o = op.concrete_mem_kind();
-        let iced_o = to_iced_operand(&o);
-        self.asm.not(iced_o)?;
-        Ok(())
-    }
-
-    fn lea(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.lea(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn get_ip(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
-        // use call/pop trick: create label and lea into reg? For simplicity, emit call 1f; 1: ; but CodeAssembler supports call with label
-        let mut lbl = self.asm.create_label();
-        self.asm.call(lbl)?;
-        self.asm.set_label(&mut lbl);
-        Ok(())
-    }
-
-    fn ret(&mut self, _cfg: X64Arch) -> Result<(), iced_x86::IcedError> {
-        self.asm.ret()?;
-        Ok(())
-    }
-
-    fn mov64(
-        &mut self,
-        _cfg: X64Arch,
-        r: &(dyn crate::out::arg::MemArg + '_),
-        val: u64,
-    ) -> Result<(), iced_x86::IcedError> {
-        let reg_kind = r.concrete_mem_kind();
-        let iced_r = to_iced_operand(&reg_kind);
-        self.asm.mov(iced_r, val)?;
-        Ok(())
-    }
-
-    fn mul(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.imul(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn div(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.idiv(iced_b)?;
-        Ok(())
-    }
-
-    fn idiv(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.idiv(iced_b)?;
-        Ok(())
-    }
-
-    fn and(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.and(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn or(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.or(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn eor(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.xor(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn shl(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.shl(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn shr(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.shr(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn sar(
-        &mut self,
-        _cfg: X64Arch,
-        a: &(dyn crate::out::arg::MemArg + '_),
-        b: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let A = a.concrete_mem_kind();
-        let B = b.concrete_mem_kind();
-        let iced_a = to_iced_operand(&A);
-        let iced_b = to_iced_operand(&B);
-        self.asm.sar(iced_a, iced_b)?;
-        Ok(())
-    }
-
-    fn fadd(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.addsd(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn fsub(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.subsd(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn fmul(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.mulsd(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn fdiv(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.divsd(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn fmov(
-        &mut self,
-        _cfg: X64Arch,
-        dest: &(dyn crate::out::arg::MemArg + '_),
-        src: &(dyn crate::out::arg::MemArg + '_),
-    ) -> Result<(), iced_x86::IcedError> {
-        let d = dest.concrete_mem_kind();
-        let s = src.concrete_mem_kind();
-        let iced_d = to_iced_operand(&d);
-        let iced_s = to_iced_operand(&s);
-        self.asm.movsd(iced_d, iced_s)?;
-        Ok(())
-    }
-
-    fn db(&mut self, _cfg: X64Arch, bytes: &[u8]) -> Result<(), iced_x86::IcedError> {
-        self.asm.db(bytes)?;
-        Ok(())
-    }
 }
 
 #[cfg(feature = "iced")]

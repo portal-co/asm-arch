@@ -37,7 +37,7 @@ pub trait WriterCore<Context> {
 
     /// Emits a HLT (halt) instruction.
     #[track_caller]
-    fn hlt(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+    fn hlt(&mut self, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
         todo!("hlt instruction not implemented")
     }
     
@@ -45,7 +45,7 @@ pub trait WriterCore<Context> {
     ///
     /// Exchanges the values in `dest` and `src`.
     #[track_caller]
-    fn xchg(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn xchg(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -56,7 +56,7 @@ pub trait WriterCore<Context> {
     ///
     /// Copies the value from `src` to `dest`.
     #[track_caller]
-    fn mov(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn mov(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -67,7 +67,7 @@ pub trait WriterCore<Context> {
     ///
     /// Subtracts `b` from `a` and stores the result in `a`.
     #[track_caller]
-    fn sub(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn sub(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -78,7 +78,7 @@ pub trait WriterCore<Context> {
     ///
     /// Adds `b` to `a` and stores the result in `a`.
     #[track_caller]
-    fn add(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn add(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -89,7 +89,7 @@ pub trait WriterCore<Context> {
     ///
     /// Copies the value from `src` to `dest` with sign extension.
     #[track_caller]
-    fn movsx(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn movsx(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -100,7 +100,7 @@ pub trait WriterCore<Context> {
     ///
     /// Copies the value from `src` to `dest` with zero extension.
     #[track_caller]
-    fn movzx(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn movzx(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -109,37 +109,37 @@ pub trait WriterCore<Context> {
     
     /// Emits a PUSH instruction.
     #[track_caller]
-    fn push(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn push(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("push instruction not implemented")
     }
     
     /// Emits a POP instruction.
     #[track_caller]
-    fn pop(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn pop(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("pop instruction not implemented")
     }
     
     /// Emits a PUSHF (push flags) instruction.
     #[track_caller]
-    fn pushf(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+    fn pushf(&mut self, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
         todo!("pushf instruction not implemented")
     }
     
     /// Emits a POPF (pop flags) instruction.
     #[track_caller]
-    fn popf(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+    fn popf(&mut self, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
         todo!("popf instruction not implemented")
     }
     
     /// Emits a CALL instruction.
     #[track_caller]
-    fn call(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn call(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("call instruction not implemented")
     }
     
     /// Emits a JMP (unconditional jump) instruction.
     #[track_caller]
-    fn jmp(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn jmp(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("jmp instruction not implemented")
     }
     
@@ -147,7 +147,7 @@ pub trait WriterCore<Context> {
     ///
     /// Compares `a` with `b` by computing `a - b` and setting flags.
     #[track_caller]
-    fn cmp(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn cmp(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -156,13 +156,13 @@ pub trait WriterCore<Context> {
     
     /// Emits a CMP (compare with zero) instruction.
     #[track_caller]
-    fn cmp0(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn cmp0(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("cmp0 instruction not implemented")
     }
     
     /// Emits a CMOVcc (conditional move) instruction for 64-bit operands.
     #[track_caller]
-    fn cmovcc64(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn cmovcc64(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _cond: ConditionCode,
         _op: &(dyn MemArg + '_),
         _val: &(dyn MemArg + '_),
@@ -172,7 +172,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a Jcc (conditional jump) instruction.
     #[track_caller]
-    fn jcc(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn jcc(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _cond: ConditionCode,
         _op: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -181,19 +181,19 @@ pub trait WriterCore<Context> {
     
     /// Emits an instruction to truncate to 32 bits (AND with 0xffffffff).
     #[track_caller]
-    fn u32(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn u32(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("u32 instruction not implemented")
     }
     
     /// Emits a NOT (bitwise complement) instruction.
     #[track_caller]
-    fn not(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn not(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("not instruction not implemented")
     }
     
     /// Emits a LEA (load effective address) instruction.
     #[track_caller]
-    fn lea(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn lea(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -202,19 +202,19 @@ pub trait WriterCore<Context> {
 
     /// Emits instructions to get the current instruction pointer.
     #[track_caller]
-    fn get_ip(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+    fn get_ip(&mut self, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
         todo!("get_ip instruction not implemented")
     }
     
     /// Emits a RET (return) instruction.
     #[track_caller]
-    fn ret(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
+    fn ret(&mut self, ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
         todo!("ret instruction not implemented")
     }
     
     /// Emits a MOV instruction with a 64-bit immediate value.
     #[track_caller]
-    fn mov64(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn mov64(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _r: &(dyn MemArg + '_),
         _val: u64,
     ) -> Result<(), Self::Error> {
@@ -223,7 +223,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a MUL (unsigned multiply) instruction.
     #[track_caller]
-    fn mul(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn mul(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -232,7 +232,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a DIV (unsigned divide) instruction.
     #[track_caller]
-    fn div(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn div(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -241,7 +241,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an IDIV (signed divide) instruction.
     #[track_caller]
-    fn idiv(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn idiv(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -250,7 +250,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an AND (bitwise AND) instruction.
     #[track_caller]
-    fn and(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn and(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -259,7 +259,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an OR (bitwise OR) instruction.
     #[track_caller]
-    fn or(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn or(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -268,7 +268,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an XOR (bitwise exclusive OR) instruction.
     #[track_caller]
-    fn eor(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn eor(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -277,7 +277,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SHL (shift left) instruction.
     #[track_caller]
-    fn shl(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn shl(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -286,7 +286,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SHR (shift right) instruction.
     #[track_caller]
-    fn shr(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn shr(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -297,7 +297,7 @@ pub trait WriterCore<Context> {
     ///
     /// Shifts `a` right by `b` bits, preserving the sign bit.
     #[track_caller]
-    fn sar(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn sar(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -306,7 +306,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an ADD instruction for floating point values.
     #[track_caller]
-    fn fadd(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn fadd(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -315,7 +315,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SUB instruction for floating point values.
     #[track_caller]
-    fn fsub(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn fsub(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -324,7 +324,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a MUL instruction for floating point values.
     #[track_caller]
-    fn fmul(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn fmul(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -333,7 +333,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a DIV instruction for floating point values.
     #[track_caller]
-    fn fdiv(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn fdiv(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -342,7 +342,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a MOV instruction for floating point values.
     #[track_caller]
-    fn fmov(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch,
+    fn fmov(&mut self, ctx: &mut Context, _cfg: crate::X64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -353,7 +353,7 @@ pub trait WriterCore<Context> {
     ///
     /// Generates a `.byte` directive (or equivalent) for the given bytes.
     #[track_caller]
-    fn db(&mut self, ctx: &mut Context, ctx: &mut Context, _cfg: crate::X64Arch, _bytes: &[u8]) -> Result<(), Self::Error> {
+    fn db(&mut self, ctx: &mut Context, _cfg: crate::X64Arch, _bytes: &[u8]) -> Result<(), Self::Error> {
         todo!("db directive not implemented")
     }
 }

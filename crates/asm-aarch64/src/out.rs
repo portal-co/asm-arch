@@ -547,10 +547,10 @@ macro_rules! writer_dispatch {
 }
 
 writer_dispatch!(
-    [ T: Writer<L, Context> + ?Sized, L, Context ] [T: WriterCore<Context> + ?Sized] &'_ mut T => T::Error [L]
+    [ T: Writer<L, Context> + WriterCore<Context> + ?Sized, L, Context ] [] &'_ mut T => T::Error [L]
 );
 
 #[cfg(feature = "alloc")]
 writer_dispatch!(
-    [ T: Writer<L, Context> + ?Sized, L, Context ] [T: WriterCore<Context> + ?Sized] ::alloc::boxed::Box<T> => T::Error [L]
+    [ T: Writer<L, Context> + WriterCore<Context> + ?Sized, L, Context ] [] ::alloc::boxed::Box<T> => T::Error [L]
 );

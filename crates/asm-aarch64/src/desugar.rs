@@ -418,7 +418,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 // This is a memory operand - load it into a temp register
                 let mut used = [Reg(0); 2];
                 let count = Self::collect_used_regs(&concrete, &mut used);
-                let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx, ctx,  &self.config, reg_class, &used, count)?;
+                let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, reg_class, &used, count)?;
 
                 let desugared_mem = self.desugar_mem_arg(arch, operand)?;
                 match size {
@@ -547,7 +547,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     let a_count = Self::collect_used_regs(&a_concrete, &mut all_used[0..3]);
                     let b_count = Self::collect_used_regs(&b_concrete, &mut all_used[3..6]);
                     let total_count = a_count + b_count;
-                    let temp_b = self.temp_manager.acquire_temp(self.writer, ctx, ctx,  &self.config, RegisterClass::Gpr, &all_used, total_count)?;
+                    let temp_b = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &all_used, total_count)?;
 
                     let desugared_mem_b = self.desugar_mem_arg(cfg, b)?;
                     let b_size = if let MemArgKind::Mem { size, .. } = &b_concrete { *size } else { MemorySize::_64 };
@@ -564,7 +564,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     op(self.writer, ctx, cfg, dest, &desugared_a, &desugared_b)?;
 
                     // Release the temp register
-                    self.temp_manager.release_temp(self.writer, ctx, ctx, temp_b)?;
+                    self.temp_manager.release_temp(self.writer, ctx, temp_b)?;
                     Ok(())
                 } else {
                     // At least one is literal - use desugar_operand
@@ -800,7 +800,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                 let src_count = Self::collect_used_regs(&src_concrete, &mut used[0..2]);
                 let dest_count = Self::collect_used_regs(&dest_concrete, &mut used[2..4]);
                 let total_count = src_count + dest_count;
-                let temp = self.temp_manager.acquire_temp(self.writer, ctx, ctx,  &self.config, RegisterClass::Gpr, &used, total_count)?;
+                let temp = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &used, total_count)?;
 
                 let desugared_src = self.desugar_mem_arg(cfg, src)?;
                 let src_size = if let MemArgKind::Mem { size, .. } = &src_concrete { *size } else { MemorySize::_64 };
@@ -815,7 +815,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                 self.writer.str(ctx,  cfg, &temp, &desugared_dest)?;
 
                 // Release temp
-                self.temp_manager.release_temp(self.writer, ctx, ctx, temp)
+                self.temp_manager.release_temp(self.writer, ctx, temp)
             }
         }
     }

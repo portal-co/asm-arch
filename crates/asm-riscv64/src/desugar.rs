@@ -457,7 +457,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         reg: Reg,
     ) -> Result<(), W::Error> {
         // Backwards compatibility: delegate to spill_manager
-        self.spill_manager.save_reg(self.writer, ctx, ctx, arch, reg)
+        self.spill_manager.save_reg(self.writer, ctx, arch, reg)
     }
 
     /// Pops a register from the stack (restore reg and adjust sp): `ld reg, 0(sp)`; `addi sp, sp, slot`.
@@ -466,7 +466,7 @@ impl<'a, W: WriterCore + ?Sized> DesugaringWriter<'a, W> {
         arch: RiscV64Arch,
         reg: Reg,
     ) -> Result<(), W::Error> {
-        self.spill_manager.restore_reg(self.writer, ctx, ctx, arch, reg)
+        self.spill_manager.restore_reg(self.writer, ctx, arch, reg)
     }
 
     /// Backwards-compatible shim: if previously used, translate to push/pop semantics.

@@ -100,7 +100,7 @@ mod tests {
         };
 
         let dest = Reg(0);
-        desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
+        desugar.mov(ctx, cfg, &dest, &mem).expect("mov should succeed");
 
         // Current desugar uses a placeholder 0 when handling literal base in this code path
         let expected = "mov64 r15 , 0\nmov r14 , qword ptr [r15+8]\nmov rax , r14\n";
@@ -122,7 +122,7 @@ mod tests {
         };
 
         let dest = Reg(1);
-        desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
+        desugarctx, .mov(cfg, &dest, &mem).expect("mov should succeed");
         // Expected sequence for invalid scale (scale=3) — note: current desugar uses placeholder base/offset
         // mov64 r15 , 0
         // mov r14 , r15
@@ -157,7 +157,7 @@ mod tests {
             reg_class: crate::RegisterClass::Gpr,
         };
 
-        desugar.mov(cfg, &dest, &src).expect("mem->mem mov should succeed");
+        dectx, sugar.mov(cfg, &dest, &src).expect("mem->mem mov should succeed");
         let expected = "mov r15 , qword ptr [rdx+4]\nmov qword ptr [rbx+12] , r15\n";
         assert_eq!(writer.out, expected);
     }
@@ -179,7 +179,7 @@ mod tests {
         };
 
         let dest = Reg(1);
-        desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
+     ctx,    desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
 
         // Should use temp_reg2 (r14) instead of temp_reg (r15) for materialization
         let expected = "mov r14 , r15\nmov64 r13 , 3\nmul r14 , r13\nmov r15 , rax\nadd r15 , r14\nmov r14 , qword ptr [r15+8]\nmov rcx , r14\n";
@@ -204,7 +204,7 @@ mod tests {
         };
 
         let dest = Reg(1);
-        desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
+ctx,         desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
 
         // Should fold large displacement into base register
         let expected = "mov64 r15 , 2147484648\nmov r15 , rbp\nadd r15 , rbp\nmov r14 , qword ptr [r15+0]\nmov rcx , r14\n";
@@ -227,7 +227,7 @@ mod tests {
             reg_class: crate::RegisterClass::Xmm,
         };
 
-        let dest = Reg(1); // GPR destination
+        let dest = Reg(1); // GPR destinactx, tion
         desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
 
         // Should use XMM temp register for loading
@@ -251,7 +251,7 @@ mod tests {
             reg_class: crate::RegisterClass::Gpr,
         };
 
-        let dest = Reg(1);
+        let dest ctx, = Reg(1);
         desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
 
         // Should use SHL 3 for scale=8
@@ -275,7 +275,7 @@ mod tests {
             reg_class: crate::RegisterClass::Gpr,
         };
 
-        let dest = Reg(1);
+        let ctx, dest = Reg(1);
         desugar.mov(cfg, &dest, &mem).expect("mov should succeed");
 
         // Should use MUL for scale=6
@@ -307,7 +307,7 @@ mod tests {
             reg_class: crate::RegisterClass::Gpr,
         };
 
-        // This should use push/pop since all temp candidates conflict and RSP is not used
+        // This should use push/pop since all temp candidates conflict ctx, and RSP is not used
         desugar.mov(cfg, &mem1, &mem2).expect("mem->mem mov should succeed");
 
         // Should push r15, load src, store to dest, pop r15

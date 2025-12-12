@@ -69,7 +69,7 @@
 //! let dest = Reg(10); // x10
 //!
 //! // Large immediate that exceeds ADD limits
-//! desugar.add(cfg, &dest, &Reg(5), &5000u64)?; // Desugars to mov + add
+//! desugar.add(ctx, cfg, &dest, &Reg(5), &5000u64)?; // Desugars to mov + add
 //!
 //! // Memory operand in arithmetic
 //! let mem = MemArgKind::Mem {
@@ -81,7 +81,7 @@
 //!     mode: AddressingMode::Offset,
 //! };
 //!
-//! desugar.add(cfg, &dest, &Reg(5), &mem)?; // Loads mem into temp, then adds
+//! desugarctx, .add(cfg, &dest, &Reg(5), &mem)?; // Loads mem into temp, then adds
 //! ```
 
 use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
@@ -627,7 +627,7 @@ mod tests {
             let b_literal = MemArgKind::NoMem(ArgKind::Lit(42));
 
             // This should desugar to mov + add
-            let _ = desugar.add(cfg, &dest, &a, &b_literal);
+            let _ = dectx, sugar.add(cfg, &dest, &a, &b_literal);
         }
 
         // Check that output contains mov and add
@@ -649,7 +649,7 @@ mod tests {
             let src_literal = MemArgKind::NoMem(ArgKind::Lit(123));
 
             // This should desugar to mov_imm (not mov)
-            let _ = desugar.mov(cfg, &dest, &src_literal);
+            let _ = desugar.mov(ctx, cfg, &dest, &src_literal);
         }
 
         // Check that output contains mov but not regular mov instruction
@@ -679,7 +679,7 @@ mod tests {
             };
 
             // This should desugar to ldr + add
-            let _ = desugar.add(cfg, &dest, &a, &b_mem);
+            let _ctx,  = desugar.add(cfg, &dest, &a, &b_mem);
         }
 
         // Check that output contains ldr and add
@@ -769,7 +769,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                     }
                     _ => {
                         // Both registers
-                        self.writer.mov(ctx, cfg, dest, src)
+                        self.writerctx, .mov(ctx, cfg, dest, src)
                     }
                 }
             }
@@ -829,7 +829,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.binary_op(cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
-            writer.add(ctx, cfg, dest, a, b)
+   ctx,          writer.add(ctx, cfg, dest, a, b)
         })
     }
 

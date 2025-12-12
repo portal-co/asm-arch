@@ -105,7 +105,7 @@ impl TempRegManager {
             let temp_reg = candidates[0];
 
             // Use the stack manager for push/pop operations
-            self.stack_manager.push(writer, ctx, X64Arch::default(), &temp_reg)?;
+            self.stack_manager.push(ctx, writer, ctx, X64Arch::default(), &temp_reg)?;
 
             Ok(temp_reg)
         } else {
@@ -118,7 +118,7 @@ impl TempRegManager {
     /// If the register is buried deeper in the stack, it remains pushed for potential future use.
     pub fn release_temp<Context, W: WriterCore<Context> + ?Sized>(&mut self, writer: &mut W, ctx: &mut Context, reg: Reg) -> Result<(), W::Error> {
         // Use the stack manager for pop operations
-        self.stack_manager.pop(writer, ctx, X64Arch::default(), &reg)
+        self.stack_manager.pop(ctx, writer, ctx, X64Arch::default(), &reg)
     }
 
     /// Release all pushed registers in reverse order (LIFO).
@@ -129,7 +129,7 @@ impl TempRegManager {
         while self.stack_manager.stack_depth() > 0 {
             let slots = self.stack_manager.stack_slots();
             let slot = &slots[slots.len() - 1];
-            writer.pop(ctx, X64Arch::default(), &Reg(slot.offset as u8))?; // This is a hack - we need to track actual registers
+            writerctx, .pop(ctx, X64Arch::default(), &Reg(slot.offset as u8))?; // This is a hack - we need to track actual registers
             self.stack_manager.deallocate_slot();
         }
         Ok(())
@@ -747,19 +747,19 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
     fn add(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.add(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.add(ctx, c, x, y))
     }
 
     fn sub(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.sub(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.sub(ctx, c, x, y))
     }
 
     fn cmp(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op_no_dest(cfg, a, b, |w, c, x, y| w.cmp(c, x, y))
+        self.binary_op_no_dest(cfg, a, b, |w, c, x, y| w.cmp(ctx, c, x, y))
     }
 
     fn cmp0(&mut self, cfg: X64Arch, op: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
@@ -789,55 +789,55 @@ impl<'a, W: WriterCore + ?Sized> WriterCore for DesugaringWriter<'a, W> {
     fn mul(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.mul(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.mul(ctx, c, x, y))
     }
 
     fn div(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.div(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.div(ctx, c, x, y))
     }
 
     fn idiv(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.idiv(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.idiv(ctx, c, x, y))
     }
 
     fn and(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.and(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.and(ctx, c, x, y))
     }
 
     fn or(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.or(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.or(ctx, c, x, y))
     }
 
     fn eor(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.eor(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.eor(ctx, c, x, y))
     }
 
     fn shl(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.shl(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.shl(ctx, c, x, y))
     }
 
     fn shr(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.shr(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.shr(ctx, c, x, y))
     }
 
     fn sar(&mut self, cfg: X64Arch, a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(cfg, &[a, b])?;
-        self.binary_op(cfg, a, b, |w, c, x, y| w.sar(c, x, y))
+        self.binary_op(cfg, a, b, |w, c, x, y| w.sar(ctx, c, x, y))
     }
 
     fn movsx(&mut self, cfg: X64Arch, dest: &(dyn MemArg + '_), src: &(dyn MemArg + '_)) -> Result<(), Self::Error> {

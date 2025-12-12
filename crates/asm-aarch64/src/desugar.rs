@@ -345,8 +345,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
 
     /// Desugars a memory argument if needed.
     fn desugar_mem_arg(
-        &mut self, ctx: &mut Context, ctx: &mut Context,
-        arch: AArch64Arch,
+        &mut self, ctx: &mut Context, arch: AArch64Arch,
         mem_arg: &(dyn MemArg + '_),
     ) -> Result<MemArgKind<ArgKind>, W::Error> {
         let concrete = mem_arg.concrete_mem_kind();
@@ -396,8 +395,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
 
     /// Loads a memory operand into a register if needed, returning a register operand.
     fn load_operand_to_reg(
-        &mut self, ctx: &mut Context, ctx: &mut Context,
-        arch: AArch64Arch,
+        &mut self, ctx: &mut Context, arch: AArch64Arch,
         operand: &(dyn MemArg + '_),
         reg_class: RegisterClass,
     ) -> Result<MemArgKind<ArgKind>, W::Error> {
@@ -418,7 +416,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 // This is a memory operand - load it into a temp register
                 let mut used = [Reg(0); 2];
                 let count = Self::collect_used_regs(&concrete, &mut used);
-                let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, reg_class, &used, count)?;
+                let temp_reg = self.temp_manager.acquire_temp(self.writer, ctx, &self.config, reg_class, &used, count)?;
 
                 let desugared_mem = self.desugar_mem_arg(ctx, arch, operand)?;
                 match size {
@@ -440,8 +438,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
     /// For literals, loads them into a register. For memory, returns the desugared memory form.
     /// The caller is responsible for loading memory operands into registers if needed.
     fn desugar_operand(
-        &mut self, ctx: &mut Context, ctx: &mut Context,
-        arch: AArch64Arch,
+        &mut self, ctx: &mut Context, arch: AArch64Arch,
         operand: &(dyn MemArg + '_),
     ) -> Result<MemArgKind<ArgKind>, W::Error> {
         let concrete = operand.concrete_mem_kind();
@@ -545,7 +542,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     let a_count = Self::collect_used_regs(&a_concrete, &mut all_used[0..3]);
                     let b_count = Self::collect_used_regs(&b_concrete, &mut all_used[3..6]);
                     let total_count = a_count + b_count;
-                    let temp_b = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &all_used, total_count)?;
+                    let temp_b = self.temp_manager.acquire_temp(self.writer, ctx, &self.config, RegisterClass::Gpr, &all_used, total_count)?;
 
                     let desugared_mem_b = self.desugar_mem_arg(ctx, cfg, b)?;
                     let b_size = if let MemArgKind::Mem { size, .. } = &b_concrete { *size } else { MemorySize::_64 };
@@ -692,9 +689,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     // Memory load/store instructions that need desugaring
 
     fn ldr(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -703,9 +698,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     }
 
     fn str(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         src: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -714,9 +707,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     }
 
     fn stp(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         src1: &(dyn MemArg + '_),
         src2: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
@@ -726,9 +717,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     }
 
     fn ldp(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest1: &(dyn MemArg + '_),
         dest2: &(dyn MemArg + '_),
         mem: &(dyn MemArg + '_),
@@ -745,9 +734,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     }
 
     fn mov(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -798,7 +785,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
                 let src_count = Self::collect_used_regs(&src_concrete, &mut used[0..2]);
                 let dest_count = Self::collect_used_regs(&dest_concrete, &mut used[2..4]);
                 let total_count = src_count + dest_count;
-                let temp = self.temp_manager.acquire_temp(self.writer, ctx,  &self.config, RegisterClass::Gpr, &used, total_count)?;
+                let temp = self.temp_manager.acquire_temp(self.writer, ctx, &self.config, RegisterClass::Gpr, &used, total_count)?;
 
                 let desugared_src = self.desugar_mem_arg(cfg, src)?;
                 let src_size = if let MemArgKind::Mem { size, .. } = &src_concrete { *size } else { MemorySize::_64 };
@@ -819,9 +806,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context> for Desug
     }
 
     fn add(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -832,9 +817,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn sub(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -845,9 +828,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn mov_imm(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         val: u64,
     ) -> Result<(), Self::Error> {
@@ -855,9 +836,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn mul(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -868,9 +847,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn udiv(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -881,9 +858,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn sdiv(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -894,9 +869,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn and(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -907,9 +880,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn orr(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -920,9 +891,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn eor(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -933,9 +902,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn lsl(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -946,9 +913,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn lsr(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -959,9 +924,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn sxt(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -970,9 +933,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn uxt(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -981,9 +942,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn mvn(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -1007,9 +966,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn cmp(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -1019,9 +976,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn csel(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         cond: crate::ConditionCode,
         dest: &(dyn MemArg + '_),
         true_val: &(dyn MemArg + '_),
@@ -1033,9 +988,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn bcond(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         cond: crate::ConditionCode,
         target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -1044,9 +997,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn adr(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
@@ -1055,9 +1006,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn msr_nzcv(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         let desugared_src = self.load_operand_to_reg(cfg, src, RegisterClass::Gpr)?;
@@ -1071,9 +1020,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn mrs_nzcv(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         self.writer.mrs_nzcv(ctx,  cfg, dest)
@@ -1082,9 +1029,7 @@ writer.add(ctx, cfg, dest, a, b)
     // Floating-point operations
 
     fn fadd(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -1095,9 +1040,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn fsub(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -1108,9 +1051,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn fmul(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -1121,9 +1062,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn fdiv(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         a: &(dyn MemArg + '_),
         b: &(dyn MemArg + '_),
@@ -1134,9 +1073,7 @@ writer.add(ctx, cfg, dest, a, b)
     }
 
     fn fmov(
-        &mut self, ctx: &mut Context,
-        ctx: &mut Context,
-        cfg: AArch64Arch,
+        &mut self, ctx: &mut Context, cfg: AArch64Arch,
         dest: &(dyn MemArg + '_),
         src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {

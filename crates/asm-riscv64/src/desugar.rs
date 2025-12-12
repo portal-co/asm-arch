@@ -1462,7 +1462,7 @@ self.writer.add(ctx, cfg, dest, &desugared_src, &temp_reg)
             let temp_reg = self.config.temp_reg3;
             self.writer.li(ctx, cfg, &temp_reg, offset as u64)?;
             let desugared_base = self.desugar_operand(cfg, base)?;
-            self.flush_sp_if_needed(cfg, &[dest, &desugared_base, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?ctx, ;
+            self.flush_sp_if_needed(cfg, &[dest, &desugared_base, &MemArgKind::NoMem(ArgKind::Reg { reg: temp_reg, size: MemorySize::_64 })])?;
             self.writer.add(ctx, cfg, &temp_reg, &desugared_base, &temp_reg)?;
             self.writer.jalr(ctx, cfg, dest, &temp_reg, 0)
         }

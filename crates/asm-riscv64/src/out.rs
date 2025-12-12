@@ -33,15 +33,14 @@ pub trait WriterCore<Context> {
 
     /// Emits an EBREAK (breakpoint) instruction.
     #[track_caller]
-    fn ebreak(&mut self, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
+    fn ebreak(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
         todo!("ebreak instruction not implemented")
     }
     
     /// Emits a MV (move/copy register) pseudo-instruction.
     /// Implemented as: ADDI dest, src, 0
     #[track_caller]
-    fn mv(
-        &mut self,
+    fn mv(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -51,8 +50,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SUB (subtract) instruction.
     #[track_caller]
-    fn sub(
-        &mut self,
+    fn sub(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -63,8 +61,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an ADD (add) instruction.
     #[track_caller]
-    fn add(
-        &mut self,
+    fn add(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -75,8 +72,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an ADDI (add immediate) instruction.
     #[track_caller]
-    fn addi(
-        &mut self,
+    fn addi(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -87,8 +83,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SD (store doubleword) instruction.
     #[track_caller]
-    fn sd(
-        &mut self,
+    fn sd(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -98,8 +93,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an LD (load doubleword) instruction.
     #[track_caller]
-    fn ld(
-        &mut self,
+    fn ld(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -109,8 +103,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a LW (load word) instruction.
     #[track_caller]
-    fn lw(
-        &mut self,
+    fn lw(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -120,8 +113,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SW (store word) instruction.
     #[track_caller]
-    fn sw(
-        &mut self,
+    fn sw(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -131,8 +123,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an LB (load byte) instruction.
     #[track_caller]
-    fn lb(
-        &mut self,
+    fn lb(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -142,8 +133,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SB (store byte) instruction.
     #[track_caller]
-    fn sb(
-        &mut self,
+    fn sb(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -153,8 +143,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an LH (load halfword) instruction.
     #[track_caller]
-    fn lh(
-        &mut self,
+    fn lh(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -164,8 +153,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SH (store halfword) instruction.
     #[track_caller]
-    fn sh(
-        &mut self,
+    fn sh(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -175,8 +163,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a JALR (jump and link register) instruction.
     #[track_caller]
-    fn jalr(
-        &mut self,
+    fn jalr(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _base: &(dyn MemArg + '_),
@@ -187,8 +174,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a JAL (jump and link) instruction.
     #[track_caller]
-    fn jal(
-        &mut self,
+    fn jal(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _target: &(dyn MemArg + '_),
@@ -198,8 +184,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a BEQ (branch if equal) instruction.
     #[track_caller]
-    fn beq(
-        &mut self,
+    fn beq(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -210,8 +195,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a BNE (branch if not equal) instruction.
     #[track_caller]
-    fn bne(
-        &mut self,
+    fn bne(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -222,8 +206,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a BLT (branch if less than, signed) instruction.
     #[track_caller]
-    fn blt(
-        &mut self,
+    fn blt(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -234,8 +217,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a BGE (branch if greater than or equal, signed) instruction.
     #[track_caller]
-    fn bge(
-        &mut self,
+    fn bge(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -246,8 +228,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a BLTU (branch if less than, unsigned) instruction.
     #[track_caller]
-    fn bltu(
-        &mut self,
+    fn bltu(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -258,8 +239,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a BGEU (branch if greater than or equal, unsigned) instruction.
     #[track_caller]
-    fn bgeu(
-        &mut self,
+    fn bgeu(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -270,8 +250,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an AND (bitwise AND) instruction.
     #[track_caller]
-    fn and(
-        &mut self,
+    fn and(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -282,8 +261,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an OR (bitwise OR) instruction.
     #[track_caller]
-    fn or(
-        &mut self,
+    fn or(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -294,8 +272,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an XOR (bitwise exclusive OR) instruction.
     #[track_caller]
-    fn xor(
-        &mut self,
+    fn xor(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -306,8 +283,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SLL (shift left logical) instruction.
     #[track_caller]
-    fn sll(
-        &mut self,
+    fn sll(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -318,8 +294,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SRL (shift right logical) instruction.
     #[track_caller]
-    fn srl(
-        &mut self,
+    fn srl(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -330,8 +305,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SRA (shift right arithmetic) instruction.
     #[track_caller]
-    fn sra(
-        &mut self,
+    fn sra(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -342,8 +316,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SLT (set less than, signed) instruction.
     #[track_caller]
-    fn slt(
-        &mut self,
+    fn slt(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -354,8 +327,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a SLTU (set less than, unsigned) instruction.
     #[track_caller]
-    fn sltu(
-        &mut self,
+    fn sltu(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -366,8 +338,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a LUI (load upper immediate) instruction.
     #[track_caller]
-    fn lui(
-        &mut self,
+    fn lui(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _imm: u32,
@@ -377,8 +348,7 @@ pub trait WriterCore<Context> {
     
     /// Emits an AUIPC (add upper immediate to PC) instruction.
     #[track_caller]
-    fn auipc(
-        &mut self,
+    fn auipc(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _imm: u32,
@@ -389,8 +359,7 @@ pub trait WriterCore<Context> {
     /// Emits a LI (load immediate) pseudo-instruction.
     /// Uses LUI + ADDI for large immediates.
     #[track_caller]
-    fn li(
-        &mut self,
+    fn li(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _val: u64,
@@ -401,21 +370,21 @@ pub trait WriterCore<Context> {
     /// Emits a RET (return) pseudo-instruction.
     /// Implemented as: JALR x0, x1, 0
     #[track_caller]
-    fn ret(&mut self, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
+    fn ret(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
         todo!("ret instruction not implemented")
     }
     
     /// Emits a CALL pseudo-instruction (for function calls).
     /// Implemented as: AUIPC + JALR sequence.
     #[track_caller]
-    fn call(&mut self, _cfg: crate::RiscV64Arch, _target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn call(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch, _target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("call pseudo-instruction not implemented")
     }
     
     /// Emits a J (jump) pseudo-instruction.
     /// Implemented as: JAL x0, target
     #[track_caller]
-    fn j(&mut self, _cfg: crate::RiscV64Arch, _target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn j(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch, _target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         todo!("j pseudo-instruction not implemented")
     }
     
@@ -423,8 +392,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a MUL (multiply) instruction.
     #[track_caller]
-    fn mul(
-        &mut self,
+    fn mul(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -435,8 +403,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a MULH (multiply high, signed×signed) instruction.
     #[track_caller]
-    fn mulh(
-        &mut self,
+    fn mulh(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -447,8 +414,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a DIV (divide, signed) instruction.
     #[track_caller]
-    fn div(
-        &mut self,
+    fn div(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -459,8 +425,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a DIVU (divide, unsigned) instruction.
     #[track_caller]
-    fn divu(
-        &mut self,
+    fn divu(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -471,8 +436,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a REM (remainder, signed) instruction.
     #[track_caller]
-    fn rem(
-        &mut self,
+    fn rem(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -483,8 +447,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a REMU (remainder, unsigned) instruction.
     #[track_caller]
-    fn remu(
-        &mut self,
+    fn remu(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -497,8 +460,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FLD (floating-point load double) instruction.
     #[track_caller]
-    fn fld(
-        &mut self,
+    fn fld(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -508,8 +470,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FSD (floating-point store double) instruction.
     #[track_caller]
-    fn fsd(
-        &mut self,
+    fn fsd(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
@@ -519,8 +480,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FADD.D (floating-point add double) instruction.
     #[track_caller]
-    fn fadd_d(
-        &mut self,
+    fn fadd_d(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -531,8 +491,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FSUB.D (floating-point subtract double) instruction.
     #[track_caller]
-    fn fsub_d(
-        &mut self,
+    fn fsub_d(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -543,8 +502,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FMUL.D (floating-point multiply double) instruction.
     #[track_caller]
-    fn fmul_d(
-        &mut self,
+    fn fmul_d(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -555,8 +513,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FDIV.D (floating-point divide double) instruction.
     #[track_caller]
-    fn fdiv_d(
-        &mut self,
+    fn fdiv_d(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -568,8 +525,7 @@ pub trait WriterCore<Context> {
     /// Emits a FMOV.D (floating-point move double) pseudo-instruction.
     /// Implemented as: FSGNJ.D dest, src, src
     #[track_caller]
-    fn fmov_d(
-        &mut self,
+    fn fmov_d(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -579,8 +535,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FCVT.D.L (convert signed 64-bit integer to double) instruction.
     #[track_caller]
-    fn fcvt_d_l(
-        &mut self,
+    fn fcvt_d_l(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -590,8 +545,7 @@ pub trait WriterCore<Context> {
     
     /// Emits a FCVT.L.D (convert double to signed 64-bit integer) instruction.
     #[track_caller]
-    fn fcvt_l_d(
-        &mut self,
+    fn fcvt_l_d(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -607,14 +561,13 @@ pub trait WriterCore<Context> {
 pub trait Writer<L, Context>: WriterCore<Context> {
     /// Sets a label at the current position.
     #[track_caller]
-    fn set_label(&mut self, _cfg: crate::RiscV64Arch, _s: L) -> Result<(), Self::Error> {
+    fn set_label(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch, _s: L) -> Result<(), Self::Error> {
         todo!("set_label not implemented")
     }
     
     /// Emits a JAL instruction to a label.
     #[track_caller]
-    fn jal_label(
-        &mut self,
+    fn jal_label(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _label: L,
@@ -624,8 +577,7 @@ pub trait Writer<L, Context>: WriterCore<Context> {
     
     /// Emits a branch instruction to a label based on condition code.
     #[track_caller]
-    fn bcond_label(
-        &mut self,
+    fn bcond_label(&mut self, ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _cond: ConditionCode,
         _a: &(dyn MemArg + '_),
@@ -644,57 +596,57 @@ macro_rules! writer_dispatch {
             $(
                 impl<$($u)*> $crate::out::WriterCore for $ty{
                     type Error = $e;
-                    fn ebreak(&mut self, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
+                    fn ebreak(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::ebreak(&mut **self, cfg)
                     }
-                    fn mv(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+                    fn mv(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
                         <$ty as $crate::out::WriterCore<Context>>::mv(&mut **self, ctx, cfg, dest, src)
                     }
-                    fn sd(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, src: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+                    fn sd(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, src: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
                         <$ty as $crate::out::WriterCore<Context>>::sd(&mut **self, ctx, cfg, src, mem)
                     }
-                    fn ld(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+                    fn ld(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), mem: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
                         <$ty as $crate::out::WriterCore<Context>>::ld(&mut **self, ctx, cfg, dest, mem)
                     }
-                    fn add(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn add(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::add(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sub(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn sub(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::sub(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn mul(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn mul(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::mul(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn div(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn div(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::div(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn and(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn and(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::and(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn or(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn or(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::or(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn xor(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn xor(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::xor(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn sll(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn sll(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::sll(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn srl(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
+                    fn srl(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::srl(&mut **self, ctx, cfg, dest, a, b)
                     }
-                    fn ret(&mut self, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
+                    fn ret(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::ret(&mut **self, cfg)
                     }
-                    fn li(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> Result<(), Self::Error>{
+                    fn li(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), val: u64) -> Result<(), Self::Error>{
                         <$ty as $crate::out::WriterCore<Context>>::li(&mut **self, ctx, cfg, dest, val)
                     }
                 }
                 impl<$($t)*, Context>$crate::out::Writer<$l, Context> for $ty{
-                    fn set_label(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, s: $l) -> Result<(), Self::Error> {
+                    fn set_label(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, s: $l) -> Result<(), Self::Error> {
                         <$ty as $crate::out::Writer<$l, Context>>::set_label(&mut **self, ctx, cfg, s)
                     }
-                    fn jal_label(&mut self, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> Result<(), Self::Error> {
+                    fn jal_label(&mut self, ctx: &mut Context, ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> Result<(), Self::Error> {
                        <$ty as $crate::out::Writer<$l, Context>>::jal_label(&mut **self, ctx, cfg, dest, label)
                     }
                 }

@@ -98,6 +98,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-solutions-asm-jvm"
+version = "0.1.0"
+dependencies = [
+ "portal-pc-asm-common",
+ "typeid",
+]
+
+[[package]]
 name = "portal-solutions-asm-regalloc"
 version = "0.1.0"
 dependencies = [

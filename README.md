@@ -81,10 +81,14 @@ portal-solutions-asm-aarch64 = { version = "0.1.0", features = ["alloc", "x64_sh
 MPL-2.0
 
 ## Goals
-- [ ] Add project goals
+- [ ] Maintain and expand architecture support (x86-64, AArch64, RISC-V, JVM)
+- [ ] Optimize register allocation algorithms
+- [ ] Ensure semantic consistency across architectures
 
 ## Progress
-- [ ] Initial setup
+- [ ] Implemented core support for x86-64 and AArch64
+- [ ] Added register allocation and semantic modeling crates
+- [ ] RISC-V desugaring improvements (hardened temp selection, large displacement folding)
 
 ---
 *AI assisted*

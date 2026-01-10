@@ -79,3 +79,12 @@ portal-solutions-asm-aarch64 = { version = "0.1.0", features = ["alloc", "x64_sh
 ## License
 
 MPL-2.0
+
+## Goals
+- [ ] Add project goals
+
+## Progress
+- [ ] Initial setup
+
+---
+*AI assisted*

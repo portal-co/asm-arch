@@ -18,11 +18,11 @@ use core::{
 #[non_exhaustive]
 pub enum ArgKind {
     /// A register with a specific size.
-    Reg { 
+    Reg {
         /// The register.
-        reg: Reg, 
+        reg: Reg,
         /// The operand size.
-        size: MemorySize 
+        size: MemorySize,
     },
     /// A literal 64-bit value.
     Lit(u64),
@@ -93,12 +93,20 @@ impl<A: Arg> MemArgKind<A> {
                 // For non-memory operands, use the provided opts
                 MemArgKind::NoMem(a.display(opts))
             }
-            MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+            MemArgKind::Mem {
+                base,
+                offset,
+                disp,
+                size,
+                reg_class,
+            } => {
                 // For memory operands, force base and offset to be GPRs
                 let gpr_opts = crate::DisplayOpts::new(opts.arch);
                 MemArgKind::Mem {
                     base: base.display(gpr_opts),
-                    offset: offset.as_ref().map(|(a, scale)| (a.display(gpr_opts), *scale)),
+                    offset: offset
+                        .as_ref()
+                        .map(|(a, scale)| (a.display(gpr_opts), *scale)),
                     disp: *disp,
                     size: *size,
                     reg_class: *reg_class,
@@ -137,7 +145,10 @@ impl<T: Display> Display for MemArgKind<T> {
                             // - _256 -> ymmword (256-bit YMM register) [Future]
                             // - _512 -> zmmword (512-bit ZMM register) [Future]
                             match size {
-                                MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmmword",
+                                MemorySize::_8
+                                | MemorySize::_16
+                                | MemorySize::_32
+                                | MemorySize::_64 => "xmmword",
                                 // Future SIMD pointer sizes:
                                 // MemorySize::_128 => "xmmword",
                                 // MemorySize::_256 => "ymmword",
@@ -149,10 +160,10 @@ impl<T: Display> Display for MemArgKind<T> {
                             // HACK: Temporary mapping until proper MemorySize variants exist
                             // _8 → 128-bit xmmword, _16 → 256-bit ymmword, _32 → 512-bit zmmword, _64 → unmapped
                             match size {
-                                MemorySize::_8 => "xmmword",   // 128-bit memory access
-                                MemorySize::_16 => "ymmword",  // 256-bit memory access
-                                MemorySize::_32 => "zmmword",  // 512-bit memory access
-                                MemorySize::_64 => "xmmword",  // Unmapped - default to xmmword
+                                MemorySize::_8 => "xmmword",  // 128-bit memory access
+                                MemorySize::_16 => "ymmword", // 256-bit memory access
+                                MemorySize::_32 => "zmmword", // 512-bit memory access
+                                MemorySize::_64 => "xmmword", // Unmapped - default to xmmword
                                 _ => "xmmword",
                             }
                         }
@@ -161,18 +172,19 @@ impl<T: Display> Display for MemArgKind<T> {
                 let c;
                 let d;
                 // let a = ;
-                write!(
-                    f,
-                    "{ptr} ptr [{base}{}+{disp}]",
-                    match offset.as_ref() {
-                        None => format_args!(""),
-                        Some((a, b)) => {
-                            c = a;
-                            d = b;
-                            format_args!("+{c}*{d}")
+
+                match offset.as_ref() {
+                    None => match format_args!("") {
+                        x => write!(f, "{ptr} ptr [{base}{x}+{disp}]"),
+                    },
+                    Some((a, b)) => {
+                        c = a;
+                        d = b;
+                        match format_args!("+{c}*{d}") {
+                            x => write!(f, "{ptr} ptr [{base}{x}+{disp}]"),
                         }
                     }
-                )
+                }
             }
         }
     }
@@ -249,7 +261,7 @@ impl<A> MemArgKind<A> {
 pub trait MemArg {
     /// Invokes the callback with the memory argument kind.
     fn mem_kind(&self, go: &mut (dyn FnMut(MemArgKind<&'_ (dyn Arg + '_)>) + '_));
-    
+
     /// Returns the concrete memory argument kind.
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         let mut m = None;
@@ -259,7 +271,7 @@ pub trait MemArg {
         });
         m.unwrap().unwrap()
     }
-    
+
     /// Creates a displayable representation of this memory argument.
     fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         let mut m = None;
@@ -269,12 +281,12 @@ pub trait MemArg {
         });
         m.unwrap()
     }
-    
+
     /// Formats this memory argument.
     fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.mem_display(opts))
     }
-    
+
     /// Returns an iterator over the registers used by this memory argument.
     #[cfg(feature = "alloc")]
     fn mem_regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -323,17 +335,17 @@ impl<T: MemArg + ?Sized> MemArg for &'_ T {
 pub trait Arg: MemArg {
     /// Returns the concrete argument kind.
     fn kind(&self) -> ArgKind;
-    
+
     /// Formats this argument.
     fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.display(opts))
     }
-    
+
     /// Creates a displayable representation of this argument.
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         return self.kind().display(opts);
     }
-    
+
     /// Returns an iterator over the registers used by this argument.
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -376,7 +388,11 @@ impl Arg for Reg {
         ))
     }
     fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
-        X64Reg::format(self, f, &RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class))
+        X64Reg::format(
+            self,
+            f,
+            &RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class),
+        )
     }
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {

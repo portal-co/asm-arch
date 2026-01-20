@@ -7,9 +7,14 @@ license = "MPL-2.0"
 description = "Assembly target types and data structures"
 
 [workspace.dependencies]
+
 portal-pc-asm-common = { version = "0.1.1", git = "https://github.com/portal-co/asm-common.git" }
+
+rv-asm = { version = "*", git = "https://github.com/portal-co/rv-utils.git" }
+
+
 typeid = "1.0.3"
 iced-x86 = { version = "1.21.0", default-features = false }
-rv-asm = { version = "*", git = "https://github.com/portal-co/rv-utils.git" }
+
 rabbitizer = "1.14.3"
 powerpc = "0.4.1"

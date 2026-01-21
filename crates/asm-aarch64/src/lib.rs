@@ -169,7 +169,7 @@ pub mod reg;
 pub mod stack;
 
 #[cfg(feature = "x64_shim")]
-pub mod shim;
+pub use portal_solutions_asm_x86_64_shim::aarch64 as shim;
 
 /// Register allocation integration module (gated by `regalloc-integration` feature).
 #[cfg(feature = "regalloc-integration")]

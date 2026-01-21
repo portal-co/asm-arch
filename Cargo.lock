@@ -93,7 +93,6 @@ version = "0.1.0"
 dependencies = [
  "portal-pc-asm-common",
  "portal-solutions-asm-regalloc",
- "portal-solutions-asm-x86-64",
  "typeid",
 ]
 
@@ -119,7 +118,6 @@ version = "0.1.0"
 dependencies = [
  "portal-pc-asm-common",
  "portal-solutions-asm-regalloc",
- "portal-solutions-asm-x86-64",
  "typeid",
 ]
 
@@ -138,6 +136,17 @@ dependencies = [
  "iced-x86",
  "portal-pc-asm-common",
  "portal-solutions-asm-regalloc",
+ "typeid",
+]
+
+[[package]]
+name = "portal-solutions-asm-x86-64-shim"
+version = "0.1.0"
+dependencies = [
+ "portal-pc-asm-common",
+ "portal-solutions-asm-aarch64",
+ "portal-solutions-asm-riscv64",
+ "portal-solutions-asm-x86-64",
  "typeid",
 ]
 

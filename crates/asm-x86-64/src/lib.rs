@@ -55,7 +55,7 @@ static XMM_REG_NAMES: &'static [&'static str; 16] = &[
 /// When `true`, the proper (non-hacky) implementation will be used once those variants exist.
 ///
 /// **Consumers can check this value** to determine if the hack is active and adjust their code accordingly.
-pub const NO_HACK: bool = false;
+pub const NO_HACK: bool = true;
 
 /// Register class for display formatting.
 ///

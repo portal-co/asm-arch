@@ -860,6 +860,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     MemorySize::_16 => self.writer.lh(ctx, arch, &temp_reg, &desugared_mem)?,
                     MemorySize::_32 => self.writer.lw(ctx, arch, &temp_reg, &desugared_mem)?,
                     MemorySize::_64 => self.writer.ld(ctx, arch, &temp_reg, &desugared_mem)?,
+                        _ => todo!()
                 }
 
                 if needs_save {
@@ -998,6 +999,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                         MemorySize::_64 => {
                             self.writer.ld(ctx, cfg, &temp_reg_a, &desugared_mem_a)?
                         }
+                            _ => todo!()
                     }
 
                     // Load b
@@ -1020,6 +1022,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                         MemorySize::_64 => {
                             self.writer.ld(ctx, cfg, &temp_reg_b, &desugared_mem_b)?
                         }
+                            _ => todo!()
                     }
 
                     let desugared_a = MemArgKind::NoMem(ArgKind::Reg {
@@ -1158,6 +1161,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                         MemorySize::_64 => {
                             self.writer.ld(ctx, cfg, &temp_reg_a, &desugared_mem_a)?
                         }
+                            _ => todo!()
                     }
 
                     // Load b
@@ -1180,6 +1184,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                         MemorySize::_64 => {
                             self.writer.ld(ctx, cfg, &temp_reg_b, &desugared_mem_b)?
                         }
+                        _ => todo!(),
                     }
 
                     let desugared_a = MemArgKind::NoMem(ArgKind::Reg {

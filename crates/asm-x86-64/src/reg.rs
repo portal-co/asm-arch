@@ -104,9 +104,9 @@ impl X64Reg for Reg {
                         MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => {
                             "xmm"
                         }
-                        // Future: Add MemorySize::_128 => "xmm"
-                        // Future: Add MemorySize::_256 => "ymm"
-                        // Future: Add MemorySize::_512 => "zmm"
+                        MemorySize::_128 => "xmm",
+                        MemorySize::_256 => "ymm",
+                        MemorySize::_512 => "zmm",
                         // Default to xmm for any unknown sizes
                         _ => "xmm",
                     }
@@ -135,6 +135,8 @@ impl X64Reg for Reg {
                             MemorySize::_16 => REG_NAMES_16,
                             MemorySize::_32 => REG_NAMES_32,
                             MemorySize::_64 => REG_NAMES,
+
+                            _ => todo!("Unsupported register size for GPR"),
                         })[idx]
                     )
                 } else {
@@ -146,6 +148,8 @@ impl X64Reg for Reg {
                             MemorySize::_16 => "w",
                             MemorySize::_32 => "d",
                             MemorySize::_64 => "",
+
+                            _ => todo!("Unsupported register size for GPR"),
                         }
                     )
                 }

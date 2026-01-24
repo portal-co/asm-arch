@@ -480,6 +480,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     MemorySize::_16 => self.writer.ldr(ctx, arch, &temp_reg, &desugared_mem)?,
                     MemorySize::_32 => self.writer.ldr(ctx, arch, &temp_reg, &desugared_mem)?,
                     MemorySize::_64 => self.writer.ldr(ctx, arch, &temp_reg, &desugared_mem)?,
+                    _ => todo!()
                 }
 
                 Ok(MemArgKind::NoMem(ArgKind::Reg {
@@ -634,6 +635,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                         MemorySize::_16 => self.writer.ldr(ctx, cfg, &temp_b, &desugared_mem_b)?,
                         MemorySize::_32 => self.writer.ldr(ctx, cfg, &temp_b, &desugared_mem_b)?,
                         MemorySize::_64 => self.writer.ldr(ctx, cfg, &temp_b, &desugared_mem_b)?,
+                        _ => todo!()
                     }
 
                     let desugared_a = self.desugar_mem_arg(ctx, cfg, a)?;
@@ -912,6 +914,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context>
                     MemorySize::_16 => self.writer.ldr(ctx, cfg, &temp, &desugared_src)?,
                     MemorySize::_32 => self.writer.ldr(ctx, cfg, &temp, &desugared_src)?,
                     MemorySize::_64 => self.writer.ldr(ctx, cfg, &temp, &desugared_src)?,
+                        _ => todo!()
                 }
 
                 let desugared_dest = self.desugar_mem_arg(ctx, cfg, dest)?;

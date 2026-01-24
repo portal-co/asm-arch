@@ -19,15 +19,15 @@ use crate::{
 pub trait AArch64Reg: crate::out::arg::Arg + Sized {
     /// Formats the register to the given formatter with the specified options.
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result;
-    
+
     /// Creates a displayable representation of the register with the given options.
     fn display<'a>(&'a self, opts: RegFormatOpts) -> RegDisplay;
-    
+
     /// Returns the context handle for loading this register from a context structure.
     ///
     /// Returns a tuple of (base register, base offset, register offset).
     fn context_handle(&self, arch: &AArch64Arch) -> (Reg, u32, u32);
-    
+
     /// Loads the register value from a context structure.
     ///
     /// # Arguments
@@ -92,16 +92,16 @@ pub trait AArch64Reg: crate::out::arg::Arg + Sized {
 impl AArch64Reg for Reg {
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result {
         let idx = (self.0 as usize) % 32;
-        
+
         match opts.reg_class {
             crate::RegisterClass::Simd => {
                 // For SIMD/FP registers, use v registers with element size qualifiers
                 let suffix = match &opts.size {
-                    MemorySize::_8 => ".b",   // byte element
-                    MemorySize::_16 => ".h",  // halfword element
-                    MemorySize::_32 => ".s",  // single precision
-                    MemorySize::_64 => ".d",  // double precision
-                    _ => ".d",  // default to double
+                    MemorySize::_8 => ".b",  // byte element
+                    MemorySize::_16 => ".h", // halfword element
+                    MemorySize::_32 => ".s", // single precision
+                    MemorySize::_64 => ".d", // double precision
+                    _ => ".d",               // default to double
                 };
                 write!(f, "{}{}", VREG_NAMES[idx], suffix)
             }
@@ -114,11 +114,11 @@ impl AArch64Reg for Reg {
             }
         }
     }
-    
+
     fn display<'a>(&'a self, opts: RegFormatOpts) -> RegDisplay {
         RegDisplay { reg: *self, opts }
     }
-    
+
     fn context_handle(&self, _arch: &AArch64Arch) -> (Reg, u32, u32) {
         // Similar to x86-64, using register 9 as context pointer
         (

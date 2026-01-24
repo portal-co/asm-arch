@@ -843,9 +843,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                     size: MemorySize::_64, // Literals are loaded as 64-bit values
                 }))
             }
-            MemArgKind::Mem {
-                size,  ..
-            } => {
+            MemArgKind::Mem { size, .. } => {
                 // This is a memory operand - need to load it into a temp register
                 let (temp_reg, needs_save, saved_reg) = self.select_temp_reg(avoid_regs);
                 if needs_save {

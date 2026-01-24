@@ -6,7 +6,7 @@
 use portal_pc_asm_common::types::{mem::MemorySized, reg::Reg};
 
 use super::*;
-use crate::reg::{RegDisplay, AArch64Reg};
+use crate::reg::{AArch64Reg, RegDisplay};
 use core::{
     convert::Infallible,
     fmt::{Display, Formatter},
@@ -19,11 +19,11 @@ use typeid;
 #[non_exhaustive]
 pub enum ArgKind {
     /// A register with a specific size.
-    Reg { 
+    Reg {
         /// The register.
-        reg: Reg, 
+        reg: Reg,
         /// The operand size.
-        size: MemorySize 
+        size: MemorySize,
     },
     /// A literal 64-bit value.
     Lit(u64),
@@ -55,7 +55,7 @@ impl Display for ArgKindDisplay {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             ArgKindDisplay::Reg(reg_display) => write!(f, "{reg_display}"),
-            ArgKindDisplay::Lit(i) => write!(f, "#{i}"),  // AArch64 uses # for immediates
+            ArgKindDisplay::Lit(i) => write!(f, "#{i}"), // AArch64 uses # for immediates
         }
     }
 }
@@ -112,12 +112,21 @@ impl<A: Arg> MemArgKind<A> {
                 // For non-memory operands, use the provided opts
                 MemArgKind::NoMem(a.display(opts))
             }
-            MemArgKind::Mem { base, offset, disp, size, reg_class, mode } => {
+            MemArgKind::Mem {
+                base,
+                offset,
+                disp,
+                size,
+                reg_class,
+                mode,
+            } => {
                 // For memory operands, force base and offset to be GPRs
                 let gpr_opts = crate::DisplayOpts::new(opts.arch);
                 MemArgKind::Mem {
                     base: base.display(gpr_opts),
-                    offset: offset.as_ref().map(|(a, scale)| (a.display(gpr_opts), *scale)),
+                    offset: offset
+                        .as_ref()
+                        .map(|(a, scale)| (a.display(gpr_opts), *scale)),
                     disp: *disp,
                     size: *size,
                     reg_class: *reg_class,
@@ -145,14 +154,14 @@ impl<T: Display> Display for MemArgKind<T> {
                         // Standard offset: [base, #disp] or [base, offset, LSL #scale]
                         write!(f, "[")?;
                         write!(f, "{base}")?;
-                        
+
                         if let Some((off, scale)) = offset {
                             write!(f, ", {off}")?;
                             if *scale > 0 {
                                 write!(f, ", LSL #{scale}")?;
                             }
                         }
-                        
+
                         if *disp != 0 {
                             if *disp > 0 {
                                 write!(f, ", #{disp}")?;
@@ -160,14 +169,14 @@ impl<T: Display> Display for MemArgKind<T> {
                                 write!(f, ", #-{}", -disp)?;
                             }
                         }
-                        
+
                         write!(f, "]")
                     }
                     AddressingMode::PreIndex => {
                         // Pre-indexed: [base, #disp]! (update base before access)
                         write!(f, "[")?;
                         write!(f, "{base}")?;
-                        
+
                         if *disp != 0 {
                             if *disp > 0 {
                                 write!(f, ", #{disp}")?;
@@ -175,13 +184,13 @@ impl<T: Display> Display for MemArgKind<T> {
                                 write!(f, ", #-{}", -disp)?;
                             }
                         }
-                        
+
                         write!(f, "]!")
                     }
                     AddressingMode::PostIndex => {
                         // Post-indexed: [base], #disp (update base after access)
                         write!(f, "[{base}]")?;
-                        
+
                         if *disp != 0 {
                             if *disp > 0 {
                                 write!(f, ", #{disp}")?;
@@ -189,7 +198,7 @@ impl<T: Display> Display for MemArgKind<T> {
                                 write!(f, ", #-{}", -disp)?;
                             }
                         }
-                        
+
                         Ok(())
                     }
                 }
@@ -220,7 +229,7 @@ impl<A> MemArgKind<A> {
             },
         }
     }
-    
+
     /// Returns a mutable reference view of this memory argument kind.
     pub fn as_mut<'a>(&'a mut self) -> MemArgKind<&'a mut A> {
         match self {
@@ -242,7 +251,7 @@ impl<A> MemArgKind<A> {
             },
         }
     }
-    
+
     /// Maps the argument type using the provided function.
     pub fn map<B, E>(
         self,
@@ -278,7 +287,7 @@ impl<A> MemArgKind<A> {
 pub trait MemArg {
     /// Invokes the callback with the memory argument kind.
     fn mem_kind(&self, go: &mut (dyn FnMut(MemArgKind<&'_ (dyn Arg + '_)>) + '_));
-    
+
     /// Returns the concrete memory argument kind.
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         let mut m = None;
@@ -287,7 +296,7 @@ pub trait MemArg {
         });
         m.unwrap().unwrap()
     }
-    
+
     /// Creates a displayable representation of this memory argument.
     fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         let mut m = None;
@@ -296,12 +305,12 @@ pub trait MemArg {
         });
         m.unwrap()
     }
-    
+
     /// Formats this memory argument.
     fn mem_format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.mem_display(opts))
     }
-    
+
     /// Returns an iterator over the registers used by this memory argument.
     #[cfg(feature = "alloc")]
     fn mem_regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -352,17 +361,17 @@ impl<T: MemArg + ?Sized> MemArg for &'_ T {
 pub trait Arg: MemArg {
     /// Returns the concrete argument kind.
     fn kind(&self) -> ArgKind;
-    
+
     /// Formats this argument.
     fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.display(opts))
     }
-    
+
     /// Creates a displayable representation of this argument.
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         return self.kind().display(opts);
     }
-    
+
     /// Returns an iterator over the registers used by this argument.
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -383,7 +392,7 @@ impl<T: Arg + ?Sized> Arg for &'_ T {
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         (&**self).display(opts)
     }
-    
+
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
         (&**self).regs()
@@ -408,7 +417,11 @@ impl Arg for Reg {
         ))
     }
     fn format(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
-        AArch64Reg::format(self, f, &RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class))
+        AArch64Reg::format(
+            self,
+            f,
+            &RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class),
+        )
     }
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -560,7 +573,7 @@ impl Arg for u64 {
         ArgKindDisplay::Lit(*self)
     }
     fn format(&self, f: &mut Formatter<'_>, _opts: crate::DisplayOpts) -> core::fmt::Result {
-        write!(f, "#{self}")  // AArch64 uses # for immediates
+        write!(f, "#{self}") // AArch64 uses # for immediates
     }
 }
 

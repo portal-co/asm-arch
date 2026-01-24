@@ -42,7 +42,8 @@ pub trait RiscV64Reg: crate::out::arg::Arg + Sized {
         xchg: bool,
     ) -> Result<(), Error> {
         let (a, b, c) = self.context_handle(arch);
-        x.ld(ctx,
+        x.ld(
+            ctx,
             *arch,
             self,
             &MemArgKind::Mem {
@@ -55,7 +56,8 @@ pub trait RiscV64Reg: crate::out::arg::Arg + Sized {
         )?;
         if xchg {
             // RISC-V doesn't have direct xchg, simulate with load/store sequence
-            x.ld(ctx,
+            x.ld(
+                ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {
@@ -67,7 +69,8 @@ pub trait RiscV64Reg: crate::out::arg::Arg + Sized {
                 },
             )?;
         } else {
-            x.ld(ctx,
+            x.ld(
+                ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {

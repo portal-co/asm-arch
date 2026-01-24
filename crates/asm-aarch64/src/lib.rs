@@ -29,26 +29,23 @@ use portal_pc_asm_common::types::mem::MemorySize;
 
 /// 64-bit general-purpose register names (x0-x30, sp, xzr).
 static REG_NAMES_64: &'static [&'static str; 32] = &[
-    "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-    "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
-    "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23",
-    "x24", "x25", "x26", "x27", "x28", "x29", "x30", "sp",
+    "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14",
+    "x15", "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27",
+    "x28", "x29", "x30", "sp",
 ];
 
 /// 32-bit general-purpose register names (w0-w30, wsp, wzr).
 static REG_NAMES_32: &'static [&'static str; 32] = &[
-    "w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7",
-    "w8", "w9", "w10", "w11", "w12", "w13", "w14", "w15",
-    "w16", "w17", "w18", "w19", "w20", "w21", "w22", "w23",
-    "w24", "w25", "w26", "w27", "w28", "w29", "w30", "wsp",
+    "w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11", "w12", "w13", "w14",
+    "w15", "w16", "w17", "w18", "w19", "w20", "w21", "w22", "w23", "w24", "w25", "w26", "w27",
+    "w28", "w29", "w30", "wsp",
 ];
 
 /// SIMD/FP register names (v0-v31).
 static VREG_NAMES: &'static [&'static str; 32] = &[
-    "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-    "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-    "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-    "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
+    "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14",
+    "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27",
+    "v28", "v29", "v30", "v31",
 ];
 
 /// Register class for display formatting.
@@ -179,12 +176,12 @@ pub mod regalloc;
 #[cfg(false)]
 mod tests {
     use super::*;
-    use portal_pc_asm_common::types::reg::Reg;
     use crate::reg::AArch64Reg;
+    use portal_pc_asm_common::types::reg::Reg;
     extern crate alloc;
-    use alloc::string::String;
     use alloc::format;
-    
+    use alloc::string::String;
+
     #[test]
     fn test_register_display() {
         let cfg = AArch64Arch::default();
@@ -192,40 +189,40 @@ mod tests {
         let reg1 = Reg(1);
         let reg30 = Reg(30);
         let reg31 = Reg(31);
-        
+
         // Test GPR display (64-bit)
         let gpr_opts = RegFormatOpts::default_with_arch(cfg);
         let x0 = format!("{}", AArch64Reg::display(&reg0, gpr_opts.clone()));
         let x1 = format!("{}", AArch64Reg::display(&reg1, gpr_opts.clone()));
         let x30 = format!("{}", AArch64Reg::display(&reg30, gpr_opts.clone()));
         let sp = format!("{}", AArch64Reg::display(&reg31, gpr_opts));
-        
+
         assert_eq!(x0, "x0");
         assert_eq!(x1, "x1");
         assert_eq!(x30, "x30");
         assert_eq!(sp, "sp");
-        
+
         // Test GPR display (32-bit)
         let gpr32_opts = RegFormatOpts::default_with_arch_and_size(cfg, MemorySize::_32);
         let w0 = format!("{}", AArch64Reg::display(&reg0, gpr32_opts.clone()));
         let w1 = format!("{}", AArch64Reg::display(&reg1, gpr32_opts));
-        
+
         assert_eq!(w0, "w0");
         assert_eq!(w1, "w1");
-        
+
         // Test SIMD display
         let simd_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_64, RegisterClass::Simd);
         let v0 = format!("{}", AArch64Reg::display(&reg0, simd_opts.clone()));
         let v1 = format!("{}", AArch64Reg::display(&reg1, simd_opts));
-        
+
         assert_eq!(v0, "v0.d");
         assert_eq!(v1, "v1.d");
     }
-    
+
     #[test]
     fn test_condition_codes() {
         use crate::ConditionCode;
-        
+
         assert_eq!(format!("{}", ConditionCode::EQ), "eq");
         assert_eq!(format!("{}", ConditionCode::NE), "ne");
         assert_eq!(format!("{}", ConditionCode::HI), "hi");
@@ -235,14 +232,14 @@ mod tests {
         assert_eq!(format!("{}", ConditionCode::GT), "gt");
         assert_eq!(format!("{}", ConditionCode::LE), "le");
     }
-    
+
     #[test]
     #[cfg(feature = "x64_shim")]
     fn test_condition_translation() {
-        use portal_solutions_asm_x86_64::ConditionCode as X64CC;
-        use crate::shim::translate_condition;
         use crate::ConditionCode as AArch64CC;
-        
+        use crate::shim::translate_condition;
+        use portal_solutions_asm_x86_64::ConditionCode as X64CC;
+
         assert_eq!(translate_condition(X64CC::E), AArch64CC::EQ);
         assert_eq!(translate_condition(X64CC::NE), AArch64CC::NE);
         assert_eq!(translate_condition(X64CC::B), AArch64CC::LO);
@@ -250,26 +247,26 @@ mod tests {
         assert_eq!(translate_condition(X64CC::L), AArch64CC::LT);
         assert_eq!(translate_condition(X64CC::G), AArch64CC::GT);
     }
-    
+
     #[test]
     #[cfg(feature = "x64_shim")]
     fn test_shim_basic_operations() {
-        use portal_solutions_asm_x86_64::{X64Arch, out::WriterCore as X64WriterCore};
         use crate::shim::X64ToAArch64Shim;
         use alloc::string::String;
         use core::fmt::Write;
-        
+        use portal_solutions_asm_x86_64::{X64Arch, out::WriterCore as X64WriterCore};
+
         let mut output = String::new();
         {
             let writer: &mut dyn Write = &mut output;
             let mut shim = X64ToAArch64Shim::new(writer);
             let cfg = X64Arch::default();
-            
+
             // Test HLT instruction
             X64WriterCore::hlt(&mut shim, cfg).unwrap();
         }
         assert!(output.contains("brk"));
-        
+
         // Test RET instruction
         output.clear();
         {
@@ -280,31 +277,29 @@ mod tests {
         }
         assert!(output.contains("ret"));
     }
-    
+
     #[test]
     #[cfg(feature = "x64_shim")]
     fn test_memarg_adapter() {
+        use crate::{out::arg::MemArg as AArch64MemArg, shim::MemArgAdapter};
         use portal_pc_asm_common::types::reg::Reg;
         use portal_solutions_asm_x86_64::X64Arch;
-        use crate::{shim::MemArgAdapter, out::arg::MemArg as AArch64MemArg};
-        
+
         // Test with a simple register
         let x64_reg = Reg(0);
-        let adapter = MemArgAdapter::new(&x64_reg,X64Arch::default());
-        
+        let adapter = MemArgAdapter::new(&x64_reg, X64Arch::default());
+
         // Verify the adapter implements the AArch64 MemArg trait
         let kind = adapter.concrete_mem_kind();
-        
+
         // Should convert to a NoMem variant
         match kind {
-            crate::out::arg::MemArgKind::NoMem(arg) => {
-                match arg {
-                    crate::out::arg::ArgKind::Reg { reg, .. } => {
-                        assert_eq!(reg.0, 0);
-                    }
-                    _ => panic!("Expected register argument"),
+            crate::out::arg::MemArgKind::NoMem(arg) => match arg {
+                crate::out::arg::ArgKind::Reg { reg, .. } => {
+                    assert_eq!(reg.0, 0);
                 }
-            }
+                _ => panic!("Expected register argument"),
+            },
             _ => panic!("Expected NoMem variant"),
         }
     }

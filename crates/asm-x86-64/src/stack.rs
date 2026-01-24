@@ -8,7 +8,13 @@
 
 use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
 
-use crate::{out::{arg::{ArgKind, MemArgKind}, WriterCore}, RegisterClass, X64Arch};
+use crate::{
+    RegisterClass, X64Arch,
+    out::{
+        WriterCore,
+        arg::{ArgKind, MemArgKind},
+    },
+};
 
 /// Represents a stack slot with its offset and size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,7 +61,11 @@ impl StackManager {
     pub fn new() -> Self {
         Self {
             stack_offset: 0,
-            stack_slots: [StackSlot { offset: 0, size: 0, reg_class: RegisterClass::Gpr }; 32],
+            stack_slots: [StackSlot {
+                offset: 0,
+                size: 0,
+                reg_class: RegisterClass::Gpr,
+            }; 32],
             stack_depth: 0,
             pending_ops: [None; 16],
             pending_count: 0,
@@ -100,9 +110,17 @@ impl StackManager {
     }
 
     /// Creates a memory argument for stack access at the given offset.
-    pub fn stack_mem_arg(&self, offset: i32, size: MemorySize, reg_class: RegisterClass) -> MemArgKind<ArgKind> {
+    pub fn stack_mem_arg(
+        &self,
+        offset: i32,
+        size: MemorySize,
+        reg_class: RegisterClass,
+    ) -> MemArgKind<ArgKind> {
         MemArgKind::Mem {
-            base: ArgKind::Reg { reg: Reg(4), size: MemorySize::_64 }, // rsp
+            base: ArgKind::Reg {
+                reg: Reg(4),
+                size: MemorySize::_64,
+            }, // rsp
             offset: None,
             disp: offset as u32,
             size,
@@ -112,12 +130,20 @@ impl StackManager {
 
     /// Creates a memory argument for local variable access using frame pointer.
     /// This performs stack offset fixups similar to RISC-V implementation.
-    pub fn local_mem_arg(&self, local: u32, size: MemorySize, reg_class: RegisterClass) -> MemArgKind<ArgKind> {
+    pub fn local_mem_arg(
+        &self,
+        local: u32,
+        size: MemorySize,
+        reg_class: RegisterClass,
+    ) -> MemArgKind<ArgKind> {
         // Calculate offset from frame pointer: locals are at negative offsets
         // Each local takes 8 bytes, so local N is at -(N+1)*8 from fp
         let offset = -((local as i32 + 1) * 8);
         MemArgKind::Mem {
-            base: ArgKind::Reg { reg: Reg(5), size: MemorySize::_64 }, // rbp (frame pointer)
+            base: ArgKind::Reg {
+                reg: Reg(5),
+                size: MemorySize::_64,
+            }, // rbp (frame pointer)
             offset: None,
             disp: offset as u32,
             size,
@@ -149,7 +175,9 @@ impl StackManager {
         let mut optimized = false;
         let mut i = 0;
         while i < self.pending_count.saturating_sub(1) {
-            if let (Some(StackAccess::Push(push_reg)), Some(StackAccess::Pop(pop_reg))) = (self.pending_ops[i], self.pending_ops[i + 1]) {
+            if let (Some(StackAccess::Push(push_reg)), Some(StackAccess::Pop(pop_reg))) =
+                (self.pending_ops[i], self.pending_ops[i + 1])
+            {
                 if push_reg == pop_reg {
                     // Remove both operations - they cancel out
                     self.pending_ops[i] = None;

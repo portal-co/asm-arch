@@ -128,7 +128,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
 
             // Use stack manager for offset-based access if available
             if let Some(stack_mgr) = stack_manager {
-                stack_mgr.access_stack(writer,ctx, arch, offset, size, reg_class, &reg)
+                stack_mgr.access_stack(writer, ctx, arch, offset, size, reg_class, &reg)
             } else {
                 // Fallback to direct memory access
                 let mem = crate::out::arg::MemArgKind::Mem {

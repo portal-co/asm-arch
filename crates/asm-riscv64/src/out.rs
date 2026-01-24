@@ -13,10 +13,7 @@
 
 use core::error::Error;
 
-use crate::{
-    out::arg::MemArg,
-    *,
-};
+use crate::{out::arg::MemArg, *};
 
 /// Argument types for instruction operands.
 pub mod arg;
@@ -36,21 +33,25 @@ pub trait WriterCore<Context> {
     fn ebreak(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
         todo!("ebreak instruction not implemented")
     }
-    
+
     /// Emits a MV (move/copy register) pseudo-instruction.
     /// Implemented as: ADDI dest, src, 0
     #[track_caller]
-    fn mv(&mut self, ctx: &mut Context,
+    fn mv(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("mv instruction not implemented")
     }
-    
+
     /// Emits a SUB (subtract) instruction.
     #[track_caller]
-    fn sub(&mut self, ctx: &mut Context,
+    fn sub(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -58,10 +59,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("sub instruction not implemented")
     }
-    
+
     /// Emits an ADD (add) instruction.
     #[track_caller]
-    fn add(&mut self, ctx: &mut Context,
+    fn add(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -69,10 +72,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("add instruction not implemented")
     }
-    
+
     /// Emits an ADDI (add immediate) instruction.
     #[track_caller]
-    fn addi(&mut self, ctx: &mut Context,
+    fn addi(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -80,90 +85,108 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("addi instruction not implemented")
     }
-    
+
     /// Emits a SD (store doubleword) instruction.
     #[track_caller]
-    fn sd(&mut self, ctx: &mut Context,
+    fn sd(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("sd instruction not implemented")
     }
-    
+
     /// Emits an LD (load doubleword) instruction.
     #[track_caller]
-    fn ld(&mut self, ctx: &mut Context,
+    fn ld(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("ld instruction not implemented")
     }
-    
+
     /// Emits a LW (load word) instruction.
     #[track_caller]
-    fn lw(&mut self, ctx: &mut Context,
+    fn lw(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("lw instruction not implemented")
     }
-    
+
     /// Emits a SW (store word) instruction.
     #[track_caller]
-    fn sw(&mut self, ctx: &mut Context,
+    fn sw(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("sw instruction not implemented")
     }
-    
+
     /// Emits an LB (load byte) instruction.
     #[track_caller]
-    fn lb(&mut self, ctx: &mut Context,
+    fn lb(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("lb instruction not implemented")
     }
-    
+
     /// Emits a SB (store byte) instruction.
     #[track_caller]
-    fn sb(&mut self, ctx: &mut Context,
+    fn sb(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("sb instruction not implemented")
     }
-    
+
     /// Emits an LH (load halfword) instruction.
     #[track_caller]
-    fn lh(&mut self, ctx: &mut Context,
+    fn lh(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("lh instruction not implemented")
     }
-    
+
     /// Emits a SH (store halfword) instruction.
     #[track_caller]
-    fn sh(&mut self, ctx: &mut Context,
+    fn sh(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("sh instruction not implemented")
     }
-    
+
     /// Emits a JALR (jump and link register) instruction.
     #[track_caller]
-    fn jalr(&mut self, ctx: &mut Context,
+    fn jalr(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _base: &(dyn MemArg + '_),
@@ -171,20 +194,24 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("jalr instruction not implemented")
     }
-    
+
     /// Emits a JAL (jump and link) instruction.
     #[track_caller]
-    fn jal(&mut self, ctx: &mut Context,
+    fn jal(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _target: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("jal instruction not implemented")
     }
-    
+
     /// Emits a BEQ (branch if equal) instruction.
     #[track_caller]
-    fn beq(&mut self, ctx: &mut Context,
+    fn beq(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -192,10 +219,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("beq instruction not implemented")
     }
-    
+
     /// Emits a BNE (branch if not equal) instruction.
     #[track_caller]
-    fn bne(&mut self, ctx: &mut Context,
+    fn bne(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -203,10 +232,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("bne instruction not implemented")
     }
-    
+
     /// Emits a BLT (branch if less than, signed) instruction.
     #[track_caller]
-    fn blt(&mut self, ctx: &mut Context,
+    fn blt(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -214,10 +245,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("blt instruction not implemented")
     }
-    
+
     /// Emits a BGE (branch if greater than or equal, signed) instruction.
     #[track_caller]
-    fn bge(&mut self, ctx: &mut Context,
+    fn bge(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -225,10 +258,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("bge instruction not implemented")
     }
-    
+
     /// Emits a BLTU (branch if less than, unsigned) instruction.
     #[track_caller]
-    fn bltu(&mut self, ctx: &mut Context,
+    fn bltu(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -236,10 +271,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("bltu instruction not implemented")
     }
-    
+
     /// Emits a BGEU (branch if greater than or equal, unsigned) instruction.
     #[track_caller]
-    fn bgeu(&mut self, ctx: &mut Context,
+    fn bgeu(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _a: &(dyn MemArg + '_),
         _b: &(dyn MemArg + '_),
@@ -247,10 +284,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("bgeu instruction not implemented")
     }
-    
+
     /// Emits an AND (bitwise AND) instruction.
     #[track_caller]
-    fn and(&mut self, ctx: &mut Context,
+    fn and(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -258,10 +297,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("and instruction not implemented")
     }
-    
+
     /// Emits an OR (bitwise OR) instruction.
     #[track_caller]
-    fn or(&mut self, ctx: &mut Context,
+    fn or(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -269,10 +310,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("or instruction not implemented")
     }
-    
+
     /// Emits an XOR (bitwise exclusive OR) instruction.
     #[track_caller]
-    fn xor(&mut self, ctx: &mut Context,
+    fn xor(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -280,10 +323,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("xor instruction not implemented")
     }
-    
+
     /// Emits a SLL (shift left logical) instruction.
     #[track_caller]
-    fn sll(&mut self, ctx: &mut Context,
+    fn sll(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -291,10 +336,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("sll instruction not implemented")
     }
-    
+
     /// Emits a SRL (shift right logical) instruction.
     #[track_caller]
-    fn srl(&mut self, ctx: &mut Context,
+    fn srl(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -302,10 +349,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("srl instruction not implemented")
     }
-    
+
     /// Emits a SRA (shift right arithmetic) instruction.
     #[track_caller]
-    fn sra(&mut self, ctx: &mut Context,
+    fn sra(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -313,10 +362,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("sra instruction not implemented")
     }
-    
+
     /// Emits a SLT (set less than, signed) instruction.
     #[track_caller]
-    fn slt(&mut self, ctx: &mut Context,
+    fn slt(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -324,10 +375,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("slt instruction not implemented")
     }
-    
+
     /// Emits a SLTU (set less than, unsigned) instruction.
     #[track_caller]
-    fn sltu(&mut self, ctx: &mut Context,
+    fn sltu(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -335,64 +388,82 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("sltu instruction not implemented")
     }
-    
+
     /// Emits a LUI (load upper immediate) instruction.
     #[track_caller]
-    fn lui(&mut self, ctx: &mut Context,
+    fn lui(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _imm: u32,
     ) -> Result<(), Self::Error> {
         todo!("lui instruction not implemented")
     }
-    
+
     /// Emits an AUIPC (add upper immediate to PC) instruction.
     #[track_caller]
-    fn auipc(&mut self, ctx: &mut Context,
+    fn auipc(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _imm: u32,
     ) -> Result<(), Self::Error> {
         todo!("auipc instruction not implemented")
     }
-    
+
     /// Emits a LI (load immediate) pseudo-instruction.
     /// Uses LUI + ADDI for large immediates.
     #[track_caller]
-    fn li(&mut self, ctx: &mut Context,
+    fn li(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _val: u64,
     ) -> Result<(), Self::Error> {
         todo!("li pseudo-instruction not implemented")
     }
-    
+
     /// Emits a RET (return) pseudo-instruction.
     /// Implemented as: JALR x0, x1, 0
     #[track_caller]
     fn ret(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
         todo!("ret instruction not implemented")
     }
-    
+
     /// Emits a CALL pseudo-instruction (for function calls).
     /// Implemented as: AUIPC + JALR sequence.
     #[track_caller]
-    fn call(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch, _target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn call(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::RiscV64Arch,
+        _target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
         todo!("call pseudo-instruction not implemented")
     }
-    
+
     /// Emits a J (jump) pseudo-instruction.
     /// Implemented as: JAL x0, target
     #[track_caller]
-    fn j(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch, _target: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+    fn j(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::RiscV64Arch,
+        _target: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
         todo!("j pseudo-instruction not implemented")
     }
-    
+
     // M extension instructions (multiplication/division)
-    
+
     /// Emits a MUL (multiply) instruction.
     #[track_caller]
-    fn mul(&mut self, ctx: &mut Context,
+    fn mul(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -400,10 +471,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("mul instruction not implemented")
     }
-    
+
     /// Emits a MULH (multiply high, signed×signed) instruction.
     #[track_caller]
-    fn mulh(&mut self, ctx: &mut Context,
+    fn mulh(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -411,10 +484,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("mulh instruction not implemented")
     }
-    
+
     /// Emits a DIV (divide, signed) instruction.
     #[track_caller]
-    fn div(&mut self, ctx: &mut Context,
+    fn div(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -422,10 +497,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("div instruction not implemented")
     }
-    
+
     /// Emits a DIVU (divide, unsigned) instruction.
     #[track_caller]
-    fn divu(&mut self, ctx: &mut Context,
+    fn divu(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -433,10 +510,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("divu instruction not implemented")
     }
-    
+
     /// Emits a REM (remainder, signed) instruction.
     #[track_caller]
-    fn rem(&mut self, ctx: &mut Context,
+    fn rem(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -444,10 +523,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("rem instruction not implemented")
     }
-    
+
     /// Emits a REMU (remainder, unsigned) instruction.
     #[track_caller]
-    fn remu(&mut self, ctx: &mut Context,
+    fn remu(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -455,32 +536,38 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("remu instruction not implemented")
     }
-    
+
     // F/D extension instructions (floating-point)
-    
+
     /// Emits a FLD (floating-point load double) instruction.
     #[track_caller]
-    fn fld(&mut self, ctx: &mut Context,
+    fn fld(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("fld instruction not implemented")
     }
-    
+
     /// Emits a FSD (floating-point store double) instruction.
     #[track_caller]
-    fn fsd(&mut self, ctx: &mut Context,
+    fn fsd(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _src: &(dyn MemArg + '_),
         _mem: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("fsd instruction not implemented")
     }
-    
+
     /// Emits a FADD.D (floating-point add double) instruction.
     #[track_caller]
-    fn fadd_d(&mut self, ctx: &mut Context,
+    fn fadd_d(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -488,10 +575,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("fadd.d instruction not implemented")
     }
-    
+
     /// Emits a FSUB.D (floating-point subtract double) instruction.
     #[track_caller]
-    fn fsub_d(&mut self, ctx: &mut Context,
+    fn fsub_d(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -499,10 +588,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("fsub.d instruction not implemented")
     }
-    
+
     /// Emits a FMUL.D (floating-point multiply double) instruction.
     #[track_caller]
-    fn fmul_d(&mut self, ctx: &mut Context,
+    fn fmul_d(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -510,10 +601,12 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("fmul.d instruction not implemented")
     }
-    
+
     /// Emits a FDIV.D (floating-point divide double) instruction.
     #[track_caller]
-    fn fdiv_d(&mut self, ctx: &mut Context,
+    fn fdiv_d(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _a: &(dyn MemArg + '_),
@@ -521,31 +614,37 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("fdiv.d instruction not implemented")
     }
-    
+
     /// Emits a FMOV.D (floating-point move double) pseudo-instruction.
     /// Implemented as: FSGNJ.D dest, src, src
     #[track_caller]
-    fn fmov_d(&mut self, ctx: &mut Context,
+    fn fmov_d(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("fmov.d pseudo-instruction not implemented")
     }
-    
+
     /// Emits a FCVT.D.L (convert signed 64-bit integer to double) instruction.
     #[track_caller]
-    fn fcvt_d_l(&mut self, ctx: &mut Context,
+    fn fcvt_d_l(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
         todo!("fcvt.d.l instruction not implemented")
     }
-    
+
     /// Emits a FCVT.L.D (convert double to signed 64-bit integer) instruction.
     #[track_caller]
-    fn fcvt_l_d(&mut self, ctx: &mut Context,
+    fn fcvt_l_d(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _src: &(dyn MemArg + '_),
@@ -561,23 +660,32 @@ pub trait WriterCore<Context> {
 pub trait Writer<L, Context>: WriterCore<Context> {
     /// Sets a label at the current position.
     #[track_caller]
-    fn set_label(&mut self, ctx: &mut Context, _cfg: crate::RiscV64Arch, _s: L) -> Result<(), Self::Error> {
+    fn set_label(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::RiscV64Arch,
+        _s: L,
+    ) -> Result<(), Self::Error> {
         todo!("set_label not implemented")
     }
-    
+
     /// Emits a JAL instruction to a label.
     #[track_caller]
-    fn jal_label(&mut self, ctx: &mut Context,
+    fn jal_label(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _dest: &(dyn MemArg + '_),
         _label: L,
     ) -> Result<(), Self::Error> {
         todo!("jal_label not implemented")
     }
-    
+
     /// Emits a branch instruction to a label based on condition code.
     #[track_caller]
-    fn bcond_label(&mut self, ctx: &mut Context,
+    fn bcond_label(
+        &mut self,
+        ctx: &mut Context,
         _cfg: crate::RiscV64Arch,
         _cond: ConditionCode,
         _a: &(dyn MemArg + '_),

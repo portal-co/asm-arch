@@ -19,15 +19,15 @@ use crate::{
 pub trait X64Reg: crate::out::arg::Arg + Sized {
     /// Formats the register to the given formatter with the specified options.
     fn format(&self, f: &mut Formatter<'_>, opts: &RegFormatOpts) -> core::fmt::Result;
-    
+
     /// Creates a displayable representation of the register with the given options.
     fn display<'a>(&'a self, opts: RegFormatOpts) -> RegDisplay;
-    
+
     /// Returns the context handle for loading this register from a context structure.
     ///
     /// Returns a tuple of (base register, base offset, register offset).
     fn context_handle(&self, arch: &X64Arch) -> (Reg, u32, u32);
-    
+
     /// Loads the register value from a context structure.
     ///
     /// # Arguments
@@ -42,7 +42,8 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
         xchg: bool,
     ) -> Result<(), Error> {
         let (a, b, c) = self.context_handle(arch);
-        x.mov(ctx,
+        x.mov(
+            ctx,
             *arch,
             self,
             &MemArgKind::Mem {
@@ -54,7 +55,8 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
             },
         )?;
         if xchg {
-            x.xchg(ctx,
+            x.xchg(
+                ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {
@@ -66,7 +68,8 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                 },
             )?;
         } else {
-            x.mov(ctx,
+            x.mov(
+                ctx,
                 *arch,
                 self,
                 &MemArgKind::Mem {
@@ -86,7 +89,7 @@ impl X64Reg for Reg {
         // Check APX support at the top of the method
         let max_regs = if opts.arch.apx { 32 } else { 16 };
         let idx = (self.0 as usize) % max_regs;
-        
+
         match opts.reg_class {
             crate::RegisterClass::Xmm => {
                 // For XMM/YMM/ZMM registers
@@ -98,7 +101,9 @@ impl X64Reg for Reg {
                     // - _256 bits (32 bytes) -> ymm (256-bit register) [Future]
                     // - _512 bits (64 bytes) -> zmm (512-bit register) [Future]
                     match &opts.size {
-                        MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => "xmm",
+                        MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => {
+                            "xmm"
+                        }
                         // Future: Add MemorySize::_128 => "xmm"
                         // Future: Add MemorySize::_256 => "ymm"
                         // Future: Add MemorySize::_512 => "zmm"
@@ -109,14 +114,14 @@ impl X64Reg for Reg {
                     // HACK: Temporary mapping until proper MemorySize variants exist
                     // _8 → 128-bit xmm, _16 → 256-bit ymm, _32 → 512-bit zmm, _64 → unmapped
                     match &opts.size {
-                        MemorySize::_8 => "xmm",   // 128-bit XMM register
-                        MemorySize::_16 => "ymm",  // 256-bit YMM register
-                        MemorySize::_32 => "zmm",  // 512-bit ZMM register
-                        MemorySize::_64 => "xmm",  // Unmapped - default to xmm
+                        MemorySize::_8 => "xmm",  // 128-bit XMM register
+                        MemorySize::_16 => "ymm", // 256-bit YMM register
+                        MemorySize::_32 => "zmm", // 512-bit ZMM register
+                        MemorySize::_64 => "xmm", // Unmapped - default to xmm
                         _ => "xmm",
                     }
                 };
-                
+
                 // Both regular and APX extended registers use the same format
                 write!(f, "{}{}", prefix, idx)
             }

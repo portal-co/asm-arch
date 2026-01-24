@@ -4,8 +4,8 @@
 //! allocator, including register kind definitions, Cmd processing, and state
 //! initialization.
 
+use crate::{RiscV64Arch, out::WriterCore};
 use portal_solutions_asm_regalloc::{Cmd, RegAlloc, RegAllocFrame};
-use crate::{out::WriterCore, RiscV64Arch};
 
 /// Register kind for RISC-V 64-bit.
 ///
@@ -20,7 +20,7 @@ pub enum RegKind {
 
 impl TryFrom<usize> for RegKind {
     type Error = ();
-    
+
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(RegKind::Int),
@@ -46,17 +46,17 @@ pub fn process_cmd<Context, E: core::error::Error>(
     cmd: &Cmd<RegKind>,
 ) -> Result<(), E> {
     use portal_pc_asm_common::types::reg::Reg;
-    
+
     match cmd {
         Cmd::Push(target) => {
             let reg = Reg(target.reg);
             let sp = Reg(2); // x2 is stack pointer in RISC-V
-            
+
             // RISC-V doesn't have push instruction
             // We need to: 1) adjust sp, 2) store to [sp]
             // addi sp, sp, -8
             writer.addi(ctx, arch, &sp, &sp, -8)?;
-            
+
             match target.kind {
                 RegKind::Int => {
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -83,7 +83,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
         Cmd::Pop(target) => {
             let reg = Reg(target.reg);
             let sp = Reg(2); // x2 is stack pointer in RISC-V
-            
+
             match target.kind {
                 RegKind::Int => {
                     let mem = crate::out::arg::MemArgKind::Mem {
@@ -106,7 +106,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
                     writer.fld(ctx, arch, &reg, &mem)?;
                 }
             }
-            
+
             // RISC-V doesn't have pop instruction
             // After load, adjust sp: addi sp, sp, 8
             writer.addi(ctx, arch, &sp, &sp, 8)
@@ -183,31 +183,38 @@ pub fn init_regalloc<const N: usize>(
     _arch: RiscV64Arch,
 ) -> RegAlloc<RegKind, N, [[RegAllocFrame<RegKind>; N]; 2]> {
     // Initialize integer register frame
-    let mut int_frame: [RegAllocFrame<RegKind>; N] = 
-        core::array::from_fn(|_| RegAllocFrame::Empty);
-    
+    let mut int_frame: [RegAllocFrame<RegKind>; N] = core::array::from_fn(|_| RegAllocFrame::Empty);
+
     // Reserve RISC-V special registers:
     // x0 (zero) - hardwired to zero
     // x1 (ra) - return address
     // x2 (sp) - stack pointer
     // x3 (gp) - global pointer
     // x4 (tp) - thread pointer
-    if N > 0 { int_frame[0] = RegAllocFrame::Reserved; }  // zero
-    if N > 1 { int_frame[1] = RegAllocFrame::Reserved; }  // ra
-    if N > 2 { int_frame[2] = RegAllocFrame::Reserved; }  // sp
-    if N > 3 { int_frame[3] = RegAllocFrame::Reserved; }  // gp
-    if N > 4 { int_frame[4] = RegAllocFrame::Reserved; }  // tp
-    if N > 8 { int_frame[8] = RegAllocFrame::Reserved; }  // s0/fp - frame pointer
-    
+    if N > 0 {
+        int_frame[0] = RegAllocFrame::Reserved;
+    } // zero
+    if N > 1 {
+        int_frame[1] = RegAllocFrame::Reserved;
+    } // ra
+    if N > 2 {
+        int_frame[2] = RegAllocFrame::Reserved;
+    } // sp
+    if N > 3 {
+        int_frame[3] = RegAllocFrame::Reserved;
+    } // gp
+    if N > 4 {
+        int_frame[4] = RegAllocFrame::Reserved;
+    } // tp
+    if N > 8 {
+        int_frame[8] = RegAllocFrame::Reserved;
+    } // s0/fp - frame pointer
+
     // Initialize float register frame
-    let float_frame: [RegAllocFrame<RegKind>; N] = 
-        core::array::from_fn(|_| RegAllocFrame::Empty);
-    
+    let float_frame: [RegAllocFrame<RegKind>; N] = core::array::from_fn(|_| RegAllocFrame::Empty);
+
     // Create frames array directly without MaybeUninit
     let frames = [int_frame, float_frame];
-    
-    RegAlloc {
-        frames,
-        tos: None,
-    }
+
+    RegAlloc { frames, tos: None }
 }

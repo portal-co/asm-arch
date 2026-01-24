@@ -54,9 +54,9 @@ pub enum RegAllocFrame<K> {
     /// Register is empty and available.
     Empty,
     /// Register holds a stack element.
-    Stack { 
+    Stack {
         /// The stack element.
-        elem: StackElement<K> 
+        elem: StackElement<K>,
     },
     /// Register holds a local variable.
     Local(u32),
@@ -77,18 +77,18 @@ pub enum Cmd<K> {
     /// Pop from the native stack into a register.
     Pop(Target<K>),
     /// Load a local variable into a register.
-    GetLocal { 
+    GetLocal {
         /// Destination register.
-        dest: Target<K>, 
+        dest: Target<K>,
         /// Local variable index.
-        local: u32 
+        local: u32,
     },
     /// Store a register into a local variable.
-    SetLocal { 
+    SetLocal {
         /// Source register.
-        src: Target<K>, 
+        src: Target<K>,
         /// Local variable index.
-        local: u32 
+        local: u32,
     },
 }
 
@@ -205,7 +205,7 @@ impl<
             }
         }
     }
-    
+
     /// Pushes a new value onto the virtual stack.
     ///
     /// Allocates a register of the specified kind for the new value.
@@ -266,7 +266,7 @@ impl<
             }
         }
     }
-    
+
     /// Pushes an existing register onto the virtual stack.
     ///
     /// Marks the specified register as holding a stack value.
@@ -283,7 +283,7 @@ impl<
         }
         todo!()
     }
-    
+
     /// Pops a value from the virtual stack.
     ///
     /// Returns the register containing the value and any commands needed.
@@ -322,7 +322,7 @@ impl<
             }
         }
     }
-    
+
     /// Pops a value from the virtual stack into a local variable.
     ///
     /// The value is stored in the specified local variable slot.
@@ -362,7 +362,7 @@ impl<
             }
         }
     }
-    
+
     /// Pushes a local variable onto the virtual stack.
     ///
     /// Loads the value from the specified local variable slot.
@@ -416,7 +416,7 @@ impl<
             e = Some(v);
         }
     }
-    
+
     /// Flushes all registers to their backing stores.
     ///
     /// Emits commands to push stack values and store locals to their

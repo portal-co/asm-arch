@@ -36,9 +36,9 @@ pub enum MemArgKind {
     /// A direct argument.
     Arg(ArgKind),
     /// A memory dereference.
-    Deref { 
+    Deref {
         /// The base argument to dereference.
-        base: Arg 
+        base: Arg,
     },
 }
 
@@ -157,33 +157,33 @@ impl<V: ValJust, T: Deref<Target = PredicateTree<V, T>>> CagedPredicateTree for 
 #[non_exhaustive]
 pub enum Val {
     /// A binary arithmetic operation.
-    Bin { 
+    Bin {
         /// Left operand.
-        left: Arg, 
+        left: Arg,
         /// Arithmetic operator.
-        op: Arith, 
+        op: Arith,
         /// Right operand.
-        right: Arg 
+        right: Arg,
     },
     /// A jump to a target address.
     ///
     /// This always breaks out of the current machine instruction being lowered,
     /// transferring control to an external address.
-    Jmp { 
+    Jmp {
         /// Jump target.
-        target: Arg 
+        target: Arg,
     },
     /// A direct value.
-    Just { 
+    Just {
         /// The value.
-        value: Arg 
+        value: Arg,
     },
     /// A memory dereference.
-    Deref { 
+    Deref {
         /// Memory address.
-        mem: Arg, 
+        mem: Arg,
         /// Optional offset.
-        offset: Option<Arg> 
+        offset: Option<Arg>,
     },
     /// A backward jump within the lowered instruction's implementation.
     ///
@@ -191,11 +191,11 @@ pub enum Val {
     /// instruction. Instead, it jumps backwards within the instruction's lowered
     /// implementation to enable looping instructions such as x86-64 `rep` prefixed
     /// instructions.
-    Rewind { 
+    Rewind {
         /// Rewind target.
-        target: Arg, 
+        target: Arg,
         /// Rewind limit.
-        limit: u32 
+        limit: u32,
     },
 }
 

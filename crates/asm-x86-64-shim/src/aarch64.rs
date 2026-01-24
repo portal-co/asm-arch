@@ -2,8 +2,8 @@
 //!
 //! Adapted to live in a separate crate; references types from `portal-solutions-asm-aarch64`.
 
-use portal_solutions_asm_aarch64::out::arg::MemArg;
 use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
+use portal_solutions_asm_aarch64::out::arg::MemArg;
 use portal_solutions_asm_x86_64::{
     ConditionCode as X64ConditionCode, X64Arch,
     out::{Writer as X64Writer, WriterCore as X64WriterCore, arg::MemArg as X64MemArg},
@@ -18,7 +18,6 @@ impl core::fmt::Display for ShimLabel {
         write!(f, ".Lshim_{}", self.0)
     }
 }
-
 
 /// Adapter that converts x86-64 MemArg to AArch64 MemArg.
 ///
@@ -137,7 +136,13 @@ impl<'a> MemArgAdapter<'a> {
 impl<'a> portal_solutions_asm_aarch64::out::arg::MemArg for MemArgAdapter<'a> {
     fn mem_kind(
         &self,
-        go: &mut (dyn FnMut(portal_solutions_asm_aarch64::out::arg::MemArgKind<&'_ (dyn portal_solutions_asm_aarch64::out::arg::Arg + '_)>) + '_),
+        go: &mut (
+                 dyn FnMut(
+            portal_solutions_asm_aarch64::out::arg::MemArgKind<
+                &'_ (dyn portal_solutions_asm_aarch64::out::arg::Arg + '_),
+            >,
+        ) + '_
+             ),
     ) {
         use portal_solutions_asm_aarch64::out::arg::MemArgKind as AArch64MemArgKind;
         use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
@@ -350,7 +355,9 @@ pub fn map_x64_register_to_aarch64(reg: Reg, arch: X64Arch) -> Reg {
 /// This trait provides helper methods for handling memory operations,
 /// automatically detecting whether operands are registers or memory
 /// and emitting appropriate LDR/STR instructions.
-pub trait WriterShimExt<Context>: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context> {
+pub trait WriterShimExt<Context>:
+    portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>
+{
     /// Loads a value to a register, using LDR if source is memory.
     ///
     /// If `src` is already a register, this performs a MOV.
@@ -374,7 +381,7 @@ pub trait WriterShimExt<Context>: portal_solutions_asm_aarch64::out::Writer<Shim
                 // Source is memory, use LDR
                 self.ldr(ctx, cfg, dest, src)
             }
-              _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -400,14 +407,17 @@ pub trait WriterShimExt<Context>: portal_solutions_asm_aarch64::out::Writer<Shim
             MemArgKind::Mem { .. } => {
                 // Destination is memory, use STR
                 self.str(ctx, cfg, src, dest)
-            },
-            _ => todo!()
+            }
+            _ => todo!(),
         }
     }
 }
 
 // Blanket implementation for all types that implement Writer<ShimLabel>
-impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> WriterShimExt<Context> for W {}
+impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>>
+    WriterShimExt<Context> for W
+{
+}
 
 /// Helper macro to handle two-operand instructions with memory operands.
 ///
@@ -460,7 +470,7 @@ macro_rules! handle_two_operand_instr {
                     .inner
                     .str($ctx, $self.aarch64_cfg, &temp_a, &a_adapter)
             }
-              _ => todo!()
+            _ => todo!(),
         }
     }};
 }
@@ -514,7 +524,7 @@ macro_rules! handle_two_operand_instr_2arg {
                     .inner
                     .str($ctx, $self.aarch64_cfg, &temp_a, &a_adapter)
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }};
 }
@@ -676,22 +686,22 @@ pub fn translate_condition(cc: X64ConditionCode) -> portal_solutions_asm_aarch64
         X64ConditionCode::NB => portal_solutions_asm_aarch64::ConditionCode::HS, // Unsigned greater or equal (not below)
         X64ConditionCode::A => portal_solutions_asm_aarch64::ConditionCode::HI, // Unsigned greater (above)
         X64ConditionCode::NA => portal_solutions_asm_aarch64::ConditionCode::LS, // Unsigned less or equal (not above)
-        X64ConditionCode::L => portal_solutions_asm_aarch64::ConditionCode::LT, // Signed less
+        X64ConditionCode::L => portal_solutions_asm_aarch64::ConditionCode::LT,  // Signed less
         X64ConditionCode::NL => portal_solutions_asm_aarch64::ConditionCode::GE, // Signed greater or equal
-        X64ConditionCode::G => portal_solutions_asm_aarch64::ConditionCode::GT, // Signed greater
+        X64ConditionCode::G => portal_solutions_asm_aarch64::ConditionCode::GT,  // Signed greater
         X64ConditionCode::NG => portal_solutions_asm_aarch64::ConditionCode::LE, // Signed less or equal
-        X64ConditionCode::O => portal_solutions_asm_aarch64::ConditionCode::VS, // Overflow
+        X64ConditionCode::O => portal_solutions_asm_aarch64::ConditionCode::VS,  // Overflow
         X64ConditionCode::NO => portal_solutions_asm_aarch64::ConditionCode::VC, // No overflow
-        X64ConditionCode::S => portal_solutions_asm_aarch64::ConditionCode::MI, // Sign (negative)
+        X64ConditionCode::S => portal_solutions_asm_aarch64::ConditionCode::MI,  // Sign (negative)
         X64ConditionCode::NS => portal_solutions_asm_aarch64::ConditionCode::PL, // No sign (positive)
         X64ConditionCode::P => portal_solutions_asm_aarch64::ConditionCode::AL, // Parity - no direct equivalent, use always
         X64ConditionCode::NP => portal_solutions_asm_aarch64::ConditionCode::AL, // No parity - no direct equivalent
-        _ => portal_solutions_asm_aarch64::ConditionCode::AL,                   // Catch-all for any future variants
+        _ => portal_solutions_asm_aarch64::ConditionCode::AL, // Catch-all for any future variants
     }
 }
 
-impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> X64WriterCore<Context>
-    for X64ToAArch64Shim<W>
+impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>>
+    X64WriterCore<Context> for X64ToAArch64Shim<W>
 {
     type Error = W::Error;
 
@@ -760,8 +770,8 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                 let temp = Reg(16);
                 self.load_memarg_into_temp(ctx, &src_adapter, &temp)?;
                 self.inner.str(ctx, self.aarch64_cfg, &temp, &dest_adapter)
-            },
-            _ => todo!()
+            }
+            _ => todo!(),
         }
     }
 
@@ -817,7 +827,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                         self.inner.sxt(ctx, self.aarch64_cfg, &temp, &src_adapter)?;
                         self.inner.str(ctx, self.aarch64_cfg, &temp, &dest_adapter)
                     }
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
             MemArgKind::Mem { .. } => {
@@ -835,10 +845,10 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                     MemArgKind::Mem { .. } => {
                         self.inner.str(ctx, self.aarch64_cfg, &temp2, &dest_adapter)
                     }
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -870,7 +880,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                         self.inner.uxt(ctx, self.aarch64_cfg, &temp, &src_adapter)?;
                         self.inner.str(ctx, self.aarch64_cfg, &temp, &dest_adapter)
                     }
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
             MemArgKind::Mem { .. } => {
@@ -888,10 +898,10 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                     MemArgKind::Mem { .. } => {
                         self.inner.str(ctx, self.aarch64_cfg, &temp2, &dest_adapter)
                     }
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -1107,7 +1117,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                 self.load_memarg_into_temp(ctx, &b_adapter, &temp)?;
                 self.inner.cmp(ctx, self.aarch64_cfg, &a_adapter, &temp)
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -1134,7 +1144,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                 self.load_memarg_into_temp(ctx, &op_adapter, &temp)?;
                 self.inner.cmp(ctx, self.aarch64_cfg, &temp, &0u64)
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -1211,7 +1221,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                 )?;
                 self.inner.str(ctx, self.aarch64_cfg, &temp_op, &op_adapter)
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -1259,7 +1269,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                     .and(ctx, self.aarch64_cfg, &temp2, &temp2, &temp)?;
                 self.inner.str(ctx, self.aarch64_cfg, &temp2, &op_adapter)
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -1288,7 +1298,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
                 self.inner.mvn(ctx, self.aarch64_cfg, &temp, &temp)?;
                 self.inner.str(ctx, self.aarch64_cfg, &temp, &op_adapter)
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -1518,8 +1528,8 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>> 
     }
 }
 
-impl<W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>, L, Context> X64Writer<L, Context>
-    for X64ToAArch64Shim<W>
+impl<W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>, L, Context>
+    X64Writer<L, Context> for X64ToAArch64Shim<W>
 where
     W: portal_solutions_asm_aarch64::out::Writer<L, Context>,
 {

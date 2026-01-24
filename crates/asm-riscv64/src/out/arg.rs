@@ -19,11 +19,11 @@ use typeid;
 #[non_exhaustive]
 pub enum ArgKind {
     /// A register with a specific size.
-    Reg { 
+    Reg {
         /// The register.
-        reg: Reg, 
+        reg: Reg,
         /// The operand size.
-        size: MemorySize 
+        size: MemorySize,
     },
     /// A literal 64-bit value.
     Lit(u64),
@@ -55,7 +55,7 @@ impl Display for ArgKindDisplay {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             ArgKindDisplay::Reg(reg_display) => write!(f, "{reg_display}"),
-            ArgKindDisplay::Lit(i) => write!(f, "{i}"),  // RISC-V immediates don't use # prefix
+            ArgKindDisplay::Lit(i) => write!(f, "{i}"), // RISC-V immediates don't use # prefix
         }
     }
 }
@@ -98,12 +98,20 @@ impl<A: Arg> MemArgKind<A> {
                 // For non-memory operands, use the provided opts
                 MemArgKind::NoMem(a.display(opts))
             }
-            MemArgKind::Mem { base, offset, disp, size, reg_class } => {
+            MemArgKind::Mem {
+                base,
+                offset,
+                disp,
+                size,
+                reg_class,
+            } => {
                 // For memory operands, force base and offset to be GPRs
                 let gpr_opts = crate::DisplayOpts::new(opts.arch);
                 MemArgKind::Mem {
                     base: base.display(gpr_opts),
-                    offset: offset.as_ref().map(|(a, scale)| (a.display(gpr_opts), *scale)),
+                    offset: offset
+                        .as_ref()
+                        .map(|(a, scale)| (a.display(gpr_opts), *scale)),
                     disp: *disp,
                     size: *size,
                     reg_class: *reg_class,
@@ -157,7 +165,7 @@ impl<A> MemArgKind<A> {
             },
         }
     }
-    
+
     /// Returns a mutable reference view of this memory argument kind.
     pub fn as_mut<'a>(&'a mut self) -> MemArgKind<&'a mut A> {
         match self {
@@ -177,7 +185,7 @@ impl<A> MemArgKind<A> {
             },
         }
     }
-    
+
     /// Maps the argument type using the provided function.
     pub fn map<B, E>(
         self,
@@ -211,7 +219,7 @@ impl<A> MemArgKind<A> {
 pub trait MemArg {
     /// Invokes the callback with the memory argument kind.
     fn mem_kind(&self, go: &mut (dyn FnMut(MemArgKind<&'_ (dyn Arg + '_)>) + '_));
-    
+
     /// Returns the concrete memory argument kind.
     fn concrete_mem_kind(&self) -> MemArgKind<ArgKind> {
         let mut m = None;
@@ -220,7 +228,7 @@ pub trait MemArg {
         });
         m.unwrap().unwrap()
     }
-    
+
     /// Creates a displayable representation of this memory argument.
     fn mem_display(&self, opts: crate::DisplayOpts) -> MemArgKind<ArgKindDisplay> {
         let mut m = None;
@@ -229,7 +237,7 @@ pub trait MemArg {
         });
         m.unwrap()
     }
-    
+
     /// Formats this memory argument.
     fn mem_fmt(&self, f: &mut Formatter<'_>, opts: crate::DisplayOpts) -> core::fmt::Result {
         write!(f, "{}", self.mem_display(opts))
@@ -242,12 +250,12 @@ pub trait MemArg {
 pub trait Arg: MemArg {
     /// Returns the argument kind for this argument.
     fn kind(&self) -> ArgKind;
-    
+
     /// Creates a displayable representation of this argument.
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         self.kind().display(opts)
     }
-    
+
     /// Returns an iterator over the registers used by this argument.
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
@@ -280,7 +288,7 @@ impl<T: Arg + ?Sized> Arg for &'_ T {
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         (&**self).display(opts)
     }
-    
+
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
         (&**self).regs()
@@ -324,14 +332,14 @@ impl Arg for Reg {
             size: MemorySize::_64,
         }
     }
-    
+
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         ArgKindDisplay::Reg(RiscV64Reg::display(
             self,
             RegFormatOpts::with_reg_class(opts.arch, Default::default(), opts.reg_class),
         ))
     }
-    
+
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> ::alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
         ::alloc::boxed::Box::new([*self].into_iter())
@@ -362,7 +370,7 @@ macro_rules! impl_arg_for_int {
                     ArgKind::Lit(*self as u64)
                 }
             }
-            
+
             impl MemArg for $ty {
                 fn mem_kind(&self, go: &mut (dyn FnMut(MemArgKind<&'_ (dyn Arg + '_)>) + '_)) {
                     go(MemArgKind::NoMem(self))
@@ -389,11 +397,11 @@ impl<T: Arg> Arg for MemorySized<T> {
             }
         }
     }
-    
+
     fn display(&self, opts: crate::DisplayOpts) -> ArgKindDisplay {
         self.kind().display(opts)
     }
-    
+
     #[cfg(feature = "alloc")]
     fn regs<'a>(&'a self) -> alloc::boxed::Box<dyn Iterator<Item = Reg> + 'a> {
         self.value.regs()
@@ -430,7 +438,9 @@ impl<A: MemArg + Arg> MemArg for MemArgKind<A> {
                 let offset_kind = offset.as_ref().map(|(a, scale)| (a.kind(), *scale));
                 go(MemArgKind::Mem {
                     base: &base_kind,
-                    offset: offset_kind.as_ref().map(|(a, scale)| (a as &dyn Arg, *scale)),
+                    offset: offset_kind
+                        .as_ref()
+                        .map(|(a, scale)| (a as &dyn Arg, *scale)),
                     disp: *disp,
                     size: *size,
                     reg_class: *reg_class,

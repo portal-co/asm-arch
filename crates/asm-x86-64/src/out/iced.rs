@@ -893,7 +893,7 @@ where
             if !self.labels.contains_key(&current_ip) {
                 let label = L::from(current_ip);
                 self.labels.insert(current_ip, label.clone());
-                self.writer.set_label(ctx,self.arch, label)?;
+                self.writer.set_label(ctx, self.arch, label)?;
             }
             // Call handler to translate the iced instruction into Writer calls.
             (self.handler)(

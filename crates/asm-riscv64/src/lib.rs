@@ -43,27 +43,24 @@ use portal_pc_asm_common::types::mem::MemorySize;
 /// 64-bit general-purpose register names (x0-x31).
 /// x0 is hardwired to zero, x1 is return address, x2 is stack pointer.
 static REG_NAMES_64: &'static [&'static str; 32] = &[
-    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
-    "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-    "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
-    "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4",
+    "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4",
+    "t5", "t6",
 ];
 
 /// 32-bit general-purpose register names (same as 64-bit in RISC-V).
 #[allow(dead_code)]
 static REG_NAMES_32: &'static [&'static str; 32] = &[
-    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
-    "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-    "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
-    "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4",
+    "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4",
+    "t5", "t6",
 ];
 
 /// Floating-point register names (f0-f31).
 static FREG_NAMES: &'static [&'static str; 32] = &[
-    "ft0", "ft1", "ft2", "ft3", "ft4", "ft5", "ft6", "ft7",
-    "fs0", "fs1", "fa0", "fa1", "fa2", "fa3", "fa4", "fa5",
-    "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
-    "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11",
+    "ft0", "ft1", "ft2", "ft3", "ft4", "ft5", "ft6", "ft7", "fs0", "fs1", "fa0", "fa1", "fa2",
+    "fa3", "fa4", "fa5", "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7", "fs8", "fs9",
+    "fs10", "fs11", "ft8", "ft9", "ft10", "ft11",
 ];
 
 /// Register class for display formatting.
@@ -149,7 +146,7 @@ impl RiscV64Arch {
             c_extension: false,
         }
     }
-    
+
     /// Creates a configuration with all common extensions (RV64GC = IMAFD + C).
     pub fn rv64gc() -> Self {
         Self {
@@ -206,12 +203,12 @@ impl Default for RegFormatOpts {
     }
 }
 
+/// Desugaring wrapper for complex memory operands.
+pub mod desugar;
 /// Instruction output generation module.
 pub mod out;
 /// Register handling and formatting module.
 pub mod reg;
-/// Desugaring wrapper for complex memory operands.
-pub mod desugar;
 
 #[cfg(feature = "x64_shim")]
 pub use portal_solutions_asm_x86_64_shim::riscv64 as shim;
@@ -223,12 +220,12 @@ pub mod regalloc;
 #[cfg(all(test, feature = "alloc"))]
 mod tests {
     use super::*;
-    use portal_pc_asm_common::types::reg::Reg;
     use crate::reg::RiscV64Reg;
+    use portal_pc_asm_common::types::reg::Reg;
     extern crate alloc;
-    use alloc::string::String;
     use alloc::format;
-    
+    use alloc::string::String;
+
     #[test]
     fn test_register_display() {
         let cfg = RiscV64Arch::default();
@@ -236,24 +233,24 @@ mod tests {
         let reg1 = Reg(1);
         let reg2 = Reg(2);
         let reg10 = Reg(10);
-        
+
         // Test GPR display (64-bit)
         let gpr_opts = RegFormatOpts::default_with_arch(cfg);
         let zero = format!("{}", RiscV64Reg::display(&reg0, gpr_opts.clone()));
         let ra = format!("{}", RiscV64Reg::display(&reg1, gpr_opts.clone()));
         let sp = format!("{}", RiscV64Reg::display(&reg2, gpr_opts.clone()));
         let a0 = format!("{}", RiscV64Reg::display(&reg10, gpr_opts));
-        
+
         assert_eq!(zero, "zero");
         assert_eq!(ra, "ra");
         assert_eq!(sp, "sp");
         assert_eq!(a0, "a0");
-        
+
         // Test FP display
         let fp_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_64, RegisterClass::Fp);
         let ft0 = format!("{}", RiscV64Reg::display(&reg0, fp_opts.clone()));
         let fa0 = format!("{}", RiscV64Reg::display(&reg10, fp_opts));
-        
+
         assert_eq!(ft0, "ft0");
         assert_eq!(fa0, "fa0");
     }

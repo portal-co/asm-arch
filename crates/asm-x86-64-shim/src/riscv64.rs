@@ -20,8 +20,8 @@
 
 use core::task::Context;
 
-use portal_solutions_asm_riscv64::out::arg::MemArg;
 use portal_pc_asm_common::types::{mem::MemorySize, reg::Reg};
+use portal_solutions_asm_riscv64::out::arg::MemArg;
 use portal_solutions_asm_x86_64::{
     ConditionCode as X64ConditionCode, X64Arch,
     out::{Writer as X64Writer, WriterCore as X64WriterCore, arg::MemArg as X64MemArg},
@@ -53,7 +53,13 @@ impl<'a> MemArgAdapter<'a> {
 impl<'a> portal_solutions_asm_riscv64::out::arg::MemArg for MemArgAdapter<'a> {
     fn mem_kind(
         &self,
-        go: &mut (dyn FnMut(portal_solutions_asm_riscv64::out::arg::MemArgKind<&'_ (dyn portal_solutions_asm_riscv64::out::arg::Arg + '_)>) + '_),
+        go: &mut (
+                 dyn FnMut(
+            portal_solutions_asm_riscv64::out::arg::MemArgKind<
+                &'_ (dyn portal_solutions_asm_riscv64::out::arg::Arg + '_),
+            >,
+        ) + '_
+             ),
     ) {
         use portal_solutions_asm_riscv64::out::arg::MemArgKind as RiscVMemArgKind;
         use portal_solutions_asm_x86_64::out::arg::MemArgKind as X64MemArgKind;
@@ -246,8 +252,8 @@ pub fn translate_condition(cc: X64ConditionCode) -> portal_solutions_asm_riscv64
     }
 }
 
-impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, Context> X64WriterCore<Context>
-    for X64ToRiscV64Shim<W>
+impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, Context>
+    X64WriterCore<Context> for X64ToRiscV64Shim<W>
 {
     type Error = W::Error;
 
@@ -811,8 +817,8 @@ impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, Context> 
     }
 }
 
-impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, L, Context> X64Writer<L, Context>
-    for X64ToRiscV64Shim<W>
+impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, L, Context>
+    X64Writer<L, Context> for X64ToRiscV64Shim<W>
 where
     W: portal_solutions_asm_riscv64::out::Writer<L, Context>,
 {

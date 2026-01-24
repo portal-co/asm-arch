@@ -39,8 +39,8 @@ static REG_NAMES_8: &'static [&'static str; 8] =
     &["al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil"];
 /// XMM register names (xmm0 through xmm15).
 static XMM_REG_NAMES: &'static [&'static str; 16] = &[
-    "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
-    "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
+    "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10",
+    "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
 ];
 
 /// **TEMPORARY HACK**: Controls whether to use the YMM/ZMM register naming hack.
@@ -179,12 +179,12 @@ pub mod stack;
 #[cfg(false)]
 mod tests {
     use super::*;
-    use portal_pc_asm_common::types::reg::Reg;
     use crate::reg::X64Reg;
+    use portal_pc_asm_common::types::reg::Reg;
     extern crate alloc;
-    use alloc::string::String;
     use alloc::format;
-    
+    use alloc::string::String;
+
     #[test]
     fn test_xmm_register_display() {
         let cfg = X64Arch::default();
@@ -192,55 +192,68 @@ mod tests {
         let reg1 = Reg(1);
         let reg7 = Reg(7);
         let reg8 = Reg(8);
-        
+
         // Test GPR display
         let gpr_opts = RegFormatOpts::default_with_arch(cfg);
         let gpr0 = format!("{}", X64Reg::display(&reg0, gpr_opts.clone()));
         let gpr1 = format!("{}", X64Reg::display(&reg1, gpr_opts.clone()));
         let gpr7 = format!("{}", X64Reg::display(&reg7, gpr_opts.clone()));
         let gpr8 = format!("{}", X64Reg::display(&reg8, gpr_opts));
-        
+
         assert_eq!(gpr0, "rax");
         assert_eq!(gpr1, "rcx");
         assert_eq!(gpr7, "rdi");
         assert_eq!(gpr8, "r8");
-        
+
         // Test XMM display
         let xmm_opts = RegFormatOpts::with_reg_class(cfg, Default::default(), RegisterClass::Xmm);
         let xmm0 = format!("{}", X64Reg::display(&reg0, xmm_opts.clone()));
         let xmm1 = format!("{}", X64Reg::display(&reg1, xmm_opts.clone()));
         let xmm7 = format!("{}", X64Reg::display(&reg7, xmm_opts.clone()));
         let xmm8 = format!("{}", X64Reg::display(&reg8, xmm_opts));
-        
+
         assert_eq!(xmm0, "xmm0");
         assert_eq!(xmm1, "xmm1");
         assert_eq!(xmm7, "xmm7");
         assert_eq!(xmm8, "xmm8");
     }
-    
+
     #[test]
     fn test_apx_xmm_registers() {
         let cfg_apx = X64Arch { apx: true };
         let reg16 = Reg(16);
         let reg31 = Reg(31);
-        
+
         // Test APX XMM registers (xmm16-xmm31)
-        let xmm_opts = RegFormatOpts::with_reg_class(cfg_apx, Default::default(), RegisterClass::Xmm);
+        let xmm_opts =
+            RegFormatOpts::with_reg_class(cfg_apx, Default::default(), RegisterClass::Xmm);
         let xmm16 = format!("{}", X64Reg::display(&reg16, xmm_opts.clone()));
         let xmm31 = format!("{}", X64Reg::display(&reg31, xmm_opts));
-        
-        assert_eq!(xmm16, "xmm16", "Register 16 should display as xmm16 with APX and XMM register class");
-        assert_eq!(xmm31, "xmm31", "Register 31 should display as xmm31 with APX and XMM register class");
-        
+
+        assert_eq!(
+            xmm16, "xmm16",
+            "Register 16 should display as xmm16 with APX and XMM register class"
+        );
+        assert_eq!(
+            xmm31, "xmm31",
+            "Register 31 should display as xmm31 with APX and XMM register class"
+        );
+
         // Test APX GPR registers for comparison
         let gpr_opts = RegFormatOpts::default_with_arch(cfg_apx);
         let r16 = format!("{}", X64Reg::display(&reg16, gpr_opts.clone()));
         let r31 = format!("{}", X64Reg::display(&reg31, gpr_opts));
-        
-        assert_eq!(r16, "r16", "Register 16 should display as r16 with APX and GPR register class");
-        assert_eq!(r31, "r31", "Register 31 should display as r31 with APX and GPR register class");
+
+        assert_eq!(
+            r16, "r16",
+            "Register 16 should display as r16 with APX and GPR register class"
+        );
+        assert_eq!(
+            r31, "r31",
+            "Register 31 should display as r31 with APX and GPR register class"
+        );
     }
-    
+
     #[test]
     fn test_ymm_zmm_register_hack() {
         // Test the temporary hack for YMM/ZMM register naming
@@ -248,21 +261,21 @@ mod tests {
         let cfg = X64Arch::default();
         let reg0 = Reg(0);
         let reg1 = Reg(1);
-        
+
         // Test XMM with _8 (hack: 128-bit xmm)
         let xmm_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_8, RegisterClass::Xmm);
         let xmm0 = format!("{}", X64Reg::display(&reg0, xmm_opts.clone()));
         let xmm1 = format!("{}", X64Reg::display(&reg1, xmm_opts));
         assert_eq!(xmm0, "xmm0", "MemorySize::_8 should map to xmm with hack");
         assert_eq!(xmm1, "xmm1", "MemorySize::_8 should map to xmm with hack");
-        
+
         // Test YMM with _16 (hack: 256-bit ymm)
         let ymm_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_16, RegisterClass::Xmm);
         let ymm0 = format!("{}", X64Reg::display(&reg0, ymm_opts.clone()));
         let ymm1 = format!("{}", X64Reg::display(&reg1, ymm_opts));
         assert_eq!(ymm0, "ymm0", "MemorySize::_16 should map to ymm with hack");
         assert_eq!(ymm1, "ymm1", "MemorySize::_16 should map to ymm with hack");
-        
+
         // Test ZMM with _32 (hack: 512-bit zmm)
         let zmm_opts = RegFormatOpts::with_reg_class(cfg, MemorySize::_32, RegisterClass::Xmm);
         let zmm0 = format!("{}", X64Reg::display(&reg0, zmm_opts.clone()));
@@ -270,32 +283,44 @@ mod tests {
         assert_eq!(zmm0, "zmm0", "MemorySize::_32 should map to zmm with hack");
         assert_eq!(zmm1, "zmm1", "MemorySize::_32 should map to zmm with hack");
     }
-    
+
     #[test]
     fn test_float_instruction_with_xmm_registers() {
         use crate::out::arg::Arg;
-        
+
         let cfg = X64Arch::default();
         let reg0 = Reg(0);
         let reg1 = Reg(1);
-        
+
         // Test that registers display as XMM when using DisplayOpts with Xmm register class
         let xmm_opts = DisplayOpts::with_reg_class(cfg, RegisterClass::Xmm);
         let reg0_xmm = format!("{}", Arg::display(&reg0, xmm_opts));
         let reg1_xmm = format!("{}", Arg::display(&reg1, xmm_opts));
-        
-        assert_eq!(reg0_xmm, "xmm0", "Register 0 should display as xmm0 with XMM register class");
-        assert_eq!(reg1_xmm, "xmm1", "Register 1 should display as xmm1 with XMM register class");
-        
+
+        assert_eq!(
+            reg0_xmm, "xmm0",
+            "Register 0 should display as xmm0 with XMM register class"
+        );
+        assert_eq!(
+            reg1_xmm, "xmm1",
+            "Register 1 should display as xmm1 with XMM register class"
+        );
+
         // Test that registers still display as GPR by default
         let gpr_opts = DisplayOpts::new(cfg);
         let reg0_gpr = format!("{}", Arg::display(&reg0, gpr_opts));
         let reg1_gpr = format!("{}", Arg::display(&reg1, gpr_opts));
-        
-        assert_eq!(reg0_gpr, "rax", "Register 0 should display as rax with default (GPR) register class");
-        assert_eq!(reg1_gpr, "rcx", "Register 1 should display as rcx with default (GPR) register class");
+
+        assert_eq!(
+            reg0_gpr, "rax",
+            "Register 0 should display as rax with default (GPR) register class"
+        );
+        assert_eq!(
+            reg1_gpr, "rcx",
+            "Register 1 should display as rcx with default (GPR) register class"
+        );
     }
-    
+
     #[test]
     fn test_pushf_popf_instructions() {
         use crate::out::WriterCore;
@@ -319,8 +344,8 @@ mod tests {
 
     #[test]
     fn test_stack_manager_offset_access() {
-        use crate::stack::StackManager;
         use crate::RegisterClass;
+        use crate::stack::StackManager;
         use portal_pc_asm_common::types::mem::MemorySize;
         use portal_pc_asm_common::types::reg::Reg;
 
@@ -333,13 +358,29 @@ mod tests {
         let offset2 = stack_mgr.allocate_slot(16, RegisterClass::Xmm);
         assert_eq!(offset2, 8, "Second slot should start at offset 8");
 
-        assert_eq!(stack_mgr.current_offset(), 24, "Total stack offset should be 24");
+        assert_eq!(
+            stack_mgr.current_offset(),
+            24,
+            "Total stack offset should be 24"
+        );
 
         // Test creating memory arguments
         let mem_arg = stack_mgr.stack_mem_arg(8, MemorySize::_64, RegisterClass::Gpr);
         match mem_arg {
-            crate::out::arg::MemArgKind::Mem { base, offset, disp, size, reg_class } => {
-                assert_eq!(base, crate::out::arg::ArgKind::Reg { reg: Reg(4), size: MemorySize::_64 }); // rsp
+            crate::out::arg::MemArgKind::Mem {
+                base,
+                offset,
+                disp,
+                size,
+                reg_class,
+            } => {
+                assert_eq!(
+                    base,
+                    crate::out::arg::ArgKind::Reg {
+                        reg: Reg(4),
+                        size: MemorySize::_64
+                    }
+                ); // rsp
                 assert_eq!(offset, None);
                 assert_eq!(disp, 8);
                 assert_eq!(size, MemorySize::_64);
@@ -350,13 +391,20 @@ mod tests {
 
         // Test deallocating slots
         let deallocated = stack_mgr.deallocate_slot();
-        assert!(deallocated.is_some(), "Should successfully deallocate a slot");
-        assert_eq!(stack_mgr.current_offset(), 8, "Stack offset should be reduced to 8");
+        assert!(
+            deallocated.is_some(),
+            "Should successfully deallocate a slot"
+        );
+        assert_eq!(
+            stack_mgr.current_offset(),
+            8,
+            "Stack offset should be reduced to 8"
+        );
     }
 
     #[test]
     fn test_stack_optimization() {
-        use crate::stack::{StackManager, StackAccess};
+        use crate::stack::{StackAccess, StackManager};
 
         let mut stack_mgr = StackManager::new();
 
@@ -369,25 +417,32 @@ mod tests {
 
         // In a real scenario, optimize_and_execute would be called with a writer
         // For this test, we just check that operations are recorded
-        assert_eq!(stack_mgr.pending_count(), 4, "Should have 4 pending operations");
+        assert_eq!(
+            stack_mgr.pending_count(),
+            4,
+            "Should have 4 pending operations"
+        );
     }
-    
+
     #[test]
     fn test_cmp_instruction() {
         use crate::out::WriterCore;
         use alloc::string::String;
         use core::fmt::Write;
         use portal_pc_asm_common::types::reg::Reg;
-        
+
         let cfg = X64Arch::default();
         let mut output = String::new();
-        
+
         // Test cmp instruction
         let writer: &mut dyn Write = &mut output;
         let reg0 = Reg(0);
         let reg1 = Reg(1);
         WriterCore::cmp(writer, cfg, &reg0, &reg1).expect("cmp should succeed");
-        assert_eq!(output, "cmp rax, rcx\n", "cmp should emit 'cmp rax, rcx\\n'");
+        assert_eq!(
+            output, "cmp rax, rcx\n",
+            "cmp should emit 'cmp rax, rcx\\n'"
+        );
     }
 }
 

@@ -77,7 +77,7 @@ dependencies = [
 [[package]]
 name = "portal-pc-asm-common"
 version = "0.1.1"
-source = "git+https://github.com/portal-co/asm-common.git#e8e6bddbf06ad095a0d4e5bcc758c720af3bb3a9"
+source = "git+https://github.com/portal-co/asm-common.git#41bb8b54dbdff71c06dcb65700f1278e589462e6"
 dependencies = [
  "array-init",
  "bitvec",
@@ -161,9 +161,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.43"
+version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc74d9a594b72ae6656596548f56f667211f8a97b3d4c3d467150794690dc40a"
+checksum = "21b2ebcf727b7760c461f091f9f0f539b77b8e87f2fd88131e7f1b433b3cece4"
 dependencies = [
  "proc-macro2",
 ]

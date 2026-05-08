@@ -22,6 +22,9 @@ use crate::{
 pub mod arg;
 /// Assembly text output implementations.
 pub mod asm;
+/// Binary assembler backend using manual AArch64 encoding.
+#[cfg(feature = "bin-backend")]
+pub mod bin;
 
 /// Core trait for writing AArch64 instructions.
 ///

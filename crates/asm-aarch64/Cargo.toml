@@ -14,3 +14,4 @@ portal-solutions-asm-regalloc = { path = "../asm-regalloc", optional = true }
 [features]
 alloc = []
 regalloc-integration=["dep:portal-solutions-asm-regalloc"]
+bin-backend = ["alloc"]

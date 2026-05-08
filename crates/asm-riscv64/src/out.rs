@@ -19,6 +19,9 @@ use crate::{out::arg::MemArg, *};
 pub mod arg;
 /// Assembly text output implementations.
 pub mod asm;
+/// Binary assembler backend using rv-asm.
+#[cfg(feature = "rv-asm-backend")]
+pub mod rv_asm_backend;
 
 /// Core trait for writing RISC-V 64-bit instructions.
 ///

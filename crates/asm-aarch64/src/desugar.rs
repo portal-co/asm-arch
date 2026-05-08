@@ -1066,6 +1066,19 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context>
         })
     }
 
+    fn asr(
+        &mut self,
+        ctx: &mut Context,
+        cfg: AArch64Arch,
+        dest: &(dyn MemArg + '_),
+        a: &(dyn MemArg + '_),
+        b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        self.binary_op(ctx, cfg, dest, a, b, |writer, ctx, cfg, dest, a, b| {
+            writer.asr(ctx, cfg, dest, a, b)
+        })
+    }
+
     fn sxt(
         &mut self,
         ctx: &mut Context,
@@ -1299,6 +1312,16 @@ where
         label: L,
     ) -> Result<(), Self::Error> {
         self.writer.b_label(ctx, cfg, label)
+    }
+
+    fn bcond_label(
+        &mut self,
+        ctx: &mut Context,
+        cfg: AArch64Arch,
+        cond: crate::ConditionCode,
+        label: L,
+    ) -> Result<(), Self::Error> {
+        self.writer.bcond_label(ctx, cfg, cond, label)
     }
 
     fn bl_label(

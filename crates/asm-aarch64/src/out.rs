@@ -298,6 +298,19 @@ pub trait WriterCore<Context> {
         todo!("lsr instruction not implemented")
     }
 
+    /// Emits an ASR (arithmetic shift right) instruction.
+    #[track_caller]
+    fn asr(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        _dest: &(dyn MemArg + '_),
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("asr instruction not implemented")
+    }
+
     /// Emits an MVN (bitwise NOT) instruction.
     #[track_caller]
     fn mvn(
@@ -505,6 +518,18 @@ pub trait Writer<L, Context>: WriterCore<Context> {
         todo!("b_label not implemented")
     }
 
+    /// Emits a B.cond (conditional branch) instruction to a label.
+    #[track_caller]
+    fn bcond_label(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        _cond: crate::ConditionCode,
+        _label: L,
+    ) -> Result<(), Self::Error> {
+        todo!("bcond_label not implemented")
+    }
+
     /// Emits a BL (branch with link) instruction to a label.
     #[track_caller]
     fn bl_label(
@@ -593,6 +618,9 @@ macro_rules! writer_dispatch {
                     fn lsr(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::lsr(&mut **self, ctx, cfg, dest, a, b)
                     }
+                    fn asr(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::asr(&mut **self, ctx, cfg, dest, a, b)
+                    }
                     fn sub(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::sub(&mut **self, ctx, cfg, dest, a, b)
                     }
@@ -630,6 +658,15 @@ macro_rules! writer_dispatch {
                     }
                     fn adr_label(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
                        <$wrapped as $crate::out::Writer<$l, $ctx>>::adr_label(&mut **self, ctx, cfg, dest, label)
+                    }
+                    fn b_label(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::Writer<$l, $ctx>>::b_label(&mut **self, ctx, cfg, label)
+                    }
+                    fn bcond_label(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, cond: $crate::ConditionCode, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::Writer<$l, $ctx>>::bcond_label(&mut **self, ctx, cfg, cond, label)
+                    }
+                    fn bl_label(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, label: $l) -> $crate::__::core::result::Result<(), Self::Error> {
+                        <$wrapped as $crate::out::Writer<$l, $ctx>>::bl_label(&mut **self, ctx, cfg, label)
                     }
                 }
             )*

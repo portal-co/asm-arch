@@ -8,6 +8,13 @@ use core::fmt::Display;
 use crate::out::{Writer, WriterCore};
 use crate::{ConditionCode, X64Arch};
 
+/// Placeholder label type for [`IcedWriter`] when no label tracking is needed.
+///
+/// This is an uninhabited type — it can never be constructed — so a
+/// `BTreeMap<NoLabel, usize>` is always empty and zero-cost.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum NoLabel {}
+
 /// Helper functions for translating iced-x86 components to crate types.
 #[cfg(feature = "iced")]
 mod helpers {
@@ -670,23 +677,39 @@ enum IcedOp {
 /// Implements [`WriterCore`] by encoding each instruction to machine bytes.
 /// Does not use `code_asm` — operands are constructed at runtime from
 /// [`MemArgKind`] values and encoded via the lower-level `Instruction` API.
+///
+/// The type parameter `L` is the label type used with [`Writer<L, Context>`].
+/// It defaults to [`NoLabel`], which means label tracking is compiled away at
+/// zero cost. Specify a concrete `L` (e.g. `u32` or a custom enum) to record
+/// label→byte-offset mappings via [`set_label`](Writer::set_label).
 #[cfg(feature = "iced")]
-pub struct IcedWriter {
+pub struct IcedWriter<L = NoLabel> {
     buf: alloc::vec::Vec<u8>,
     ip: u64,
+    labels: alloc::collections::BTreeMap<L, usize>,
 }
 
 #[cfg(feature = "iced")]
-impl IcedWriter {
+impl<L> IcedWriter<L> {
     /// Create a new writer. `base_ip` is the virtual address the code will run at
     /// (used by the encoder for RIP-relative references).
     pub fn new(base_ip: u64) -> Self {
-        Self { buf: alloc::vec::Vec::new(), ip: base_ip }
+        Self { buf: alloc::vec::Vec::new(), ip: base_ip, labels: alloc::collections::BTreeMap::new() }
     }
 
-    /// Return the assembled bytes.
+    /// Return the assembled bytes, discarding any recorded label offsets.
     pub fn into_bytes(self) -> alloc::vec::Vec<u8> {
         self.buf
+    }
+
+    /// Return the assembled bytes and the recorded label→offset map.
+    pub fn into_parts(self) -> (alloc::vec::Vec<u8>, alloc::collections::BTreeMap<L, usize>) {
+        (self.buf, self.labels)
+    }
+
+    /// Current byte offset (number of bytes assembled so far).
+    pub fn offset(&self) -> usize {
+        self.buf.len()
     }
 
     fn encode_instr(&mut self, instr: iced_x86::Instruction) -> Result<(), iced_x86::IcedError> {
@@ -722,7 +745,7 @@ impl IcedWriter {
 }
 
 #[cfg(feature = "iced")]
-impl<Context> crate::out::WriterCore<Context> for IcedWriter {
+impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
     type Error = iced_x86::IcedError;
 
     fn hlt(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch) -> Result<(), Self::Error> {
@@ -1156,6 +1179,19 @@ impl<Context> crate::out::WriterCore<Context> for IcedWriter {
 }
 
 #[cfg(feature = "iced")]
+impl<L: Ord, Context> crate::out::Writer<L, Context> for IcedWriter<L> {
+    fn set_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::X64Arch,
+        s: L,
+    ) -> Result<(), Self::Error> {
+        self.labels.insert(s, self.buf.len());
+        Ok(())
+    }
+}
+
+#[cfg(feature = "iced")]
 /// Minimal, flexible frontend for one‑the‑fly decoding using iced-x86.
 ///
 /// This type wraps a `Writer` and provides a streaming decoder loop. It
@@ -1328,5 +1364,35 @@ where
             pos += consumed;
         }
         Ok(())
+    }
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(all(test, feature = "iced"))]
+mod tests {
+    use super::*;
+    use crate::out::Writer as _;
+
+    #[test]
+    fn set_label_records_byte_offset() {
+        let arch = crate::X64Arch::default();
+        let mut ctx = ();
+        let mut w: IcedWriter<u32> = IcedWriter::new(0);
+
+        // HLT is 1 byte (0xF4); emit two of them
+        w.hlt(&mut ctx, arch).unwrap();
+        w.hlt(&mut ctx, arch).unwrap();
+        assert_eq!(w.offset(), 2);
+
+        // Record label 99 at offset 2
+        w.set_label(&mut ctx, arch, 99u32).unwrap();
+
+        // Emit one more HLT
+        w.hlt(&mut ctx, arch).unwrap();
+
+        let (bytes, labels) = w.into_parts();
+        assert_eq!(bytes.len(), 3);
+        assert_eq!(labels[&99u32], 2);
     }
 }

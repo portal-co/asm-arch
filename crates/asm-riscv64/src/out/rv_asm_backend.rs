@@ -1,10 +1,18 @@
 extern crate alloc;
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use rv_asm::{Imm, Inst, Reg as RvReg, Xlen};
 
 use crate::out::arg::{ArgKind, MemArgKind};
 use crate::out::MemArg;
+
+/// Placeholder label type for [`RvAsmWriter`] when no label tracking is needed.
+///
+/// This is an uninhabited type — it can never be constructed — so a
+/// `BTreeMap<NoLabel, usize>` is always empty and zero-cost.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum NoLabel {}
 
 fn to_rv_reg(arg: &dyn MemArg) -> RvReg {
     match arg.concrete_mem_kind() {
@@ -31,17 +39,34 @@ fn lit_as_imm(arg: &dyn MemArg) -> Imm {
 }
 
 /// Binary assembler backend for RISC-V 64 using `rv_asm::Inst::encode_normal`.
-pub struct RvAsmWriter {
+///
+/// The type parameter `L` is the label type used with [`Writer<L, Context>`].
+/// It defaults to [`NoLabel`], which means label tracking is compiled away at
+/// zero cost. Specify a concrete `L` (e.g. `u32` or a custom enum) to record
+/// label→byte-offset mappings via [`set_label`](crate::out::Writer::set_label).
+pub struct RvAsmWriter<L = NoLabel> {
     buf: Vec<u8>,
+    labels: BTreeMap<L, usize>,
 }
 
-impl RvAsmWriter {
+impl<L> RvAsmWriter<L> {
     pub fn new() -> Self {
-        Self { buf: Vec::new() }
+        Self { buf: Vec::new(), labels: BTreeMap::new() }
     }
 
+    /// Return the assembled bytes, discarding any recorded label offsets.
     pub fn into_bytes(self) -> Vec<u8> {
         self.buf
+    }
+
+    /// Return the assembled bytes and the recorded label→offset map.
+    pub fn into_parts(self) -> (Vec<u8>, BTreeMap<L, usize>) {
+        (self.buf, self.labels)
+    }
+
+    /// Current byte offset (number of bytes assembled so far).
+    pub fn offset(&self) -> usize {
+        self.buf.len()
     }
 
     fn emit(&mut self, inst: Inst) {
@@ -50,13 +75,13 @@ impl RvAsmWriter {
     }
 }
 
-impl Default for RvAsmWriter {
+impl<L> Default for RvAsmWriter<L> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<Context> crate::out::WriterCore<Context> for RvAsmWriter {
+impl<L, Context> crate::out::WriterCore<Context> for RvAsmWriter<L> {
     type Error = core::convert::Infallible;
 
     fn ebreak(&mut self, _ctx: &mut Context, _cfg: crate::RiscV64Arch) -> Result<(), Self::Error> {
@@ -289,5 +314,49 @@ impl<Context> crate::out::WriterCore<Context> for RvAsmWriter {
     fn remu(&mut self, _ctx: &mut Context, _cfg: crate::RiscV64Arch, dest: &(dyn MemArg + '_), a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         self.emit(Inst::Remu { dest: to_rv_reg(dest), src1: to_rv_reg(a), src2: to_rv_reg(b) });
         Ok(())
+    }
+}
+
+// ── Writer implementation ────────────────────────────────────────────────────
+
+impl<L: Ord, Context> crate::out::Writer<L, Context> for RvAsmWriter<L> {
+    fn set_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::RiscV64Arch,
+        s: L,
+    ) -> Result<(), Self::Error> {
+        self.labels.insert(s, self.buf.len());
+        Ok(())
+    }
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::out::Writer as _;
+
+    #[test]
+    fn set_label_records_byte_offset() {
+        let arch = crate::RiscV64Arch::default();
+        let mut ctx = ();
+        let mut w: RvAsmWriter<u32> = RvAsmWriter::new();
+
+        // Emit two 4-byte instructions (EBREAK)
+        w.emit(Inst::Ebreak);
+        w.emit(Inst::Ebreak);
+        assert_eq!(w.offset(), 8);
+
+        // Record label 7 at offset 8
+        w.set_label(&mut ctx, arch, 7u32).unwrap();
+
+        // Emit one more instruction
+        w.emit(Inst::Ebreak);
+
+        let (bytes, labels) = w.into_parts();
+        assert_eq!(bytes.len(), 12);
+        assert_eq!(labels[&7u32], 8);
     }
 }

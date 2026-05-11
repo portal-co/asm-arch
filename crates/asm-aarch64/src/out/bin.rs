@@ -1,10 +1,18 @@
 extern crate alloc;
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use portal_pc_asm_common::types::mem::MemorySize;
 
 use crate::out::arg::{ArgKind, MemArgKind};
 use crate::out::MemArg;
+
+/// Placeholder label type for [`AArch64Writer`] when no label tracking is needed.
+///
+/// This is an uninhabited type — it can never be constructed — so a
+/// `BTreeMap<NoLabel, usize>` is always empty and zero-cost.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum NoLabel {}
 
 // ── register extraction ──────────────────────────────────────────────────────
 
@@ -43,31 +51,43 @@ fn lit_value(arg: &dyn MemArg) -> Option<u64> {
 ///
 /// All AArch64 instructions are fixed-width 32-bit little-endian. Suitable for
 /// AOT compilation and WASM targets (no JIT allocator or FFI dependency).
-pub struct AArch64Writer {
+///
+/// The type parameter `L` is the label type used with [`Writer<L, Context>`].
+/// It defaults to [`NoLabel`], which means label tracking is compiled away at
+/// zero cost. Specify a concrete `L` (e.g. `u32` or a custom enum) to record
+/// label→byte-offset mappings via [`set_label`](crate::out::Writer::set_label).
+pub struct AArch64Writer<L = NoLabel> {
     buf: Vec<u8>,
+    labels: BTreeMap<L, usize>,
 }
 
-impl AArch64Writer {
+impl<L> AArch64Writer<L> {
     pub fn new() -> Self {
-        Self { buf: Vec::new() }
+        Self { buf: Vec::new(), labels: BTreeMap::new() }
     }
 
+    /// Return the assembled bytes, discarding any recorded label offsets.
     pub fn into_bytes(self) -> Vec<u8> {
         self.buf
+    }
+
+    /// Return the assembled bytes and the recorded label→offset map.
+    pub fn into_parts(self) -> (Vec<u8>, BTreeMap<L, usize>) {
+        (self.buf, self.labels)
+    }
+
+    /// Current byte offset (number of bytes assembled so far).
+    pub fn offset(&self) -> usize {
+        self.buf.len()
     }
 
     #[inline(always)]
     fn emit(&mut self, word: u32) {
         self.buf.extend_from_slice(&word.to_le_bytes());
     }
-
-    // Current offset in bytes (used for branch target calculation)
-    pub fn offset(&self) -> usize {
-        self.buf.len()
-    }
 }
 
-impl Default for AArch64Writer {
+impl<L> Default for AArch64Writer<L> {
     fn default() -> Self {
         Self::new()
     }
@@ -75,7 +95,7 @@ impl Default for AArch64Writer {
 
 // ── WriterCore implementation ────────────────────────────────────────────────
 
-impl<Context> crate::out::WriterCore<Context> for AArch64Writer {
+impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
     type Error = core::convert::Infallible;
 
     fn brk(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, imm: u16) -> Result<(), Self::Error> {
@@ -472,5 +492,49 @@ impl<Context> crate::out::WriterCore<Context> for AArch64Writer {
         // FMOV Dd, Dn
         self.emit(0x1E60_4000 | (fn_ << 5) | fd);
         Ok(())
+    }
+}
+
+// ── Writer implementation ────────────────────────────────────────────────────
+
+impl<L: Ord, Context> crate::out::Writer<L, Context> for AArch64Writer<L> {
+    fn set_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        s: L,
+    ) -> Result<(), Self::Error> {
+        self.labels.insert(s, self.buf.len());
+        Ok(())
+    }
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::out::Writer as _;
+
+    #[test]
+    fn set_label_records_byte_offset() {
+        let arch = crate::AArch64Arch::default();
+        let mut ctx = ();
+        let mut w: AArch64Writer<u32> = AArch64Writer::new();
+
+        // Emit two 4-byte instructions (RET = 0xD65F03C0)
+        w.emit(0xD65F_03C0);
+        w.emit(0xD65F_03C0);
+        assert_eq!(w.offset(), 8);
+
+        // Record label 42 at offset 8
+        w.set_label(&mut ctx, arch, 42u32).unwrap();
+
+        // Emit one more instruction
+        w.emit(0xD420_0000);
+
+        let (bytes, labels) = w.into_parts();
+        assert_eq!(bytes.len(), 12);
+        assert_eq!(labels[&42u32], 8);
     }
 }

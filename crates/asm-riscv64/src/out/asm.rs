@@ -359,6 +359,11 @@ macro_rules! writers {
                     $crate::__::core::write!(self,"jal {dest}, {label}\n")
                 }
 
+                fn la_label(&mut self, _ctx: &mut Context, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: L) -> Result<(),Self::Error>{
+                    let dest = dest.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"la {dest}, {label}\n")
+                }
+
                 fn bcond_label(&mut self, _ctx: &mut Context, cfg: $crate::RiscV64Arch, cond: $crate::ConditionCode, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_), label: L) -> Result<(),Self::Error>{
                     let a = a.mem_display(cfg.into());
                     let b = b.mem_display(cfg.into());
@@ -373,6 +378,7 @@ macro_rules! writers {
                         $crate::ConditionCode::LE => $crate::__::core::write!(self,"ble {a}, {b}, {label}\n"),
                         $crate::ConditionCode::GTU => $crate::__::core::write!(self,"bgtu {a}, {b}, {label}\n"),
                         $crate::ConditionCode::LEU => $crate::__::core::write!(self,"bleu {a}, {b}, {label}\n"),
+                        _ => $crate::__::core::write!(self,"b? {a}, {b}, {label}\n"),
                     }
                 }
             })*

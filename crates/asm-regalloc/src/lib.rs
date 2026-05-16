@@ -235,7 +235,6 @@ impl<
                     return Ok((i as u8, e.into_iter().flatten().chain(c.into_iter())));
                 }
                 i += 1;
-                i = i & ((N - 1) & 0xff);
             }
             let i = self.tos.as_mut();
             if let Some(i) = i {
@@ -316,7 +315,6 @@ impl<
                             continue 'a;
                         }
                         i += 1;
-                        i = i & ((N - 1) & 0xff);
                     }
                 }
             }
@@ -356,7 +354,6 @@ impl<
                             continue 'a;
                         }
                         i += 1;
-                        i = i & ((N - 1) & 0xff);
                     }
                 }
             }
@@ -394,7 +391,6 @@ impl<
                     }
                 }
                 i += 1;
-                i = i & ((N - 1) & 0xff);
             }
             i = 0;
             while let Some(a) = self.frames[kind.clone()].get_mut(i) {
@@ -410,7 +406,6 @@ impl<
                     continue 'a;
                 }
                 i += 1;
-                i = i & ((N - 1) & 0xff);
             }
             let (_, v) = self.evict()?;
             e = Some(v);

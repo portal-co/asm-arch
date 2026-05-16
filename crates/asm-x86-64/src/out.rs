@@ -25,7 +25,7 @@ pub mod arg;
 pub mod asm;
 
 #[cfg(feature = "iced")]
-mod iced;
+pub mod iced;
 
 /// Core trait for writing x86-64 instructions.
 ///

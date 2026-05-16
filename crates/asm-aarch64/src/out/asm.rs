@@ -56,7 +56,11 @@ macro_rules! writers {
 
                 fn bl(&mut self, _ctx: &mut Context, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let target = target.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"bl {target}\n")
+                    // `bl` only accepts an immediate label.  When the target
+                    // is a register we must emit `blr` (branch-with-link to
+                    // register).  Callers that already have a label should
+                    // use `bl_label` instead.
+                    $crate::__::core::write!(self,"blr {target}\n")
                 }
 
                 fn br(&mut self, _ctx: &mut Context, cfg: $crate::AArch64Arch, target: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{

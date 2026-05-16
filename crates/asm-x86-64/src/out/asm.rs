@@ -207,7 +207,13 @@ macro_rules! writers {
                 }
                  fn lea_label(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: L) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"lea {dest}, {label}\n")
+                    // `lea {dest}, {label}` in Intel syntax assembles to an
+                    // absolute-addressing LEA with a relocation against the
+                    // symbol; without linking, the displacement stays zero
+                    // and the LEA loads address 0.  `[rip + label]` produces
+                    // a PC-relative LEA whose offset the assembler resolves
+                    // locally when the label lives in the same section.
+                    $crate::__::core::write!(self,"lea {dest}, [rip + {label}]\n")
                 }
                 fn call_label(&mut self, _ctx: &mut Context, _cfg: $crate::X64Arch, label: L) -> $crate::__::core::result::Result<(), Self::Error> {
                     $crate::__::core::write!(self, "call {label}\n")

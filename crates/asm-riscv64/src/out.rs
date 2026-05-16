@@ -684,6 +684,22 @@ pub trait Writer<L, Context>: WriterCore<Context> {
         todo!("jal_label not implemented")
     }
 
+    /// Emits a load-address pseudo-instruction to a label.
+    ///
+    /// Loads the *address* of `label` into `dest` without transferring control.
+    /// Emits the assembler `la` pseudo-instruction (`auipc`+`addi` pair).
+    /// Unlike `jal_label`, this does NOT modify the program counter.
+    #[track_caller]
+    fn la_label(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::RiscV64Arch,
+        _dest: &(dyn MemArg + '_),
+        _label: L,
+    ) -> Result<(), Self::Error> {
+        todo!("la_label not implemented")
+    }
+
     /// Emits a branch instruction to a label based on condition code.
     #[track_caller]
     fn bcond_label(
@@ -759,6 +775,9 @@ macro_rules! writer_dispatch {
                     }
                     fn jal_label(&mut self, ctx: &mut $ctx, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> Result<(), Self::Error> {
                        <$wrapped as $crate::out::Writer<$l, $ctx>>::jal_label(&mut **self, ctx, cfg, dest, label)
+                    }
+                    fn la_label(&mut self, ctx: &mut $ctx, cfg: $crate::RiscV64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), label: $l) -> Result<(), Self::Error> {
+                       <$wrapped as $crate::out::Writer<$l, $ctx>>::la_label(&mut **self, ctx, cfg, dest, label)
                     }
                 }
             )*

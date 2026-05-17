@@ -272,6 +272,10 @@ macro_rules! writers {
                 fn bl_label(&mut self, _ctx: &mut Context, _cfg: $crate::AArch64Arch, label: L) -> $crate::__::core::result::Result<(),Self::Error>{
                     $crate::__::core::write!(self,"bl {label}\n")
                 }
+
+                fn bcond_label(&mut self, _ctx: &mut Context, _cfg: $crate::AArch64Arch, cond: $crate::ConditionCode, label: L) -> $crate::__::core::result::Result<(),Self::Error>{
+                    $crate::__::core::write!(self,"b.{cond} {label}\n")
+                }
             })*
         };
     };

@@ -4,7 +4,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use portal_pc_asm_common::types::mem::MemorySize;
 
-use crate::out::arg::{ArgKind, MemArgKind};
+use crate::out::arg::{AddressingMode, ArgKind, MemArgKind};
 use crate::out::MemArg;
 
 /// Placeholder label type for [`AArch64Writer`] when no label tracking is needed.
@@ -30,11 +30,11 @@ fn to_reg_size(arg: &dyn MemArg) -> (u32, MemorySize) {
     }
 }
 
-fn mem_base_disp(mem: &dyn MemArg) -> (u32, u32) {
+fn mem_base_disp(mem: &dyn MemArg) -> (u32, i32, AddressingMode) {
     match mem.concrete_mem_kind() {
-        MemArgKind::Mem { base: ArgKind::Reg { reg, .. }, disp, .. } => (reg.0 as u32, disp as u32),
-        MemArgKind::NoMem(ArgKind::Reg { reg, .. }) => (reg.0 as u32, 0),
-        _ => (0, 0),
+        MemArgKind::Mem { base: ArgKind::Reg { reg, .. }, disp, mode, .. } => (reg.0 as u32, disp, mode),
+        MemArgKind::NoMem(ArgKind::Reg { reg, .. }) => (reg.0 as u32, 0, AddressingMode::Offset),
+        _ => (0, 0, AddressingMode::Offset),
     }
 }
 
@@ -56,14 +56,65 @@ fn lit_value(arg: &dyn MemArg) -> Option<u64> {
 /// It defaults to [`NoLabel`], which means label tracking is compiled away at
 /// zero cost. Specify a concrete `L` (e.g. `u32` or a custom enum) to record
 /// label→byte-offset mappings via [`set_label`](crate::out::Writer::set_label).
+/// Kind-specific data for a pending label fixup.
+enum AArch64FixupKind {
+    /// ADR Xd, #imm21 — need `rd` to re-encode.
+    Adr { rd: u32 },
+    /// B #imm26 — unconditional branch.
+    B,
+    /// BL #imm26 — branch-with-link.
+    Bl,
+    /// B.cond #imm19 — conditional branch; need condition code.
+    BCond { cond: crate::ConditionCode },
+}
+
+/// A pending fixup: once `set_label(label)` is called the instruction at
+/// `instr_offset` is rewritten with the correct PC-relative offset.
+struct AArch64Fixup<L> {
+    instr_offset: usize,
+    label: L,
+    kind: AArch64FixupKind,
+}
+
+impl<L> AArch64Fixup<L> {
+    fn apply(&self, buf: &mut Vec<u8>, target: usize) {
+        let delta = (target as i64 - self.instr_offset as i64) as i32;
+        let word: u32 = match &self.kind {
+            AArch64FixupKind::Adr { rd } => {
+                // ADR: byte offset stored as 21-bit signed, split immlo/immhi.
+                let imm21 = delta as u32;
+                let immlo = imm21 & 0x3;
+                let immhi = (imm21 >> 2) & 0x7_FFFF;
+                0x1000_0000 | (immlo << 29) | (immhi << 5) | rd
+            }
+            AArch64FixupKind::B => {
+                // B: instruction-aligned (÷4), 26-bit signed.
+                let imm26 = ((delta / 4) as u32) & 0x3FF_FFFF;
+                0x1400_0000 | imm26
+            }
+            AArch64FixupKind::Bl => {
+                let imm26 = ((delta / 4) as u32) & 0x3FF_FFFF;
+                0x9400_0000 | imm26
+            }
+            AArch64FixupKind::BCond { cond } => {
+                // B.cond: 19-bit signed offset in bits [23:5], cond in bits [3:0].
+                let imm19 = ((delta / 4) as u32) & 0x7_FFFF;
+                0x5400_0000 | (imm19 << 5) | (*cond as u32)
+            }
+        };
+        buf[self.instr_offset..self.instr_offset + 4].copy_from_slice(&word.to_le_bytes());
+    }
+}
+
 pub struct AArch64Writer<L = NoLabel> {
     buf: Vec<u8>,
     labels: BTreeMap<L, usize>,
+    pending_fixups: Vec<AArch64Fixup<L>>,
 }
 
 impl<L> AArch64Writer<L> {
     pub fn new() -> Self {
-        Self { buf: Vec::new(), labels: BTreeMap::new() }
+        Self { buf: Vec::new(), labels: BTreeMap::new(), pending_fixups: Vec::new() }
     }
 
     /// Return the assembled bytes, discarding any recorded label offsets.
@@ -120,8 +171,13 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
             } else {
                 let rm = to_reg(src);
                 if size == MemorySize::_64 {
-                    // MOV Xd, Xn = ORR Xd, XZR, Xn
-                    self.emit(0xAA00_03E0 | (rm << 16) | rd);
+                    if rd == 31 || rm == 31 {
+                        // MOV SP, Xn (or Xn, SP) = ADD Xd, Xn, #0 (ORR can't address SP)
+                        self.emit(0x9100_0000 | (rm << 5) | rd);
+                    } else {
+                        // MOV Xd, Xn = ORR Xd, XZR, Xn
+                        self.emit(0xAA00_03E0 | (rm << 16) | rd);
+                    }
                 } else {
                     // MOV Wd, Wn = ORR Wd, WZR, Wn
                     self.emit(0x2A00_03E0 | (rm << 16) | rd);
@@ -330,7 +386,8 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
         let (rn, size) = to_reg_size(src);
         let instr = match size {
             MemorySize::_8  => 0x5300_1C00 | (rn << 5) | rd, // UXTB Wd, Wn
-            _               => 0x5300_3C00 | (rn << 5) | rd, // UXTH Wd, Wn
+            MemorySize::_16 => 0x5300_3C00 | (rn << 5) | rd, // UXTH Wd, Wn
+            _               => 0x2A00_03E0 | (rn << 16) | rd, // MOV Wd, Wn (ORR Wd, WZR, Wn) — zero-extends to Xd
         };
         self.emit(instr);
         Ok(())
@@ -338,12 +395,46 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
 
     fn ldr(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, dest: &(dyn MemArg + '_), mem: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let (rt, size) = to_reg_size(dest);
-        let (rn, disp) = mem_base_disp(mem);
-        let instr = match size {
-            MemorySize::_64 => 0xF940_0000 | (((disp / 8) & 0xFFF) << 10) | (rn << 5) | rt,
-            MemorySize::_32 => 0xB940_0000 | (((disp / 4) & 0xFFF) << 10) | (rn << 5) | rt,
-            MemorySize::_16 => 0x7940_0000 | (((disp / 2) & 0xFFF) << 10) | (rn << 5) | rt,
-            _               => 0x3940_0000 | ((disp & 0xFFF) << 10) | (rn << 5) | rt,
+        let (rn, disp, mode) = mem_base_disp(mem);
+        let instr = match mode {
+            AddressingMode::Offset => {
+                let simm9 = (disp as u32) & 0x1FF;
+                if disp >= 0 {
+                    // Unsigned scaled offset: LDR Xt, [Xn, #pimm]
+                    match size {
+                        MemorySize::_64 => 0xF940_0000 | (((disp / 8) as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                        MemorySize::_32 => 0xB940_0000 | (((disp / 4) as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                        MemorySize::_16 => 0x7940_0000 | (((disp / 2) as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                        _               => 0x3940_0000 | ((disp as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                    }
+                } else {
+                    // Signed unscaled offset: LDUR Xt, [Xn, #simm9]
+                    match size {
+                        MemorySize::_64 => 0xF840_0000 | (simm9 << 12) | (rn << 5) | rt,
+                        MemorySize::_32 => 0xB840_0000 | (simm9 << 12) | (rn << 5) | rt,
+                        MemorySize::_16 => 0x7840_0000 | (simm9 << 12) | (rn << 5) | rt,
+                        _               => 0x3840_0000 | (simm9 << 12) | (rn << 5) | rt,
+                    }
+                }
+            }
+            AddressingMode::PreIndex => {
+                let simm9 = (disp as u32) & 0x1FF;
+                match size {
+                    MemorySize::_64 => 0xF840_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_32 => 0xB840_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_16 => 0x7840_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                    _               => 0x3840_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                }
+            }
+            AddressingMode::PostIndex => {
+                let simm9 = (disp as u32) & 0x1FF;
+                match size {
+                    MemorySize::_64 => 0xF840_0400 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_32 => 0xB840_0400 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_16 => 0x7840_0400 | (simm9 << 12) | (rn << 5) | rt,
+                    _               => 0x3840_0400 | (simm9 << 12) | (rn << 5) | rt,
+                }
+            }
         };
         self.emit(instr);
         Ok(())
@@ -351,12 +442,45 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
 
     fn str(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, src: &(dyn MemArg + '_), mem: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let (rt, size) = to_reg_size(src);
-        let (rn, disp) = mem_base_disp(mem);
-        let instr = match size {
-            MemorySize::_64 => 0xF900_0000 | (((disp / 8) & 0xFFF) << 10) | (rn << 5) | rt,
-            MemorySize::_32 => 0xB900_0000 | (((disp / 4) & 0xFFF) << 10) | (rn << 5) | rt,
-            MemorySize::_16 => 0x7900_0000 | (((disp / 2) & 0xFFF) << 10) | (rn << 5) | rt,
-            _               => 0x3900_0000 | ((disp & 0xFFF) << 10) | (rn << 5) | rt,
+        let (rn, disp, mode) = mem_base_disp(mem);
+        let instr = match mode {
+            AddressingMode::Offset => {
+                let simm9 = (disp as u32) & 0x1FF;
+                if disp >= 0 {
+                    match size {
+                        MemorySize::_64 => 0xF900_0000 | (((disp / 8) as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                        MemorySize::_32 => 0xB900_0000 | (((disp / 4) as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                        MemorySize::_16 => 0x7900_0000 | (((disp / 2) as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                        _               => 0x3900_0000 | ((disp as u32 & 0xFFF) << 10) | (rn << 5) | rt,
+                    }
+                } else {
+                    // Signed unscaled offset: STUR Xt, [Xn, #simm9]
+                    match size {
+                        MemorySize::_64 => 0xF800_0000 | (simm9 << 12) | (rn << 5) | rt,
+                        MemorySize::_32 => 0xB800_0000 | (simm9 << 12) | (rn << 5) | rt,
+                        MemorySize::_16 => 0x7800_0000 | (simm9 << 12) | (rn << 5) | rt,
+                        _               => 0x3800_0000 | (simm9 << 12) | (rn << 5) | rt,
+                    }
+                }
+            }
+            AddressingMode::PreIndex => {
+                let simm9 = (disp as u32) & 0x1FF;
+                match size {
+                    MemorySize::_64 => 0xF800_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_32 => 0xB800_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_16 => 0x7800_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                    _               => 0x3800_0C00 | (simm9 << 12) | (rn << 5) | rt,
+                }
+            }
+            AddressingMode::PostIndex => {
+                let simm9 = (disp as u32) & 0x1FF;
+                match size {
+                    MemorySize::_64 => 0xF800_0400 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_32 => 0xB800_0400 | (simm9 << 12) | (rn << 5) | rt,
+                    MemorySize::_16 => 0x7800_0400 | (simm9 << 12) | (rn << 5) | rt,
+                    _               => 0x3800_0400 | (simm9 << 12) | (rn << 5) | rt,
+                }
+            }
         };
         self.emit(instr);
         Ok(())
@@ -365,20 +489,28 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
     fn ldp(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, dest1: &(dyn MemArg + '_), dest2: &(dyn MemArg + '_), mem: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let rt1 = to_reg(dest1);
         let rt2 = to_reg(dest2);
-        let (rn, disp) = mem_base_disp(mem);
-        let simm7 = ((disp as i32 / 8) & 0x7F) as u32;
-        // LDP Xt1, Xt2, [Xn, #imm] (signed offset)
-        self.emit(0xA940_0000 | (simm7 << 15) | (rt2 << 10) | (rn << 5) | rt1);
+        let (rn, disp, mode) = mem_base_disp(mem);
+        let simm7 = ((disp / 8) as u32) & 0x7F;
+        let base_opc = match mode {
+            AddressingMode::Offset    => 0xA940_0000u32,
+            AddressingMode::PreIndex  => 0xA9C0_0000u32,
+            AddressingMode::PostIndex => 0xA8C0_0000u32,
+        };
+        self.emit(base_opc | (simm7 << 15) | (rt2 << 10) | (rn << 5) | rt1);
         Ok(())
     }
 
     fn stp(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, src1: &(dyn MemArg + '_), src2: &(dyn MemArg + '_), mem: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let rt1 = to_reg(src1);
         let rt2 = to_reg(src2);
-        let (rn, disp) = mem_base_disp(mem);
-        let simm7 = ((disp as i32 / 8) & 0x7F) as u32;
-        // STP Xt1, Xt2, [Xn, #imm] (signed offset)
-        self.emit(0xA900_0000 | (simm7 << 15) | (rt2 << 10) | (rn << 5) | rt1);
+        let (rn, disp, mode) = mem_base_disp(mem);
+        let simm7 = ((disp / 8) as u32) & 0x7F;
+        let base_opc = match mode {
+            AddressingMode::Offset    => 0xA900_0000u32,
+            AddressingMode::PreIndex  => 0xA9A0_0000u32,
+            AddressingMode::PostIndex => 0xA880_0000u32,
+        };
+        self.emit(base_opc | (simm7 << 15) | (rt2 << 10) | (rn << 5) | rt1);
         Ok(())
     }
 
@@ -504,7 +636,96 @@ impl<L: Ord, Context> crate::out::Writer<L, Context> for AArch64Writer<L> {
         _cfg: crate::AArch64Arch,
         s: L,
     ) -> Result<(), Self::Error> {
-        self.labels.insert(s, self.buf.len());
+        let target = self.buf.len();
+        let mut i = 0;
+        while i < self.pending_fixups.len() {
+            if self.pending_fixups[i].label == s {
+                let fix = self.pending_fixups.swap_remove(i);
+                fix.apply(&mut self.buf, target);
+                // don't advance i — swap_remove put a new element at index i
+            } else {
+                i += 1;
+            }
+        }
+        self.labels.insert(s, target);
+        Ok(())
+    }
+
+    fn adr_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        dest: &(dyn crate::out::MemArg + '_),
+        label: L,
+    ) -> Result<(), Self::Error> {
+        let rd = to_reg(dest);
+        let instr_offset = self.buf.len();
+        if let Some(&target) = self.labels.get(&label) {
+            let delta = (target as i64 - instr_offset as i64) as i32;
+            let imm21 = delta as u32;
+            let immlo = imm21 & 0x3;
+            let immhi = (imm21 >> 2) & 0x7_FFFF;
+            self.emit(0x1000_0000 | (immlo << 29) | (immhi << 5) | rd);
+        } else {
+            // Placeholder ADR Xd, #0 — patched when label is defined.
+            self.emit(0x1000_0000 | rd);
+            self.pending_fixups.push(AArch64Fixup { instr_offset, label, kind: AArch64FixupKind::Adr { rd } });
+        }
+        Ok(())
+    }
+
+    fn b_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        label: L,
+    ) -> Result<(), Self::Error> {
+        let instr_offset = self.buf.len();
+        if let Some(&target) = self.labels.get(&label) {
+            let delta = (target as i64 - instr_offset as i64) as i32;
+            let imm26 = ((delta / 4) as u32) & 0x3FF_FFFF;
+            self.emit(0x1400_0000 | imm26);
+        } else {
+            self.emit(0x1400_0000); // B #0 placeholder
+            self.pending_fixups.push(AArch64Fixup { instr_offset, label, kind: AArch64FixupKind::B });
+        }
+        Ok(())
+    }
+
+    fn bcond_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        cond: crate::ConditionCode,
+        label: L,
+    ) -> Result<(), Self::Error> {
+        let instr_offset = self.buf.len();
+        if let Some(&target) = self.labels.get(&label) {
+            let delta = (target as i64 - instr_offset as i64) as i32;
+            let imm19 = ((delta / 4) as u32) & 0x7_FFFF;
+            self.emit(0x5400_0000 | (imm19 << 5) | (cond as u32));
+        } else {
+            self.emit(0x5400_0000 | (cond as u32)); // B.cond #0 placeholder
+            self.pending_fixups.push(AArch64Fixup { instr_offset, label, kind: AArch64FixupKind::BCond { cond } });
+        }
+        Ok(())
+    }
+
+    fn bl_label(
+        &mut self,
+        _ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        label: L,
+    ) -> Result<(), Self::Error> {
+        let instr_offset = self.buf.len();
+        if let Some(&target) = self.labels.get(&label) {
+            let delta = (target as i64 - instr_offset as i64) as i32;
+            let imm26 = ((delta / 4) as u32) & 0x3FF_FFFF;
+            self.emit(0x9400_0000 | imm26);
+        } else {
+            self.emit(0x9400_0000); // BL #0 placeholder
+            self.pending_fixups.push(AArch64Fixup { instr_offset, label, kind: AArch64FixupKind::Bl });
+        }
         Ok(())
     }
 }

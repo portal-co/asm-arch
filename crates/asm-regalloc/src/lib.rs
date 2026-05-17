@@ -304,6 +304,7 @@ impl<
                     let mut i = 0;
                     while let Some(a) = self.frames[kind.clone()].get_mut(i) {
                         if let RegAllocFrame::Empty = a {
+                            *a = RegAllocFrame::Stack { elem: StackElement::Native };
                             c = Some(Cmd::Pop(Target {
                                 reg: i as u8,
                                 kind: kind.clone(),
@@ -316,6 +317,7 @@ impl<
                         }
                         i += 1;
                     }
+                    panic!("regalloc::pop: no empty frame available (all registers occupied)");
                 }
             }
         }
@@ -343,6 +345,7 @@ impl<
                     let mut i = 0;
                     while let Some(a) = self.frames[kind.clone()].get_mut(i) {
                         if let RegAllocFrame::Empty = a {
+                            *a = RegAllocFrame::Stack { elem: StackElement::Native };
                             c = Some(Cmd::Pop(Target {
                                 reg: i as u8,
                                 kind: kind.clone(),
@@ -355,6 +358,7 @@ impl<
                         }
                         i += 1;
                     }
+                    panic!("regalloc::pop_local: no empty frame available (all registers occupied)");
                 }
             }
         }

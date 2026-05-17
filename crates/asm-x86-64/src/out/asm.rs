@@ -66,13 +66,15 @@ macro_rules! writers {
                     $crate::__::core::write!(self,"j{cc} {op}\n")
                 }
                 fn u32(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    // Zero-extend lower 32 bits: shl+shr clears upper 32 bits.
+                    // `and r64, 0xffffffff` is invalid (immediate must fit signed-i32).
                     let op = op.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"and {op}, 0xffffffff\n")
+                    $crate::__::core::write!(self,"shl {op}, 32\nshr {op}, 32\n")
                 }
                 fn lea(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg.into());
                     let src = src.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"lea {dest}, {src}")
+                    $crate::__::core::write!(self,"lea {dest}, {src}\n")
                 }
                 fn mov(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                      let dest = dest.mem_display(cfg.into());
@@ -128,6 +130,8 @@ macro_rules! writers {
                 fn shl(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let a = a.mem_display(cfg.into());
                     let b = b.mem_display(cfg.into());
+                    // x86-64 shift count must be CL or an immediate; display as-is
+                    // (caller must ensure count is in CL/RCX and pass it with 8-bit size to emit "cl")
                     $crate::__::core::write!(self,"shl {a},{b}\n")
                 }
                 fn shr(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{

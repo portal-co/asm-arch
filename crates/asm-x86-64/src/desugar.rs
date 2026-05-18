@@ -1005,17 +1005,6 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context>
         }
     }
 
-    fn jcc(
-        &mut self,
-        ctx: &mut Context,
-        cfg: X64Arch,
-        cc: crate::ConditionCode,
-        op: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        let desugared = self.desugar_operand(ctx, cfg, op)?;
-        self.writer.jcc(ctx, cfg, cc, &desugared)
-    }
-
     fn call(
         &mut self,
         ctx: &mut Context,

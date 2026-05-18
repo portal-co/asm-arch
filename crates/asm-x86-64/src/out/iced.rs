@@ -400,8 +400,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::O, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::O, op)?;
             }
         }
         Mnemonic::Jno => {
@@ -415,8 +413,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NO, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NO, op)?;
             }
         }
         Mnemonic::Jb => {
@@ -430,8 +426,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::B, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::B, op)?;
             }
         }
         Mnemonic::Jae => {
@@ -445,8 +439,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NB, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NB, op)?;
             }
         }
         Mnemonic::Je => {
@@ -460,8 +452,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::E, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::E, op)?;
             }
         }
         Mnemonic::Jne => {
@@ -475,8 +465,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NE, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NE, op)?;
             }
         }
         Mnemonic::Jbe => {
@@ -490,8 +478,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NA, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NA, op)?;
             }
         }
         Mnemonic::Ja => {
@@ -505,8 +491,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::A, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::A, op)?;
             }
         }
         Mnemonic::Js => {
@@ -520,8 +504,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::S, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::S, op)?;
             }
         }
         Mnemonic::Jns => {
@@ -535,8 +517,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NS, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NS, op)?;
             }
         }
         Mnemonic::Jp => {
@@ -550,8 +530,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::P, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::P, op)?;
             }
         }
         Mnemonic::Jnp => {
@@ -565,8 +543,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NP, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NP, op)?;
             }
         }
         Mnemonic::Jl => {
@@ -580,8 +556,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::L, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::L, op)?;
             }
         }
         Mnemonic::Jge => {
@@ -595,8 +569,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NL, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NL, op)?;
             }
         }
         Mnemonic::Jle => {
@@ -610,8 +582,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::NG, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::NG, op)?;
             }
         }
         Mnemonic::Jg => {
@@ -625,8 +595,6 @@ where
                     .or_insert_with(|| L::from(target))
                     .clone();
                 writer.jcc_label(ctx, *arch, crate::ConditionCode::G, label)?;
-            } else if let Some(op) = dest {
-                writer.jcc(ctx, *arch, crate::ConditionCode::G, op)?;
             }
         }
         // For unsupported instructions, emit as raw bytes
@@ -1111,13 +1079,6 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
             }
             _ => Ok(()),
         }
-    }
-
-    fn jcc(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, cond: crate::ConditionCode, op: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
-        // For indirect jcc we simulate with a conditional jump over a jmp
-        // Actually jcc with register target isn't directly encodable; skip
-        let _ = (cond, op);
-        Ok(())
     }
 
     fn cmovcc64(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, cond: crate::ConditionCode, op: &(dyn crate::out::arg::MemArg + '_), val: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {

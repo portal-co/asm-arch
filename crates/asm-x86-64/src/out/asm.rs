@@ -61,10 +61,6 @@ macro_rules! writers {
                      let val = val.mem_display(cfg.into());
                     $crate::__::core::write!(self,"cmov{cc} {op}, {val}\n")
                 }
-                fn jcc(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                    let op = op.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"j{cc} {op}\n")
-                }
                 fn u32(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     // Zero-extend lower 32 bits: shl+shr clears upper 32 bits.
                     // `and r64, 0xffffffff` is invalid (immediate must fit signed-i32).

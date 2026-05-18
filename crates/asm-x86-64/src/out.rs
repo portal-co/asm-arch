@@ -219,18 +219,6 @@ pub trait WriterCore<Context> {
         todo!("cmovcc64 instruction not implemented")
     }
 
-    /// Emits a Jcc (conditional jump) instruction.
-    #[track_caller]
-    fn jcc(
-        &mut self,
-        ctx: &mut Context,
-        _cfg: crate::X64Arch,
-        _cond: ConditionCode,
-        _op: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        todo!("jcc instruction not implemented")
-    }
-
     /// Emits an instruction to truncate to 32 bits (AND with 0xffffffff).
     #[track_caller]
     fn u32(
@@ -574,9 +562,6 @@ macro_rules! writer_dispatch {
                     }
                     fn cmovcc64(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::cmovcc64(&mut **self, ctx, cfg,cc,op,val)
-                    }
-                    fn jcc(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$wrapped as $crate::out::WriterCore<$ctx>>::jcc(&mut **self, ctx, cfg,cc,op)
                     }
                     fn lea(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch,
                         dest: &(dyn $crate::out::arg::MemArg + '_),

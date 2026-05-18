@@ -495,7 +495,7 @@ impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, Context>
             .sub(ctx, self.riscv_cfg, &temp, &op_adapter, &zero)
     }
 
-    fn cmovcc64(
+    fn cmovcc(
         &mut self,
         ctx: &mut Context,
         _cfg: X64Arch,
@@ -516,65 +516,6 @@ impl<W: portal_solutions_asm_riscv64::out::Writer<ShimLabel, Context>, Context>
         self.inner
             .mv(ctx, self.riscv_cfg, &op_adapter, &val_adapter)?;
         Ok(())
-    }
-
-    fn jcc(
-        &mut self,
-        ctx: &mut Context,
-        _cfg: X64Arch,
-        cond: X64ConditionCode,
-        op: &(dyn X64MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        // Conditional jump - needs comparison context from previous CMP
-        let temp = Reg(31); // t6 (result from CMP)
-        let zero = Reg(0);
-        let op_adapter = MemArgAdapter::new(op, _cfg);
-        let riscv_cond = translate_condition(cond);
-
-        // Use temp register that holds comparison result
-        match riscv_cond {
-            portal_solutions_asm_riscv64::ConditionCode::EQ => {
-                self.inner
-                    .beq(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
-            }
-            portal_solutions_asm_riscv64::ConditionCode::NE => {
-                self.inner
-                    .bne(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
-            }
-            portal_solutions_asm_riscv64::ConditionCode::LT => {
-                self.inner
-                    .blt(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
-            }
-            portal_solutions_asm_riscv64::ConditionCode::GE => {
-                self.inner
-                    .bge(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
-            }
-            portal_solutions_asm_riscv64::ConditionCode::LTU => {
-                self.inner
-                    .bltu(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
-            }
-            portal_solutions_asm_riscv64::ConditionCode::GEU => {
-                self.inner
-                    .bgeu(ctx, self.riscv_cfg, &temp, &zero, &op_adapter)
-            }
-            _ => self
-                .inner
-                .bne(ctx, self.riscv_cfg, &temp, &zero, &op_adapter),
-        }
-    }
-
-    fn u32(
-        &mut self,
-        ctx: &mut Context,
-        _cfg: X64Arch,
-        op: &(dyn X64MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        // Zero upper 32 bits - use AND with mask or load word
-        let op_adapter = MemArgAdapter::new(op, _cfg);
-        let temp = Reg(30);
-        self.inner.li(ctx, self.riscv_cfg, &temp, 0xFFFFFFFF)?;
-        self.inner
-            .and(ctx, self.riscv_cfg, &op_adapter, &op_adapter, &temp)
     }
 
     fn not(

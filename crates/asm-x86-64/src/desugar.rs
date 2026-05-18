@@ -1092,7 +1092,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context>
         self.writer.cmp0(ctx, cfg, op)
     }
 
-    fn cmovcc64(
+    fn cmovcc(
         &mut self,
         ctx: &mut Context,
         cfg: X64Arch,
@@ -1102,18 +1102,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> WriterCore<Context>
     ) -> Result<(), Self::Error> {
         // Flush pending operations if RSP is involved
         self.ensure_stack_flushed_for_rsp(ctx, cfg, &[op, val])?;
-        self.writer.cmovcc64(ctx, cfg, cond, op, val)
-    }
-
-    fn u32(
-        &mut self,
-        ctx: &mut Context,
-        cfg: X64Arch,
-        op: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        // Flush pending operations if RSP is involved
-        self.ensure_stack_flushed_for_rsp(ctx, cfg, &[op])?;
-        self.writer.u32(ctx, cfg, op)
+        self.writer.cmovcc(ctx, cfg, cond, op, val)
     }
 
     fn not(

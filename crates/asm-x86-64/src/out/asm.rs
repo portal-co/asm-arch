@@ -56,16 +56,10 @@ macro_rules! writers {
                     let op = op.mem_display(cfg.into());
                     $crate::__::core::write!(self,"cmp {op}, 0\n")
                 }
-                fn cmovcc64(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val:&(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                fn cmovcc(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val:&(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                      let op = op.mem_display(cfg.into());
                      let val = val.mem_display(cfg.into());
                     $crate::__::core::write!(self,"cmov{cc} {op}, {val}\n")
-                }
-                fn u32(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                    // Zero-extend lower 32 bits: shl+shr clears upper 32 bits.
-                    // `and r64, 0xffffffff` is invalid (immediate must fit signed-i32).
-                    let op = op.mem_display(cfg.into());
-                    $crate::__::core::write!(self,"shl {op}, 32\nshr {op}, 32\n")
                 }
                 fn lea(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                     let dest = dest.mem_display(cfg.into());

@@ -208,7 +208,7 @@ pub trait WriterCore<Context> {
 
     /// Emits a CMOVcc (conditional move) instruction for 64-bit operands.
     #[track_caller]
-    fn cmovcc64(
+    fn cmovcc(
         &mut self,
         ctx: &mut Context,
         _cfg: crate::X64Arch,
@@ -216,18 +216,7 @@ pub trait WriterCore<Context> {
         _op: &(dyn MemArg + '_),
         _val: &(dyn MemArg + '_),
     ) -> Result<(), Self::Error> {
-        todo!("cmovcc64 instruction not implemented")
-    }
-
-    /// Emits an instruction to truncate to 32 bits (AND with 0xffffffff).
-    #[track_caller]
-    fn u32(
-        &mut self,
-        ctx: &mut Context,
-        _cfg: crate::X64Arch,
-        _op: &(dyn MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        todo!("u32 instruction not implemented")
+        todo!("cmovcc instruction not implemented")
     }
 
     /// Emits a NOT (bitwise complement) instruction.
@@ -560,8 +549,8 @@ macro_rules! writer_dispatch {
                     fn cmp0(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(),Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::cmp0(&mut **self, ctx, cfg,op)
                     }
-                    fn cmovcc64(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$wrapped as $crate::out::WriterCore<$ctx>>::cmovcc64(&mut **self, ctx, cfg,cc,op,val)
+                    fn cmovcc(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch,cc: $crate::ConditionCode, op: &(dyn $crate::out::arg::MemArg + '_),val: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::cmovcc(&mut **self, ctx, cfg,cc,op,val)
                     }
                     fn lea(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch,
                         dest: &(dyn $crate::out::arg::MemArg + '_),
@@ -582,9 +571,6 @@ macro_rules! writer_dispatch {
                     }
                     fn mov(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::mov(&mut **self, ctx, cfg,dest,src)
-                    }
-                    fn u32(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
-                        <$wrapped as $crate::out::WriterCore<$ctx>>::u32(&mut **self, ctx, cfg,op)
                     }
                     fn not(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch, op: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::not(&mut **self, ctx, cfg,op)

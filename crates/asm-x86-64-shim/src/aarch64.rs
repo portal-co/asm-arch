@@ -1148,7 +1148,7 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>>
         }
     }
 
-    fn cmovcc64(
+    fn cmovcc(
         &mut self,
         ctx: &mut Context,
         _cfg: X64Arch,
@@ -1220,54 +1220,6 @@ impl<Context, W: portal_solutions_asm_aarch64::out::Writer<ShimLabel, Context>>
                     &temp_op,
                 )?;
                 self.inner.str(ctx, self.aarch64_cfg, &temp_op, &op_adapter)
-            }
-            _ => todo!(),
-        }
-    }
-
-    fn jcc(
-        &mut self,
-        ctx: &mut Context,
-        _cfg: X64Arch,
-        cond: X64ConditionCode,
-        op: &(dyn X64MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        // x86-64 Jcc -> AArch64 B.cond
-        let aarch64_cond = translate_condition(cond);
-        let op_adapter = MemArgAdapter::new(op, _cfg);
-        self.inner
-            .bcond(ctx, self.aarch64_cfg, aarch64_cond, &op_adapter)
-    }
-
-    fn u32(
-        &mut self,
-        ctx: &mut Context,
-        _cfg: X64Arch,
-        op: &(dyn X64MemArg + '_),
-    ) -> Result<(), Self::Error> {
-        // x86-64 AND op, 0xffffffff -> AArch64 AND op, op, #0xffffffff (handle memory)
-        use portal_solutions_asm_aarch64::out::arg::MemArgKind;
-
-        let op_adapter = MemArgAdapter::new(op, _cfg);
-        let op_kind = op_adapter.concrete_mem_kind();
-        let temp = Reg(16); // Use temp register for immediate
-        let temp2 = Reg(17); // For result if memory
-
-        self.inner
-            .mov_imm(ctx, self.aarch64_cfg, &temp, 0xffffffff)?;
-
-        match op_kind {
-            MemArgKind::NoMem(_) => {
-                // Register - direct AND
-                self.inner
-                    .and(ctx, self.aarch64_cfg, &op_adapter, &op_adapter, &temp)
-            }
-            MemArgKind::Mem { .. } => {
-                // Memory - LDR, AND, STR
-                self.load_memarg_into_temp(ctx, &op_adapter, &temp2)?;
-                self.inner
-                    .and(ctx, self.aarch64_cfg, &temp2, &temp2, &temp)?;
-                self.inner.str(ctx, self.aarch64_cfg, &temp2, &op_adapter)
             }
             _ => todo!(),
         }

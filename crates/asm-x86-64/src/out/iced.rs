@@ -310,82 +310,82 @@ where
         // Conditional moves
         Mnemonic::Cmovo => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::O, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::O, op, v)?;
             }
         }
         Mnemonic::Cmovno => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NO, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NO, op, v)?;
             }
         }
         Mnemonic::Cmovb => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::B, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::B, op, v)?;
             }
         }
         Mnemonic::Cmovae => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NB, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NB, op, v)?;
             }
         }
         Mnemonic::Cmove => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::E, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::E, op, v)?;
             }
         }
         Mnemonic::Cmovne => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NE, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NE, op, v)?;
             }
         }
         Mnemonic::Cmovbe => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NA, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NA, op, v)?;
             }
         }
         Mnemonic::Cmova => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::A, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::A, op, v)?;
             }
         }
         Mnemonic::Cmovs => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::S, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::S, op, v)?;
             }
         }
         Mnemonic::Cmovns => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NS, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NS, op, v)?;
             }
         }
         Mnemonic::Cmovp => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::P, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::P, op, v)?;
             }
         }
         Mnemonic::Cmovnp => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NP, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NP, op, v)?;
             }
         }
         Mnemonic::Cmovl => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::L, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::L, op, v)?;
             }
         }
         Mnemonic::Cmovge => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NL, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NL, op, v)?;
             }
         }
         Mnemonic::Cmovle => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::NG, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::NG, op, v)?;
             }
         }
         Mnemonic::Cmovg => {
             if let (Some(op), Some(v)) = (dest, src) {
-                writer.cmovcc64(ctx, *arch, crate::ConditionCode::G, op, v)?;
+                writer.cmovcc(ctx, *arch, crate::ConditionCode::G, op, v)?;
             }
         }
         // Conditional jumps
@@ -747,6 +747,31 @@ impl<L> IcedWriter<L> {
             IcedOp::Imm(_) => MemorySize::_64,
         }
     }
+
+    /// Convert a register to the correctly-sized form for `size`.
+    ///
+    /// For _8: `r` is assumed to already be the 8-bit form (from `reg_to_iced_sized`).
+    /// For _16/_32: `r` is assumed to be the 64-bit form; arithmetic converts it.
+    /// For _64: returned unchanged.
+    ///
+    /// iced GPR discriminants: AL=1..R15L=20, AX=21..R15W=36, EAX=37..R15D=52, RAX=53..R15=68.
+    /// Within each tier the blitz register order (RAX=0,RCX=1,RDX=2,RBX=3,RSP=4,RBP=5,RSI=6,
+    /// RDI=7,R8=8..R15=15) maps directly: e.g. EAX = 37+0, ECX = 37+1, R8D = 37+8 = 45.
+    fn gpr_for_size(r: iced_x86::Register, size: MemorySize) -> iced_x86::Register {
+        let disc = r as usize;
+        match size {
+            MemorySize::_8 => r, // already the 8-bit form from reg_to_iced_sized
+            MemorySize::_16 => {
+                if disc < 53 { return r; } // already non-64-bit
+                iced_x86::Register::try_from(disc - 32).unwrap_or(r)
+            }
+            MemorySize::_32 => {
+                if disc < 53 { return r; }
+                iced_x86::Register::try_from(disc - 16).unwrap_or(r)
+            }
+            _ => r, // _64 or unknown: unchanged
+        }
+    }
 }
 
 #[cfg(feature = "iced")]
@@ -772,21 +797,57 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
     fn mov(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, dest: &(dyn crate::out::arg::MemArg + '_), src: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let d = mem_kind_to_iced(&dest.concrete_mem_kind());
         let s = mem_kind_to_iced(&src.concrete_mem_kind());
+        let sz = Self::size_of(&d);
         let instr = match (&d, &s) {
             (IcedOp::Reg(dr, _), IcedOp::Reg(sr, _)) => {
-                iced_x86::Instruction::with2(iced_x86::Code::Mov_r64_rm64, *dr, *sr).unwrap_or_else(|e| panic!("iced: {e}"))
+                let dr = Self::gpr_for_size(*dr, sz);
+                let sr = Self::gpr_for_size(*sr, sz);
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Mov_r8_rm8,
+                    MemorySize::_16 => iced_x86::Code::Mov_r16_rm16,
+                    MemorySize::_32 => iced_x86::Code::Mov_r32_rm32,
+                    _               => iced_x86::Code::Mov_r64_rm64,
+                };
+                iced_x86::Instruction::with2(code, dr, sr).unwrap_or_else(|e| panic!("iced: {e}"))
             }
             (IcedOp::Reg(dr, _), IcedOp::Imm(v)) => {
-                iced_x86::Instruction::with2(iced_x86::Code::Mov_r64_imm64, *dr, *v).unwrap_or_else(|e| panic!("iced: {e}"))
+                let dr = Self::gpr_for_size(*dr, sz);
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Mov_r8_imm8,
+                    MemorySize::_16 => iced_x86::Code::Mov_r16_imm16,
+                    MemorySize::_32 => iced_x86::Code::Mov_r32_imm32,
+                    _               => iced_x86::Code::Mov_r64_imm64,
+                };
+                iced_x86::Instruction::with2(code, dr, *v).unwrap_or_else(|e| panic!("iced: {e}"))
             }
             (IcedOp::Reg(dr, _), IcedOp::Mem(sm, _)) => {
-                iced_x86::Instruction::with2(iced_x86::Code::Mov_r64_rm64, *dr, sm.clone()).unwrap_or_else(|e| panic!("iced: {e}"))
+                let dr = Self::gpr_for_size(*dr, sz);
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Mov_r8_rm8,
+                    MemorySize::_16 => iced_x86::Code::Mov_r16_rm16,
+                    MemorySize::_32 => iced_x86::Code::Mov_r32_rm32,
+                    _               => iced_x86::Code::Mov_r64_rm64,
+                };
+                iced_x86::Instruction::with2(code, dr, sm.clone()).unwrap_or_else(|e| panic!("iced: {e}"))
             }
             (IcedOp::Mem(dm, _), IcedOp::Reg(sr, _)) => {
-                iced_x86::Instruction::with2(iced_x86::Code::Mov_rm64_r64, dm.clone(), *sr).unwrap_or_else(|e| panic!("iced: {e}"))
+                let sr = Self::gpr_for_size(*sr, sz);
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Mov_rm8_r8,
+                    MemorySize::_16 => iced_x86::Code::Mov_rm16_r16,
+                    MemorySize::_32 => iced_x86::Code::Mov_rm32_r32,
+                    _               => iced_x86::Code::Mov_rm64_r64,
+                };
+                iced_x86::Instruction::with2(code, dm.clone(), sr).unwrap_or_else(|e| panic!("iced: {e}"))
             }
             (IcedOp::Mem(dm, _), IcedOp::Imm(v)) => {
-                iced_x86::Instruction::with2(iced_x86::Code::Mov_rm64_imm32, dm.clone(), *v as i32).unwrap_or_else(|e| panic!("iced: {e}"))
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Mov_rm8_imm8,
+                    MemorySize::_16 => iced_x86::Code::Mov_rm16_imm16,
+                    MemorySize::_32 => iced_x86::Code::Mov_rm32_imm32,
+                    _               => iced_x86::Code::Mov_rm64_imm32,
+                };
+                iced_x86::Instruction::with2(code, dm.clone(), *v as i32).unwrap_or_else(|e| panic!("iced: {e}"))
             }
             _ => return Ok(()),
         };
@@ -927,11 +988,28 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
     fn shl(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, a: &(dyn crate::out::arg::MemArg + '_), b: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let d = mem_kind_to_iced(&a.concrete_mem_kind());
         let s = mem_kind_to_iced(&b.concrete_mem_kind());
-        let instr = match (&d, &s) {
-            (IcedOp::Reg(dr, _), IcedOp::Imm(v)) => iced_x86::Instruction::with2(iced_x86::Code::Shl_rm64_imm8, *dr, *v as u32).unwrap_or_else(|e| panic!("iced: {e}")),
-            // CL is explicit in iced's model even though encoded implicitly; must use with2.
-            (IcedOp::Reg(dr, _), IcedOp::Reg(sr, _)) if *sr == iced_x86::Register::CL => iced_x86::Instruction::with2(iced_x86::Code::Shl_rm64_CL, *dr, iced_x86::Register::CL).unwrap_or_else(|e| panic!("iced: {e}")),
-            (IcedOp::Mem(dm, _), IcedOp::Imm(v)) => iced_x86::Instruction::with2(iced_x86::Code::Shl_rm64_imm8, dm.clone(), *v as u32).unwrap_or_else(|e| panic!("iced: {e}")),
+        let sz = Self::size_of(&d);
+        let dr = Self::gpr_for_size(Self::op_to_reg(&d), sz);
+        let instr = match &s {
+            IcedOp::Imm(v) => {
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Shl_rm8_imm8,
+                    MemorySize::_16 => iced_x86::Code::Shl_rm16_imm8,
+                    MemorySize::_32 => iced_x86::Code::Shl_rm32_imm8,
+                    _               => iced_x86::Code::Shl_rm64_imm8,
+                };
+                iced_x86::Instruction::with2(code, dr, *v as u32).unwrap_or_else(|e| panic!("iced: {e}"))
+            }
+            // CL is explicit in iced's model even though encoded implicitly.
+            IcedOp::Reg(sr, _) if *sr == iced_x86::Register::CL => {
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Shl_rm8_CL,
+                    MemorySize::_16 => iced_x86::Code::Shl_rm16_CL,
+                    MemorySize::_32 => iced_x86::Code::Shl_rm32_CL,
+                    _               => iced_x86::Code::Shl_rm64_CL,
+                };
+                iced_x86::Instruction::with2(code, dr, iced_x86::Register::CL).unwrap_or_else(|e| panic!("iced: {e}"))
+            }
             _ => return Ok(()),
         };
         self.encode_instr(instr)
@@ -940,10 +1018,27 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
     fn shr(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, a: &(dyn crate::out::arg::MemArg + '_), b: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let d = mem_kind_to_iced(&a.concrete_mem_kind());
         let s = mem_kind_to_iced(&b.concrete_mem_kind());
-        let instr = match (&d, &s) {
-            (IcedOp::Reg(dr, _), IcedOp::Imm(v)) => iced_x86::Instruction::with2(iced_x86::Code::Shr_rm64_imm8, *dr, *v as u32).unwrap_or_else(|e| panic!("iced: {e}")),
-            (IcedOp::Reg(dr, _), IcedOp::Reg(sr, _)) if *sr == iced_x86::Register::CL => iced_x86::Instruction::with2(iced_x86::Code::Shr_rm64_CL, *dr, iced_x86::Register::CL).unwrap_or_else(|e| panic!("iced: {e}")),
-            (IcedOp::Mem(dm, _), IcedOp::Imm(v)) => iced_x86::Instruction::with2(iced_x86::Code::Shr_rm64_imm8, dm.clone(), *v as u32).unwrap_or_else(|e| panic!("iced: {e}")),
+        let sz = Self::size_of(&d);
+        let dr = Self::gpr_for_size(Self::op_to_reg(&d), sz);
+        let instr = match &s {
+            IcedOp::Imm(v) => {
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Shr_rm8_imm8,
+                    MemorySize::_16 => iced_x86::Code::Shr_rm16_imm8,
+                    MemorySize::_32 => iced_x86::Code::Shr_rm32_imm8,
+                    _               => iced_x86::Code::Shr_rm64_imm8,
+                };
+                iced_x86::Instruction::with2(code, dr, *v as u32).unwrap_or_else(|e| panic!("iced: {e}"))
+            }
+            IcedOp::Reg(sr, _) if *sr == iced_x86::Register::CL => {
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Shr_rm8_CL,
+                    MemorySize::_16 => iced_x86::Code::Shr_rm16_CL,
+                    MemorySize::_32 => iced_x86::Code::Shr_rm32_CL,
+                    _               => iced_x86::Code::Shr_rm64_CL,
+                };
+                iced_x86::Instruction::with2(code, dr, iced_x86::Register::CL).unwrap_or_else(|e| panic!("iced: {e}"))
+            }
             _ => return Ok(()),
         };
         self.encode_instr(instr)
@@ -952,10 +1047,27 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
     fn sar(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, a: &(dyn crate::out::arg::MemArg + '_), b: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let d = mem_kind_to_iced(&a.concrete_mem_kind());
         let s = mem_kind_to_iced(&b.concrete_mem_kind());
-        let instr = match (&d, &s) {
-            (IcedOp::Reg(dr, _), IcedOp::Imm(v)) => iced_x86::Instruction::with2(iced_x86::Code::Sar_rm64_imm8, *dr, *v as u32).unwrap_or_else(|e| panic!("iced: {e}")),
-            (IcedOp::Reg(dr, _), IcedOp::Reg(sr, _)) if *sr == iced_x86::Register::CL => iced_x86::Instruction::with2(iced_x86::Code::Sar_rm64_CL, *dr, iced_x86::Register::CL).unwrap_or_else(|e| panic!("iced: {e}")),
-            (IcedOp::Mem(dm, _), IcedOp::Imm(v)) => iced_x86::Instruction::with2(iced_x86::Code::Sar_rm64_imm8, dm.clone(), *v as u32).unwrap_or_else(|e| panic!("iced: {e}")),
+        let sz = Self::size_of(&d);
+        let dr = Self::gpr_for_size(Self::op_to_reg(&d), sz);
+        let instr = match &s {
+            IcedOp::Imm(v) => {
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Sar_rm8_imm8,
+                    MemorySize::_16 => iced_x86::Code::Sar_rm16_imm8,
+                    MemorySize::_32 => iced_x86::Code::Sar_rm32_imm8,
+                    _               => iced_x86::Code::Sar_rm64_imm8,
+                };
+                iced_x86::Instruction::with2(code, dr, *v as u32).unwrap_or_else(|e| panic!("iced: {e}"))
+            }
+            IcedOp::Reg(sr, _) if *sr == iced_x86::Register::CL => {
+                let code = match sz {
+                    MemorySize::_8  => iced_x86::Code::Sar_rm8_CL,
+                    MemorySize::_16 => iced_x86::Code::Sar_rm16_CL,
+                    MemorySize::_32 => iced_x86::Code::Sar_rm32_CL,
+                    _               => iced_x86::Code::Sar_rm64_CL,
+                };
+                iced_x86::Instruction::with2(code, dr, iced_x86::Register::CL).unwrap_or_else(|e| panic!("iced: {e}"))
+            }
             _ => return Ok(()),
         };
         self.encode_instr(instr)
@@ -994,17 +1106,29 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
     fn lea(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, dest: &(dyn crate::out::arg::MemArg + '_), src: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let d = mem_kind_to_iced(&dest.concrete_mem_kind());
         let s = mem_kind_to_iced(&src.concrete_mem_kind());
-        let dr = Self::op_to_reg(&d);
+        let sz = Self::size_of(&d);
+        let dr = Self::gpr_for_size(Self::op_to_reg(&d), sz);
         let sm = Self::op_to_mem(&s);
-        self.encode_instr(iced_x86::Instruction::with2(iced_x86::Code::Lea_r64_m, dr, sm).unwrap_or_else(|e| panic!("iced: {e}")))
+        let code = match sz {
+            MemorySize::_16 => iced_x86::Code::Lea_r16_m,
+            MemorySize::_32 => iced_x86::Code::Lea_r32_m,
+            _               => iced_x86::Code::Lea_r64_m,
+        };
+        self.encode_instr(iced_x86::Instruction::with2(code, dr, sm).unwrap_or_else(|e| panic!("iced: {e}")))
     }
 
     fn mul(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, a: &(dyn crate::out::arg::MemArg + '_), b: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let d = mem_kind_to_iced(&a.concrete_mem_kind());
         let s = mem_kind_to_iced(&b.concrete_mem_kind());
-        let instr = match (&d, &s) {
-            (IcedOp::Reg(dr, _), IcedOp::Reg(sr, _)) => iced_x86::Instruction::with2(iced_x86::Code::Imul_r64_rm64, *dr, *sr).unwrap_or_else(|e| panic!("iced: {e}")),
-            (IcedOp::Reg(dr, _), IcedOp::Mem(sm, _)) => iced_x86::Instruction::with2(iced_x86::Code::Imul_r64_rm64, *dr, sm.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
+        let sz = Self::size_of(&d);
+        let (code, dr) = match sz {
+            MemorySize::_16 => (iced_x86::Code::Imul_r16_rm16, Self::gpr_for_size(Self::op_to_reg(&d), sz)),
+            MemorySize::_32 => (iced_x86::Code::Imul_r32_rm32, Self::gpr_for_size(Self::op_to_reg(&d), sz)),
+            _               => (iced_x86::Code::Imul_r64_rm64, Self::op_to_reg(&d)),
+        };
+        let instr = match &s {
+            IcedOp::Reg(sr, _) => iced_x86::Instruction::with2(code, dr, Self::gpr_for_size(*sr, sz)).unwrap_or_else(|e| panic!("iced: {e}")),
+            IcedOp::Mem(sm, _) => iced_x86::Instruction::with2(code, dr, sm.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
             _ => return Ok(()),
         };
         self.encode_instr(instr)
@@ -1012,9 +1136,16 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
 
     fn div(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, _a: &(dyn crate::out::arg::MemArg + '_), b: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let s = mem_kind_to_iced(&b.concrete_mem_kind());
+        let sz = Self::size_of(&s);
+        let code = match sz {
+            MemorySize::_8  => iced_x86::Code::Div_rm8,
+            MemorySize::_16 => iced_x86::Code::Div_rm16,
+            MemorySize::_32 => iced_x86::Code::Div_rm32,
+            _               => iced_x86::Code::Div_rm64,
+        };
         let instr = match &s {
-            IcedOp::Reg(r, _) => iced_x86::Instruction::with1(iced_x86::Code::Div_rm64, *r).unwrap_or_else(|e| panic!("iced: {e}")),
-            IcedOp::Mem(m, _) => iced_x86::Instruction::with1(iced_x86::Code::Div_rm64, m.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
+            IcedOp::Reg(r, _) => iced_x86::Instruction::with1(code, *r).unwrap_or_else(|e| panic!("iced: {e}")),
+            IcedOp::Mem(m, _) => iced_x86::Instruction::with1(code, m.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
             _ => return Ok(()),
         };
         self.encode_instr(instr)
@@ -1022,9 +1153,16 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
 
     fn idiv(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, _a: &(dyn crate::out::arg::MemArg + '_), b: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         let s = mem_kind_to_iced(&b.concrete_mem_kind());
+        let sz = Self::size_of(&s);
+        let code = match sz {
+            MemorySize::_8  => iced_x86::Code::Idiv_rm8,
+            MemorySize::_16 => iced_x86::Code::Idiv_rm16,
+            MemorySize::_32 => iced_x86::Code::Idiv_rm32,
+            _               => iced_x86::Code::Idiv_rm64,
+        };
         let instr = match &s {
-            IcedOp::Reg(r, _) => iced_x86::Instruction::with1(iced_x86::Code::Idiv_rm64, *r).unwrap_or_else(|e| panic!("iced: {e}")),
-            IcedOp::Mem(m, _) => iced_x86::Instruction::with1(iced_x86::Code::Idiv_rm64, m.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
+            IcedOp::Reg(r, _) => iced_x86::Instruction::with1(code, *r).unwrap_or_else(|e| panic!("iced: {e}")),
+            IcedOp::Mem(m, _) => iced_x86::Instruction::with1(code, m.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
             _ => return Ok(()),
         };
         self.encode_instr(instr)
@@ -1064,48 +1202,65 @@ impl<L, Context> crate::out::WriterCore<Context> for IcedWriter<L> {
         self.encode_instr(instr)
     }
 
-    fn u32(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, op: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
-        // Zero-extend the low 32 bits: write to the 32-bit register form, which
-        // in x86-64 automatically zero-extends to the full 64-bit register.
-        // iced 64-bit GPR index = 53+n; 32-bit GPR index = 53+n-16 = 37+n.
-        let o = mem_kind_to_iced(&op.concrete_mem_kind());
-        match &o {
-            IcedOp::Reg(r64, _) => {
-                let r32 = iced_x86::Register::try_from(*r64 as usize - 16)
-                    .unwrap_or_else(|_| panic!("u32: no 32-bit form for {r64:?}"));
-                let instr = iced_x86::Instruction::with2(iced_x86::Code::Mov_r32_rm32, r32, r32)
-                    .unwrap_or_else(|e| panic!("iced: {e}"));
-                self.encode_instr(instr)
-            }
-            _ => Ok(()),
-        }
-    }
-
-    fn cmovcc64(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, cond: crate::ConditionCode, op: &(dyn crate::out::arg::MemArg + '_), val: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
+    fn cmovcc(&mut self, _ctx: &mut Context, _cfg: crate::X64Arch, cond: crate::ConditionCode, op: &(dyn crate::out::arg::MemArg + '_), val: &(dyn crate::out::arg::MemArg + '_)) -> Result<(), Self::Error> {
         use crate::ConditionCode::*;
         let d = mem_kind_to_iced(&op.concrete_mem_kind());
         let s = mem_kind_to_iced(&val.concrete_mem_kind());
-        let dr = Self::op_to_reg(&d);
-        let code = match cond {
-            O => iced_x86::Code::Cmovo_r64_rm64,
-            NO => iced_x86::Code::Cmovno_r64_rm64,
-            B => iced_x86::Code::Cmovb_r64_rm64,
-            NB => iced_x86::Code::Cmovae_r64_rm64,
-            E => iced_x86::Code::Cmove_r64_rm64,
-            NE => iced_x86::Code::Cmovne_r64_rm64,
-            NA => iced_x86::Code::Cmovbe_r64_rm64,
-            A => iced_x86::Code::Cmova_r64_rm64,
-            S => iced_x86::Code::Cmovs_r64_rm64,
-            NS => iced_x86::Code::Cmovns_r64_rm64,
-            P => iced_x86::Code::Cmovp_r64_rm64,
-            NP => iced_x86::Code::Cmovnp_r64_rm64,
-            L => iced_x86::Code::Cmovl_r64_rm64,
-            NL => iced_x86::Code::Cmovge_r64_rm64,
-            NG => iced_x86::Code::Cmovle_r64_rm64,
-            G => iced_x86::Code::Cmovg_r64_rm64,
+        let sz = Self::size_of(&d);
+        let dr = Self::gpr_for_size(Self::op_to_reg(&d), sz);
+        // cmovcc is defined for 16/32/64-bit only; no 8-bit form in x86-64.
+        let code = match (cond, sz) {
+            (O,  MemorySize::_16) => iced_x86::Code::Cmovo_r16_rm16,
+            (O,  MemorySize::_32) => iced_x86::Code::Cmovo_r32_rm32,
+            (O,  _)               => iced_x86::Code::Cmovo_r64_rm64,
+            (NO, MemorySize::_16) => iced_x86::Code::Cmovno_r16_rm16,
+            (NO, MemorySize::_32) => iced_x86::Code::Cmovno_r32_rm32,
+            (NO, _)               => iced_x86::Code::Cmovno_r64_rm64,
+            (B,  MemorySize::_16) => iced_x86::Code::Cmovb_r16_rm16,
+            (B,  MemorySize::_32) => iced_x86::Code::Cmovb_r32_rm32,
+            (B,  _)               => iced_x86::Code::Cmovb_r64_rm64,
+            (NB, MemorySize::_16) => iced_x86::Code::Cmovae_r16_rm16,
+            (NB, MemorySize::_32) => iced_x86::Code::Cmovae_r32_rm32,
+            (NB, _)               => iced_x86::Code::Cmovae_r64_rm64,
+            (E,  MemorySize::_16) => iced_x86::Code::Cmove_r16_rm16,
+            (E,  MemorySize::_32) => iced_x86::Code::Cmove_r32_rm32,
+            (E,  _)               => iced_x86::Code::Cmove_r64_rm64,
+            (NE, MemorySize::_16) => iced_x86::Code::Cmovne_r16_rm16,
+            (NE, MemorySize::_32) => iced_x86::Code::Cmovne_r32_rm32,
+            (NE, _)               => iced_x86::Code::Cmovne_r64_rm64,
+            (NA, MemorySize::_16) => iced_x86::Code::Cmovbe_r16_rm16,
+            (NA, MemorySize::_32) => iced_x86::Code::Cmovbe_r32_rm32,
+            (NA, _)               => iced_x86::Code::Cmovbe_r64_rm64,
+            (A,  MemorySize::_16) => iced_x86::Code::Cmova_r16_rm16,
+            (A,  MemorySize::_32) => iced_x86::Code::Cmova_r32_rm32,
+            (A,  _)               => iced_x86::Code::Cmova_r64_rm64,
+            (S,  MemorySize::_16) => iced_x86::Code::Cmovs_r16_rm16,
+            (S,  MemorySize::_32) => iced_x86::Code::Cmovs_r32_rm32,
+            (S,  _)               => iced_x86::Code::Cmovs_r64_rm64,
+            (NS, MemorySize::_16) => iced_x86::Code::Cmovns_r16_rm16,
+            (NS, MemorySize::_32) => iced_x86::Code::Cmovns_r32_rm32,
+            (NS, _)               => iced_x86::Code::Cmovns_r64_rm64,
+            (P,  MemorySize::_16) => iced_x86::Code::Cmovp_r16_rm16,
+            (P,  MemorySize::_32) => iced_x86::Code::Cmovp_r32_rm32,
+            (P,  _)               => iced_x86::Code::Cmovp_r64_rm64,
+            (NP, MemorySize::_16) => iced_x86::Code::Cmovnp_r16_rm16,
+            (NP, MemorySize::_32) => iced_x86::Code::Cmovnp_r32_rm32,
+            (NP, _)               => iced_x86::Code::Cmovnp_r64_rm64,
+            (L,  MemorySize::_16) => iced_x86::Code::Cmovl_r16_rm16,
+            (L,  MemorySize::_32) => iced_x86::Code::Cmovl_r32_rm32,
+            (L,  _)               => iced_x86::Code::Cmovl_r64_rm64,
+            (NL, MemorySize::_16) => iced_x86::Code::Cmovge_r16_rm16,
+            (NL, MemorySize::_32) => iced_x86::Code::Cmovge_r32_rm32,
+            (NL, _)               => iced_x86::Code::Cmovge_r64_rm64,
+            (NG, MemorySize::_16) => iced_x86::Code::Cmovle_r16_rm16,
+            (NG, MemorySize::_32) => iced_x86::Code::Cmovle_r32_rm32,
+            (NG, _)               => iced_x86::Code::Cmovle_r64_rm64,
+            (G,  MemorySize::_16) => iced_x86::Code::Cmovg_r16_rm16,
+            (G,  MemorySize::_32) => iced_x86::Code::Cmovg_r32_rm32,
+            (G,  _)               => iced_x86::Code::Cmovg_r64_rm64,
         };
         let instr = match &s {
-            IcedOp::Reg(sr, _) => iced_x86::Instruction::with2(code, dr, *sr).unwrap_or_else(|e| panic!("iced: {e}")),
+            IcedOp::Reg(sr, _) => iced_x86::Instruction::with2(code, dr, Self::gpr_for_size(*sr, sz)).unwrap_or_else(|e| panic!("iced: {e}")),
             IcedOp::Mem(sm, _) => iced_x86::Instruction::with2(code, dr, sm.clone()).unwrap_or_else(|e| panic!("iced: {e}")),
             _ => return Ok(()),
         };

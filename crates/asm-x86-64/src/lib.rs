@@ -42,33 +42,39 @@ static XMM_REG_NAMES: &'static [&'static str; 16] = &[
     "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10",
     "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
 ];
-
-/// **TEMPORARY HACK**: Controls whether to use the YMM/ZMM register naming hack.
-///
-/// When `false` (current value), smaller `MemorySize` values are mapped to larger SIMD registers:
-/// - `MemorySize::_8` → xmm (128-bit)
-/// - `MemorySize::_16` → ymm (256-bit)
-/// - `MemorySize::_32` → zmm (512-bit)
-/// - `MemorySize::_64` → unmapped (defaults to xmm)
-///
-/// This is a workaround until proper `MemorySize` variants (_128/_256/_512) are added to `portal-pc-asm-common`.
-/// When `true`, the proper (non-hacky) implementation will be used once those variants exist.
-///
-/// **Consumers can check this value** to determine if the hack is active and adjust their code accordingly.
-pub const NO_HACK: bool = true;
+/// YMM register names (ymm0 through ymm15; AVX 256-bit).
+static YMM_REG_NAMES: &'static [&'static str; 16] = &[
+    "ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7", "ymm8", "ymm9", "ymm10",
+    "ymm11", "ymm12", "ymm13", "ymm14", "ymm15",
+];
+/// ZMM register names (zmm0 through zmm31; AVX-512 512-bit).
+static ZMM_REG_NAMES: &'static [&'static str; 32] = &[
+    "zmm0",  "zmm1",  "zmm2",  "zmm3",  "zmm4",  "zmm5",  "zmm6",  "zmm7",
+    "zmm8",  "zmm9",  "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15",
+    "zmm16", "zmm17", "zmm18", "zmm19", "zmm20", "zmm21", "zmm22", "zmm23",
+    "zmm24", "zmm25", "zmm26", "zmm27", "zmm28", "zmm29", "zmm30", "zmm31",
+];
 
 /// Register class for display formatting.
 ///
-/// Determines whether registers are formatted as general-purpose registers (GPR)
-/// or XMM registers for floating-point operations.
+/// Determines whether registers are formatted as GPR, XMM (128-bit scalar/SIMD),
+/// YMM (AVX 256-bit), or ZMM (AVX-512 512-bit).
+///
+/// For `Xmm`, the MemorySize in `RegFormatOpts` further controls whether the
+/// register is printed as `xmm` (≤128-bit), `ymm` (_256), or `zmm` (_512).
+/// Use `Ymm` or `Zmm` directly when the width is known at the call site.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[non_exhaustive]
 pub enum RegisterClass {
     /// General-purpose register (rax, rbx, etc.).
     #[default]
     Gpr,
-    /// XMM register for floating-point/SIMD operations (xmm0, xmm1, etc.).
+    /// XMM scalar/SIMD register; prefix (xmm/ymm/zmm) is derived from MemorySize.
     Xmm,
+    /// Explicit YMM (AVX 256-bit) register (ymm0–ymm15, or ymm0–ymm31 with AVX-512).
+    Ymm,
+    /// Explicit ZMM (AVX-512 512-bit) register (zmm0–zmm31).
+    Zmm,
 }
 
 /// Display options for formatting assembly operands.

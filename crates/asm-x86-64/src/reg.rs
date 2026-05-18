@@ -92,38 +92,29 @@ impl X64Reg for Reg {
 
         match opts.reg_class {
             crate::RegisterClass::Xmm => {
-                // For XMM/YMM/ZMM registers
-                let prefix = if crate::NO_HACK {
-                    // Non-hacky code: Proper MemorySize to register mapping (for future use)
-                    // Scheme: MemorySize determines register type
-                    // - _64 bits (8 bytes) and below -> xmm (128-bit, using scalar operations)
-                    // - _128 bits (16 bytes) -> xmm (full 128-bit register) [Future]
-                    // - _256 bits (32 bytes) -> ymm (256-bit register) [Future]
-                    // - _512 bits (64 bytes) -> zmm (512-bit register) [Future]
-                    match &opts.size {
-                        MemorySize::_8 | MemorySize::_16 | MemorySize::_32 | MemorySize::_64 => {
-                            "xmm"
-                        }
-                        MemorySize::_128 => "xmm",
-                        MemorySize::_256 => "ymm",
-                        MemorySize::_512 => "zmm",
-                        // Default to xmm for any unknown sizes
-                        _ => "xmm",
-                    }
-                } else {
-                    // HACK: Temporary mapping until proper MemorySize variants exist
-                    // _8 → 128-bit xmm, _16 → 256-bit ymm, _32 → 512-bit zmm, _64 → unmapped
-                    match &opts.size {
-                        MemorySize::_8 => "xmm",  // 128-bit XMM register
-                        MemorySize::_16 => "ymm", // 256-bit YMM register
-                        MemorySize::_32 => "zmm", // 512-bit ZMM register
-                        MemorySize::_64 => "xmm", // Unmapped - default to xmm
-                        _ => "xmm",
-                    }
+                // Derive prefix from MemorySize: scalar/128-bit → xmm, 256-bit → ymm, 512-bit → zmm.
+                let prefix = match &opts.size {
+                    MemorySize::_256 => "ymm",
+                    MemorySize::_512 => "zmm",
+                    _ => "xmm",
                 };
-
-                // Both regular and APX extended registers use the same format
                 write!(f, "{}{}", prefix, idx)
+            }
+            crate::RegisterClass::Ymm => {
+                // Explicit YMM: always ymm prefix (AVX 256-bit).
+                if idx < YMM_REG_NAMES.len() {
+                    write!(f, "{}", YMM_REG_NAMES[idx])
+                } else {
+                    write!(f, "ymm{idx}")
+                }
+            }
+            crate::RegisterClass::Zmm => {
+                // Explicit ZMM: always zmm prefix (AVX-512 512-bit).
+                if idx < ZMM_REG_NAMES.len() {
+                    write!(f, "{}", ZMM_REG_NAMES[idx])
+                } else {
+                    write!(f, "zmm{idx}")
+                }
             }
             crate::RegisterClass::Gpr => {
                 if idx < 8 {

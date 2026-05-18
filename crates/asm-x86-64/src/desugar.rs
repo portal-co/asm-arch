@@ -87,7 +87,7 @@ impl TempRegManager {
     ) -> Result<Reg, W::Error> {
         let candidates = match reg_class {
             RegisterClass::Gpr => [config.temp_gpr, config.temp_gpr2, config.temp_gpr3],
-            RegisterClass::Xmm => [config.temp_xmm, config.temp_xmm2, Reg(0)], // Pad to 3 elements
+            _ => [config.temp_xmm, config.temp_xmm2, Reg(0)], // Xmm/Ymm/Zmm: SIMD temps
         };
 
         // Find first candidate that doesn't conflict
@@ -363,7 +363,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
     fn select_temp_reg(&self, reg_class: crate::RegisterClass) -> Reg {
         match reg_class {
             crate::RegisterClass::Gpr => self.config.temp_gpr,
-            crate::RegisterClass::Xmm => self.config.temp_xmm,
+            _ => self.config.temp_xmm, // Xmm, Ymm, Zmm all use the SIMD temp
         }
     }
 
@@ -415,7 +415,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 self.config.temp_gpr2,
                 self.config.temp_gpr3,
             ],
-            crate::RegisterClass::Xmm => [self.config.temp_xmm, self.config.temp_xmm2, Reg(0)], // Pad to 3 elements
+            _ => [self.config.temp_xmm, self.config.temp_xmm2, Reg(0)], // Xmm/Ymm/Zmm: SIMD temps
         };
 
         // Find first candidate that doesn't conflict

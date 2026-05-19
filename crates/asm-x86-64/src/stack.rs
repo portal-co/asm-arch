@@ -125,6 +125,7 @@ impl StackManager {
             disp: offset as u32,
             size,
             reg_class,
+            segment: crate::out::arg::Segment::None,
         }
     }
 
@@ -148,6 +149,7 @@ impl StackManager {
             disp: offset as u32,
             size,
             reg_class,
+            segment: crate::out::arg::Segment::None,
         }
     }
 

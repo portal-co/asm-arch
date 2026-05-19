@@ -448,6 +448,29 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("db directive not implemented")
     }
+
+    /// Returns the current byte offset into the output stream, if tracked.
+    ///
+    /// Text-mode writers return `None`. Binary writers (e.g. iced) return
+    /// `Some(n)` where `n` is the number of bytes emitted so far.
+    fn current_offset(&self) -> Option<usize> {
+        None
+    }
+
+    /// Emits alignment padding to the next `alignment`-byte boundary.
+    ///
+    /// For text writers this emits a `.balign` assembler directive and the
+    /// assembler fills the gap with NOPs. For binary writers, NOP instructions
+    /// are emitted directly until the offset is aligned.
+    #[track_caller]
+    fn align_to(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::X64Arch,
+        _alignment: usize,
+    ) -> Result<(), Self::Error> {
+        todo!("align_to not implemented")
+    }
 }
 
 /// Extended writer trait with label support.
@@ -631,6 +654,12 @@ macro_rules! writer_dispatch {
                     }
                     fn db(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch, bytes: &[u8]) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::db(&mut **self, ctx, cfg,bytes)
+                    }
+                    fn current_offset(&self) -> ::core::option::Option<usize> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::current_offset(&**self)
+                    }
+                    fn align_to(&mut self, ctx: &mut $ctx, cfg: $crate::X64Arch, alignment: usize) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::align_to(&mut **self, ctx, cfg, alignment)
                     }
                 }
                 impl<$($u)*>$crate::out::Writer<$l, $ctx> for $ty{

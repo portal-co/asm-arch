@@ -194,6 +194,9 @@ macro_rules! writers {
                     }
                     $crate::__::core::write!(self, "\n")
                 }
+                fn align_to(&mut self, _ctx: &mut Context, _cfg: $crate::X64Arch, alignment: usize) -> $crate::__::core::result::Result<(), Self::Error>{
+                    $crate::__::core::write!(self, ".balign {alignment}\n")
+                }
             }
             impl<L: Display, Context> $crate::out::Writer<L, Context> for $ty {
                  fn set_label(&mut self, _ctx: &mut Context, cfg: $crate::X64Arch, s: L) -> $crate::__::core::result::Result<(), Self::Error> {

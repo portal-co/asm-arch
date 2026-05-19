@@ -77,6 +77,7 @@ impl<'a> portal_solutions_asm_riscv64::out::arg::MemArg for MemArgAdapter<'a> {
                 disp,
                 size,
                 reg_class,
+                segment: _,
             } => {
                 let riscv_base = convert_arg_kind(base, self.arch);
                 let riscv_offset =

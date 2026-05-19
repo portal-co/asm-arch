@@ -78,6 +78,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
                         disp: 0,
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Xmm,
+                        segment: crate::out::arg::Segment::None,
                     };
                     writer.fmov(ctx, arch, &mem, &reg)
                 }
@@ -108,6 +109,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
                         disp: 0,
                         size: portal_pc_asm_common::types::mem::MemorySize::_64,
                         reg_class: crate::RegisterClass::Xmm,
+                        segment: crate::out::arg::Segment::None,
                     };
                     writer.fmov(ctx, arch, &reg, &mem)?;
                     // Adjust stack back: add rsp, 8
@@ -137,6 +139,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
                     disp: offset as u32,
                     size,
                     reg_class,
+                    segment: crate::out::arg::Segment::None,
                 };
                 match dest.kind {
                     RegKind::Int => writer.mov(ctx, arch, &reg, &mem),
@@ -162,6 +165,7 @@ pub fn process_cmd<Context, E: core::error::Error>(
                 disp: offset as u32,
                 size,
                 reg_class,
+                segment: crate::out::arg::Segment::None,
             };
             match src.kind {
                 RegKind::Int => writer.mov(ctx, arch, &mem, &reg),

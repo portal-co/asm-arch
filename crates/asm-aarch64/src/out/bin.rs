@@ -224,6 +224,17 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
         Ok(())
     }
 
+    fn add_uxtw(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, dest: &(dyn MemArg + '_), a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
+        let rd = to_reg(dest);
+        let rn = to_reg(a);
+        let rm = to_reg(b);
+        // ADD Xd, Xn, Wm, UXTW  (shift=0, option=UXTW=010)
+        // Encoding: sf=1 op=0 S=0 opt=01 Rm option=010 imm3=000 Rn Rd
+        // = 0x8B20_0000 | (rm << 16) | (UXTW=0x4000) | (rn << 5) | rd
+        self.emit(0x8B20_4000 | (rm << 16) | (rn << 5) | rd);
+        Ok(())
+    }
+
     fn sub(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, dest: &(dyn MemArg + '_), a: &(dyn MemArg + '_), b: &(dyn MemArg + '_)) -> Result<(), Self::Error> {
         let rd = to_reg(dest);
         let rn = to_reg(a);
@@ -623,6 +634,19 @@ impl<L, Context> crate::out::WriterCore<Context> for AArch64Writer<L> {
         let fn_ = to_reg(src);
         // FMOV Dd, Dn
         self.emit(0x1E60_4000 | (fn_ << 5) | fd);
+        Ok(())
+    }
+
+    fn current_offset(&self) -> Option<usize> {
+        Some(self.buf.len())
+    }
+
+    fn align_to(&mut self, _ctx: &mut Context, _cfg: crate::AArch64Arch, alignment: usize) -> Result<(), Self::Error> {
+        // AArch64 instructions are fixed 4-byte; alignment must be a multiple of 4.
+        // NOP = 0xD503201F
+        while self.buf.len() % alignment != 0 {
+            self.emit(0xD503_201F);
+        }
         Ok(())
     }
 }

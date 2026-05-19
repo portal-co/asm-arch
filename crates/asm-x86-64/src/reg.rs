@@ -52,6 +52,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                 disp: b,
                 size: MemorySize::_64,
                 reg_class: crate::RegisterClass::Gpr,
+                segment: crate::out::arg::Segment::None,
             },
         )?;
         if xchg {
@@ -65,6 +66,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                     disp: c,
                     size: MemorySize::_64,
                     reg_class: crate::RegisterClass::Gpr,
+                    segment: crate::out::arg::Segment::None,
                 },
             )?;
         } else {
@@ -78,6 +80,7 @@ pub trait X64Reg: crate::out::arg::Arg + Sized {
                     disp: c,
                     size: MemorySize::_64,
                     reg_class: crate::RegisterClass::Gpr,
+                    segment: crate::out::arg::Segment::None,
                 },
             )?;
         }

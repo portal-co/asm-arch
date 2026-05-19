@@ -197,6 +197,14 @@ macro_rules! writers {
                     $crate::__::core::write!(self,"add {dest}, {a}, {b}\n")
                 }
 
+                fn add_uxtw(&mut self, _ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                    let dest = dest.mem_display(cfg.into());
+                    let a = a.mem_display(cfg.into());
+                    // b is a 32-bit register (wN); the MemorySize::_32 in the ArgKind drives display
+                    let b = b.mem_display(cfg.into());
+                    $crate::__::core::write!(self,"add {dest}, {a}, {b}, uxtw\n")
+                }
+
                 fn sxt(&mut self, _ctx: &mut Context, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                     let dest = dest.mem_display(cfg.into());
                     let src = src.mem_display(cfg.into());

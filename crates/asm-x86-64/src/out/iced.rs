@@ -93,6 +93,7 @@ mod helpers {
                     disp,
                     size,
                     reg_class,
+                    segment: crate::out::arg::Segment::None,
                 })
             }
             _ => None,

@@ -463,6 +463,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 disp,
                 size: _,
                 reg_class: _,
+                segment: _,
             } => {
                 // Ensure base is a register.
                 let base_reg = match base {
@@ -597,6 +598,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
             disp,
             size,
             reg_class,
+            segment: crate::out::arg::Segment::None,
         }
     }
 
@@ -615,6 +617,7 @@ impl<'a, W: WriterCore<Context> + ?Sized, Context> DesugaringWriter<'a, W, Conte
                 disp,
                 size,
                 reg_class,
+                segment: _,
             } => {
                 // literal base - load into temp (and fold any index/disp as necessary)
                 let (base_reg, new_disp) = self.desugar_mem_operand(ctx, arch, &concrete)?;

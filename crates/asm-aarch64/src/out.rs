@@ -89,6 +89,23 @@ pub trait WriterCore<Context> {
         todo!("add instruction not implemented")
     }
 
+    /// Emits `ADD Xd, Xn, Wm, UXTW` — extended-register ADD used by LFI.
+    ///
+    /// Zero-extends the 32-bit register `b` (treated as `Wm`) to 64 bits and adds it
+    /// to `a` (`Xn`), storing the result in `dest` (`Xd`). Required by LFI for
+    /// sandboxed address computation (`add x28, x27, wN, uxtw`).
+    #[track_caller]
+    fn add_uxtw(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        _dest: &(dyn MemArg + '_),
+        _a: &(dyn MemArg + '_),
+        _b: &(dyn MemArg + '_),
+    ) -> Result<(), Self::Error> {
+        todo!("add_uxtw instruction not implemented")
+    }
+
     /// Emits a SXTB/SXTH/SXTW (sign-extend) instruction.
     #[track_caller]
     fn sxt(
@@ -480,6 +497,26 @@ pub trait WriterCore<Context> {
     ) -> Result<(), Self::Error> {
         todo!("fmov instruction not implemented")
     }
+
+    /// Returns the current byte offset into the output stream, if tracked.
+    ///
+    /// Binary writers return `Some(n)`; text writers return `None`.
+    fn current_offset(&self) -> Option<usize> {
+        None
+    }
+
+    /// Emits alignment padding to the next `alignment`-byte boundary.
+    ///
+    /// Binary writers emit NOP words; text writers emit `.balign`.
+    #[track_caller]
+    fn align_to(
+        &mut self,
+        ctx: &mut Context,
+        _cfg: crate::AArch64Arch,
+        _alignment: usize,
+    ) -> Result<(), Self::Error> {
+        todo!("align_to not implemented")
+    }
 }
 
 /// Extended writer trait with label support.
@@ -630,6 +667,9 @@ macro_rules! writer_dispatch {
                     fn add(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::add(&mut **self, ctx, cfg, dest, a, b)
                     }
+                    fn add_uxtw(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), a: &(dyn $crate::out::arg::MemArg + '_), b: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::add_uxtw(&mut **self, ctx, cfg, dest, a, b)
+                    }
                     fn sxt(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::sxt(&mut **self, ctx, cfg, dest, src)
                     }
@@ -653,6 +693,12 @@ macro_rules! writer_dispatch {
                     }
                     fn fmov(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, dest: &(dyn $crate::out::arg::MemArg + '_), src: &(dyn $crate::out::arg::MemArg + '_)) -> $crate::__::core::result::Result<(), Self::Error>{
                         <$wrapped as $crate::out::WriterCore<$ctx>>::fmov(&mut **self, ctx, cfg, dest, src)
+                    }
+                    fn current_offset(&self) -> ::core::option::Option<usize> {
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::current_offset(&**self)
+                    }
+                    fn align_to(&mut self, ctx: &mut $ctx, cfg: $crate::AArch64Arch, alignment: usize) -> $crate::__::core::result::Result<(), Self::Error>{
+                        <$wrapped as $crate::out::WriterCore<$ctx>>::align_to(&mut **self, ctx, cfg, alignment)
                     }
                 }
                 impl<$($u)*>$crate::out::Writer<$l, $ctx> for $ty{

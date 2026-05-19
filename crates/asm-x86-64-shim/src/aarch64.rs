@@ -187,6 +187,7 @@ impl<'a> portal_solutions_asm_aarch64::out::arg::MemArg for MemArgAdapter<'a> {
                 disp,
                 size,
                 reg_class,
+                segment: _,
             } => {
                 // Memory reference - convert components, with APX handling
                 // Default conversions
@@ -625,6 +626,7 @@ impl<W> X64ToAArch64Shim<W> {
                     disp,
                     size,
                     reg_class,
+                    segment: _,
                 } = adapter.inner.concrete_mem_kind()
                 {
                     let aarch64_base = convert_arg_kind(orig_base, adapter.arch);

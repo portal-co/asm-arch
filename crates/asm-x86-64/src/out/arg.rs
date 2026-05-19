@@ -62,6 +62,20 @@ impl Display for ArgKind {
     }
 }
 
+/// Segment register override for memory operands.
+///
+/// Used by LFI sandboxed code generation to emit `gs:`-prefixed memory
+/// accesses, which the LFI verifier requires for all non-rsp/non-rip
+/// memory operands in sandboxed code.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+pub enum Segment {
+    /// No segment override (default).
+    #[default]
+    None,
+    /// GS segment register override — emits `gs:` prefix before the memory operand.
+    Gs,
+}
+
 /// Represents a memory argument kind.
 ///
 /// Can be either a direct operand or a memory reference with base, offset,
@@ -83,6 +97,8 @@ pub enum MemArgKind<A = ArgKind> {
         size: MemorySize,
         /// Register class for pointer naming (xmmword vs qword, etc.).
         reg_class: crate::RegisterClass,
+        /// Optional segment register override (e.g. `gs:` for LFI sandboxing).
+        segment: Segment,
     },
 }
 impl<A: Arg> MemArgKind<A> {
@@ -99,6 +115,7 @@ impl<A: Arg> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                segment,
             } => {
                 // For memory operands, force base and offset to be GPRs
                 let gpr_opts = crate::DisplayOpts::new(opts.arch);
@@ -110,6 +127,7 @@ impl<A: Arg> MemArgKind<A> {
                     disp: *disp,
                     size: *size,
                     reg_class: *reg_class,
+                    segment: *segment,
                 }
             }
         }
@@ -125,6 +143,7 @@ impl<T: Display> Display for MemArgKind<T> {
                 disp,
                 size,
                 reg_class,
+                segment,
             } => {
                 // Pointer type name based on register class and size
                 let ptr = match reg_class {
@@ -144,19 +163,22 @@ impl<T: Display> Display for MemArgKind<T> {
                     crate::RegisterClass::Ymm => "ymmword",
                     crate::RegisterClass::Zmm => "zmmword",
                 };
+                let seg = match segment {
+                    Segment::None => "",
+                    Segment::Gs => "gs:",
+                };
                 let c;
                 let d;
-                // let a = ;
 
                 match offset.as_ref() {
                     None => match format_args!("") {
-                        x => write!(f, "{ptr} ptr [{base}{x}+{disp}]"),
+                        x => write!(f, "{ptr} ptr {seg}[{base}{x}+{disp}]"),
                     },
                     Some((a, b)) => {
                         c = a;
                         d = b;
                         match format_args!("+{c}*{d}") {
-                            x => write!(f, "{ptr} ptr [{base}{x}+{disp}]"),
+                            x => write!(f, "{ptr} ptr {seg}[{base}{x}+{disp}]"),
                         }
                     }
                 }
@@ -175,12 +197,14 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                segment,
             } => MemArgKind::Mem {
                 base,
                 offset: offset.as_ref().map(|(a, b)| (a, *b)),
                 disp: *disp,
                 size: *size,
                 reg_class: *reg_class,
+                segment: *segment,
             },
         }
     }
@@ -194,12 +218,14 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                segment,
             } => MemArgKind::Mem {
                 base,
                 offset: offset.as_mut().map(|(a, b)| (a, *b)),
                 disp: *disp,
                 size: *size,
                 reg_class: *reg_class,
+                segment: *segment,
             },
         }
     }
@@ -216,6 +242,7 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                segment,
             } => MemArgKind::Mem {
                 base: go(base)?,
                 offset: match offset {
@@ -225,6 +252,7 @@ impl<A> MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                segment,
             },
         })
     }
@@ -272,9 +300,10 @@ pub trait MemArg {
                 MemArgKind::Mem {
                     base,
                     offset,
-                    disp,
-                    size,
-                    reg_class,
+                    disp: _,
+                    size: _,
+                    reg_class: _,
+                    segment: _,
                 } => base
                     .regs()
                     .chain(offset.iter().flat_map(|(a, _)| a.regs()))
@@ -445,14 +474,16 @@ impl<T: MemArg> MemArg for MemorySized<T> {
                 base,
                 offset,
                 disp,
-                size,
+                size: _,
                 reg_class,
+                segment,
             } => MemArgKind::Mem {
                 base,
                 offset,
                 disp,
                 size: self.size,
                 reg_class,
+                segment,
             },
         }
     }
@@ -466,14 +497,16 @@ impl<T: MemArg> MemArg for MemorySized<T> {
                 base,
                 offset,
                 disp,
-                size,
+                size: _,
                 reg_class,
+                segment,
             } => go(MemArgKind::Mem {
                 base,
                 offset,
                 disp,
                 size: self.size,
                 reg_class,
+                segment,
             }),
         });
     }
@@ -540,6 +573,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
                 disp,
                 size,
                 reg_class,
+                segment,
             } => MemArgKind::Mem {
                 base,
                 offset: match offset.as_ref() {
@@ -549,6 +583,7 @@ impl<A: Arg> MemArg for MemArgKind<A> {
                 disp: *disp,
                 size: *size,
                 reg_class: *reg_class,
+                segment: *segment,
             },
         })
     }

@@ -248,188 +248,84 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "dex-bytecode"
+name = "ephemera"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "osctx"
+name = "vaffle"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-dex"
+name = "volar-c-backend"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-link-core"
+name = "volar-common"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-linker"
+name = "volar-compiler"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-memory"
+name = "volar-compiler-common"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-mips"
+name = "volar-compiler-passes"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-module-builder"
+name = "volar-dyn"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-module-target"
+name = "volar-ir"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-object"
+name = "volar-ir-common"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-ordering"
+name = "volar-ir-lir-target"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-powerpc"
+name = "volar-ir-passes"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-reach"
+name = "volar-lir"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-riscv"
+name = "volar-lir-codegen"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-schedule"
+name = "volar-primitives"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-traps"
+name = "volar-provenance"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-wasm-helpers"
+name = "volar-spec"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "speet-x86_64"
+name = "volar-spec-dyn"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "wasm-layout"
+name = "volar-vaffle-target"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "yecta"
+name = "volar-weaver"
 version = "0.1.0"
-
-[[patch.unused]]
-name = "ast-traits"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "cfg-traits"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "register-machine-traits"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "sift-trait"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "siftify"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "ssa-canon"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-cc"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-impls"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-pliron-compat"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "ssa-reloop"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-reloop2"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-rust"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-trace"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "ssa-traits"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "ssa-translation"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "tac-traits"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "type-onion"
-version = "0.2.3"
-
-[[patch.unused]]
-name = "portal-jsc-common"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-generator"
-version = "0.8.0-pre.10"
-
-[[patch.unused]]
-name = "portal-jsc-simpl-js"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-swc-cfg"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-swc-ll-common"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-swc-opt-ssa"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-swc-ssa"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-swc-tac"
-version = "0.8.0-pre.11"
-
-[[patch.unused]]
-name = "portal-jsc-swc-util"
-version = "0.8.0-pre.11"
 
 [[patch.unused]]
 name = "embedded-llm"
@@ -437,18 +333,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "embedded-llm-tools"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "portal-solutions-swibb"
-version = "0.6.0-alpha.1"
-
-[[patch.unused]]
-name = "wax-core"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "wax-tags"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -560,85 +444,201 @@ name = "dreamcompiler-minibc-interp"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "portal-jsc-common"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-generator"
+version = "0.8.0-pre.10"
+
+[[patch.unused]]
+name = "portal-jsc-simpl-js"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-swc-cfg"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-swc-ll-common"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-swc-opt-ssa"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-swc-ssa"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-swc-tac"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "portal-jsc-swc-util"
+version = "0.8.0-pre.11"
+
+[[patch.unused]]
+name = "ast-traits"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "cfg-traits"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "register-machine-traits"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "sift-trait"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "siftify"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "ssa-canon"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-cc"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-impls"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-pliron-compat"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "ssa-reloop"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-reloop2"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-rust"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-trace"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "ssa-traits"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "ssa-translation"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "tac-traits"
+version = "0.2.3"
+
+[[patch.unused]]
+name = "type-onion"
+version = "0.2.3"
+
+[[patch.unused]]
 name = "pit-core"
 version = "0.5.0-alpha.1"
 
 [[patch.unused]]
-name = "ephemera"
+name = "wax-core"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "vaffle"
+name = "wax-tags"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-c-backend"
+name = "dex-bytecode"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-common"
+name = "osctx"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-compiler"
+name = "speet-dex"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-compiler-common"
+name = "speet-link-core"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-compiler-passes"
+name = "speet-linker"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-dyn"
+name = "speet-memory"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-ir"
+name = "speet-mips"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-ir-common"
+name = "speet-module-builder"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-ir-lir-target"
+name = "speet-module-target"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-ir-passes"
+name = "speet-object"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-lir"
+name = "speet-ordering"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-lir-codegen"
+name = "speet-powerpc"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-primitives"
+name = "speet-reach"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-provenance"
+name = "speet-riscv"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-spec"
+name = "speet-schedule"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-spec-dyn"
+name = "speet-traps"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-vaffle-target"
+name = "speet-wasm-helpers"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "volar-weaver"
+name = "speet-x86_64"
 version = "0.1.0"
+
+[[patch.unused]]
+name = "wasm-layout"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "yecta"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "portal-solutions-swibb"
+version = "0.6.0-alpha.1"
